@@ -55,9 +55,6 @@ export default defineConfig({
     },
     optimizeDeps: {
         exclude: [
-            '@atlaskit/pragmatic-drag-and-drop',
-            '@atlaskit/pragmatic-drag-and-drop-auto-scroll',
-            '@atlaskit/pragmatic-drag-and-drop-hitbox',
             '@tanstack/react-query-persist-client',
             'idb-keyval',
         ],
@@ -146,5 +143,9 @@ export default defineConfig({
             '/@/shared': path.resolve(__dirname, './src/shared'),
         },
     },
+    envDir: path.resolve(__dirname),
     root: path.resolve(__dirname, './src/renderer'),
+    server: {
+        port: 4343,
+    },
 });

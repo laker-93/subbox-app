@@ -1,15 +1,18 @@
-import { useMemo } from 'react';
-import { Navigate, Outlet } from 'react-router';
+import { useCallback, useMemo } from 'react';
+import { Outlet } from 'react-router';
 
+import { urlConfig } from '/@/renderer/config/url-config';
 import { isServerLock } from '/@/renderer/features/action-required/utils/window-properties';
-import { AppRoute } from '/@/renderer/router/routes';
+import { PymixAuthModal } from '/@/renderer/features/pymix/components/pymix-auth-modal';
 import { useAuthStoreActions, useCurrentServer } from '/@/renderer/store';
+import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 
 const normalizeUrl = (url: string) => url.replace(/\/$/, '');
 
 export const AppOutlet = () => {
     const currentServer = useCurrentServer();
     const { deleteServer, setCurrentServer } = useAuthStoreActions();
+    const [authModalOpened, authModalHandlers] = useDisclosure(true);
 
     const isActionsRequired = useMemo(() => {
         // When SERVER_LOCK is enabled and the configured URL has changed,
@@ -27,14 +30,22 @@ export const AppOutlet = () => {
 
         const isServerRequired = !currentServer;
 
-        const actions = [isServerRequired];
-        const isActionRequired = actions.some((c) => c);
-
-        return isActionRequired;
+        return isServerRequired;
     }, [currentServer, deleteServer, setCurrentServer]);
 
+    const handleAuthSuccess = useCallback(() => {
+        authModalHandlers.close();
+    }, [authModalHandlers]);
+
     if (isActionsRequired) {
-        return <Navigate replace to={AppRoute.ACTION_REQUIRED} />;
+        return (
+            <PymixAuthModal
+                baseUrl={urlConfig.pymix}
+                handlers={authModalHandlers}
+                opened={authModalOpened}
+                onSuccess={handleAuthSuccess}
+            />
+        );
     }
 
     return <Outlet />;
