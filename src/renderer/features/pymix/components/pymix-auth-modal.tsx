@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
+import { authenticateServices } from '/@/renderer/features/pymix/utils/authenticate-services';
+import { useAuthStoreActions } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
 import { Modal, ModalProps } from '/@/shared/components/modal/modal';
@@ -85,6 +87,7 @@ function LoginView({
 }) {
     const { t } = useTranslation();
     const [isLoading, setIsLoading] = useState(false);
+    const { addServer, setCurrentServer } = useAuthStoreActions();
 
     const form = useForm({
         initialValues: {
@@ -96,6 +99,8 @@ function LoginView({
     const handleSubmit = form.onSubmit(async (values) => {
         try {
             setIsLoading(true);
+
+            // 1. Authenticate with pymix
             await PymixController.login({
                 baseUrl,
                 body: {
@@ -104,11 +109,17 @@ function LoginView({
                 },
             });
 
+            // 2. Authenticate with navidrome + filebrowser and set up server
+            const serverItem = await authenticateServices({
+                password: values.password,
+                username: values.username,
+            });
+
+            addServer(serverItem);
+            setCurrentServer(serverItem);
+
             toast.success({
-                message: t('common.success', {
-                    defaultValue: 'Success',
-                    postProcess: 'sentenceCase',
-                }),
+                message: t('form.addServer.success', { postProcess: 'sentenceCase' }),
             });
             onSuccess();
         } catch (err: any) {
@@ -176,6 +187,7 @@ function CreateAccountView({
 }) {
     const { t } = useTranslation();
     const [isLoading, setIsLoading] = useState(false);
+    const { addServer, setCurrentServer } = useAuthStoreActions();
 
     const form = useForm({
         initialValues: {
@@ -189,6 +201,8 @@ function CreateAccountView({
     const handleSubmit = form.onSubmit(async (values) => {
         try {
             setIsLoading(true);
+
+            // 1. Create pymix account
             await PymixController.create({
                 baseUrl,
                 body: {
@@ -199,11 +213,17 @@ function CreateAccountView({
                 },
             });
 
+            // 2. Authenticate with navidrome + filebrowser and set up server
+            const serverItem = await authenticateServices({
+                password: values.password,
+                username: values.username,
+            });
+
+            addServer(serverItem);
+            setCurrentServer(serverItem);
+
             toast.success({
-                message: t('common.success', {
-                    defaultValue: 'Account created',
-                    postProcess: 'sentenceCase',
-                }),
+                message: t('form.addServer.success', { postProcess: 'sentenceCase' }),
             });
             onSuccess();
         } catch (err: any) {
