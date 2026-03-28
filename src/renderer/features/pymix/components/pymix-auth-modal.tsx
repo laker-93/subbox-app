@@ -5,7 +5,6 @@ import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { authenticateServices } from '/@/renderer/features/pymix/utils/authenticate-services';
 import { useAuthStoreActions } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
-import { Group } from '/@/shared/components/group/group';
 import { Modal, ModalProps } from '/@/shared/components/modal/modal';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
 import { Stack } from '/@/shared/components/stack/stack';
@@ -20,25 +19,24 @@ type AuthView = 'create' | 'login' | 'select';
 interface PymixAuthModalProps {
     baseUrl: string;
     handlers: ModalProps['handlers'];
+    initialView?: 'create' | 'login';
     opened: boolean;
     onSuccess: () => void;
 }
 
-export const PymixAuthModal = ({ baseUrl, handlers, onSuccess, opened }: PymixAuthModalProps) => {
-    const [view, setView] = useState<AuthView>('select');
-
-    const handleBack = () => setView('select');
+export const PymixAuthModal = ({ baseUrl, handlers, initialView, onSuccess, opened }: PymixAuthModalProps) => {
+    const [view, setView] = useState<AuthView>(initialView ?? 'select');
 
     return (
-        <Modal handlers={handlers} opened={opened} size="sm" title="Pymix Account">
+        <Modal handlers={handlers} opened={opened} size="xs" withCloseButton={false}>
             {view === 'select' && (
                 <SelectView onCreateAccount={() => setView('create')} onLogin={() => setView('login')} />
             )}
             {view === 'login' && (
-                <LoginView baseUrl={baseUrl} onBack={handleBack} onSuccess={onSuccess} />
+                <LoginView baseUrl={baseUrl} onSuccess={onSuccess} />
             )}
             {view === 'create' && (
-                <CreateAccountView baseUrl={baseUrl} onBack={handleBack} onSuccess={onSuccess} />
+                <CreateAccountView baseUrl={baseUrl} onSuccess={onSuccess} />
             )}
         </Modal>
     );
@@ -54,20 +52,20 @@ function SelectView({
     const { t } = useTranslation();
 
     return (
-        <Stack gap="xl" p="md">
-            <Stack align="center" gap="sm">
-                <TextTitle order={3}>
+        <Stack gap="lg" p="md">
+            <Stack align="center" gap="xs">
+                <TextTitle order={4}>
                     {t('common.welcome', { defaultValue: 'Welcome', postProcess: 'sentenceCase' })}
                 </TextTitle>
                 <Text c="dimmed" size="sm" ta="center">
                     Login to an existing account or create a new one.
                 </Text>
             </Stack>
-            <Stack gap="md">
-                <Button fullWidth onClick={onLogin} size="lg" variant="filled">
+            <Stack gap="sm">
+                <Button fullWidth onClick={onLogin} variant="filled">
                     {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
                 </Button>
-                <Button fullWidth onClick={onCreateAccount} size="lg" variant="default">
+                <Button fullWidth onClick={onCreateAccount} variant="default">
                     {t('common.create', { defaultValue: 'Create', postProcess: 'titleCase' })}{' '}
                     Account
                 </Button>
@@ -78,11 +76,9 @@ function SelectView({
 
 function LoginView({
     baseUrl,
-    onBack,
     onSuccess,
 }: {
     baseUrl: string;
-    onBack: () => void;
     onSuccess: () => void;
 }) {
     const { t } = useTranslation();
@@ -133,11 +129,11 @@ function LoginView({
 
     return (
         <form onSubmit={handleSubmit}>
-            <Stack gap="xl" p="md">
-                <TextTitle order={3}>
+            <Stack gap="md" p="md">
+                <TextTitle order={4}>
                     {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
                 </TextTitle>
-                <Stack gap="md">
+                <Stack gap="sm">
                     <TextInput
                         data-autofocus
                         label={t('form.addServer.input', {
@@ -145,6 +141,7 @@ function LoginView({
                             postProcess: 'titleCase',
                         })}
                         required
+                        size="sm"
                         variant="filled"
                         {...form.getInputProps('username')}
                     />
@@ -154,23 +151,20 @@ function LoginView({
                             postProcess: 'titleCase',
                         })}
                         required
+                        size="sm"
                         variant="filled"
                         {...form.getInputProps('password')}
                     />
                 </Stack>
-                <Group grow>
-                    <Button onClick={onBack} variant="default">
-                        {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
-                    </Button>
-                    <Button
-                        disabled={isSubmitDisabled}
-                        loading={isLoading}
-                        type="submit"
-                        variant="filled"
-                    >
-                        {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
-                    </Button>
-                </Group>
+                <Button
+                    disabled={isSubmitDisabled}
+                    fullWidth
+                    loading={isLoading}
+                    type="submit"
+                    variant="filled"
+                >
+                    {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
+                </Button>
             </Stack>
         </form>
     );
@@ -178,11 +172,9 @@ function LoginView({
 
 function CreateAccountView({
     baseUrl,
-    onBack,
     onSuccess,
 }: {
     baseUrl: string;
-    onBack: () => void;
     onSuccess: () => void;
 }) {
     const { t } = useTranslation();
@@ -238,12 +230,12 @@ function CreateAccountView({
 
     return (
         <form onSubmit={handleSubmit}>
-            <Stack gap="xl" p="md">
-                <TextTitle order={3}>
+            <Stack gap="md" p="md">
+                <TextTitle order={4}>
                     {t('common.create', { defaultValue: 'Create', postProcess: 'titleCase' })}{' '}
                     Account
                 </TextTitle>
-                <Stack gap="md">
+                <Stack gap="sm">
                     <TextInput
                         data-autofocus
                         label={t('form.addServer.input', {
@@ -251,12 +243,14 @@ function CreateAccountView({
                             postProcess: 'titleCase',
                         })}
                         required
+                        size="sm"
                         variant="filled"
                         {...form.getInputProps('username')}
                     />
                     <TextInput
                         label="Email"
                         required
+                        size="sm"
                         type="email"
                         variant="filled"
                         {...form.getInputProps('email')}
@@ -267,30 +261,28 @@ function CreateAccountView({
                             postProcess: 'titleCase',
                         })}
                         required
+                        size="sm"
                         variant="filled"
                         {...form.getInputProps('password')}
                     />
                     <TextInput
                         label="Invite Token"
                         required
+                        size="sm"
                         variant="filled"
                         {...form.getInputProps('token')}
                     />
                 </Stack>
-                <Group grow>
-                    <Button onClick={onBack} variant="default">
-                        {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
-                    </Button>
-                    <Button
-                        disabled={isSubmitDisabled}
-                        loading={isLoading}
-                        type="submit"
-                        variant="filled"
-                    >
-                        {t('common.create', { defaultValue: 'Create', postProcess: 'titleCase' })}{' '}
-                        Account
-                    </Button>
-                </Group>
+                <Button
+                    disabled={isSubmitDisabled}
+                    fullWidth
+                    loading={isLoading}
+                    type="submit"
+                    variant="filled"
+                >
+                    {t('common.create', { defaultValue: 'Create', postProcess: 'titleCase' })}{' '}
+                    Account
+                </Button>
             </Stack>
         </form>
     );

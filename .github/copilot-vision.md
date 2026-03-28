@@ -1,3 +1,56 @@
+# What is Subbox?
+
+Subbox is a cloud-based music library management platform designed specifically for DJs.
+
+It allows users to:
+
+* Upload and store their music collections in the cloud
+* Stream their library across devices
+* Manage playlists, cue points, and loops
+* Sync and convert libraries between DJ software such as Serato and Rekordbox
+
+Subbox uses a **Source → Cloud → Destination** model:
+
+* Sources: Local DJ libraries (Serato, Rekordbox) or uploaded files
+* Cloud: Centralised storage and metadata management
+* Destinations: Export back to DJ software or download updated collections
+
+Key capabilities:
+
+* Metadata-first syncing (cue points, loops, playlists without reuploading audio)
+* Automatic detection of library changes (delta sync)
+* Per-user isolated music environments (Navidrome for streaming, Beets for organisation)
+* Cross-platform access (desktop, web, mobile)
+
+---
+
+## How Subbox Differs from Feishin
+
+Feishin is primarily a lightweight music player client for Navidrome/Subsonic servers.
+
+Subbox extends this concept into a full DJ workflow platform:
+
+### Feishin
+
+* Music streaming client
+* Connects to an existing server
+* Focused on playback and browsing
+* No library syncing or DJ metadata support
+
+### Subbox
+
+* Full cloud DJ library system
+* Manages both audio files and DJ metadata
+* Handles library syncing and conflict resolution
+* Converts between DJ ecosystems (Serato ↔ Rekordbox)
+* Includes backend orchestration (pymix) and per-user services
+
+In short:
+
+* Feishin = music player
+* Subbox = cloud-based DJ library management + sync platform
+
+
 # Subbox Sync & Library UX Specification
 
 ## Overview

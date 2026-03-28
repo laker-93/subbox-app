@@ -6,14 +6,15 @@ import { Link, useNavigate } from 'react-router';
 
 import packageJson from '../../../../../package.json';
 
-import { isServerLock } from '/@/renderer/features/action-required/utils/window-properties';
-import { ServerList } from '/@/renderer/features/servers/components/server-list';
+import { HelpModalContent } from '/@/renderer/features/help/components/help-modal-content';
 import { openSettingsModal } from '/@/renderer/features/settings/utils/open-settings-modal';
 import { openReleaseNotesModal } from '/@/renderer/release-notes-modal';
 import {
     useAppStore,
     useAppStoreActions,
+    useAuthStoreActions,
     useCommandPalette,
+    useCurrentServer,
     useGeneralSettings,
     useSettingsStoreActions,
 } from '/@/renderer/store';
@@ -85,6 +86,8 @@ export const AppMenu = () => {
     const { setSettings } = useSettingsStoreActions();
     const settings = useGeneralSettings();
     const { open: openCommandPalette } = useCommandPalette();
+    const currentServer = useCurrentServer();
+    const { deleteServer, setCurrentServer } = useAuthStoreActions();
 
     const handleBrowserDevTools = () => {
         browser?.devtools();
@@ -114,15 +117,22 @@ export const AppMenu = () => {
         });
     };
 
-    const handleManageServersModal = () => {
-        openModal({
-            children: <ServerList />,
-            title: t('page.manageServers.title', { postProcess: 'titleCase' }),
-        });
+    const handleLogOff = () => {
+        if (currentServer) {
+            deleteServer(currentServer.id);
+            setCurrentServer(null);
+        }
     };
 
     const handleQuit = () => {
         browser?.quit();
+    };
+
+    const handleHelpModal = () => {
+        openModal({
+            children: <HelpModalContent />,
+            title: t('page.appMenu.help', { postProcess: 'sentenceCase' }),
+        });
     };
 
     const handleSetSideQueueLayout = (sideQueueLayout: 'horizontal' | 'vertical') => {
@@ -196,15 +206,11 @@ export const AppMenu = () => {
             type: 'divider',
         },
         {
-            condition: !isServerLock(),
-            id: 'manage-servers',
-            item: {
-                label: t('page.appMenu.manageServers', { postProcess: 'sentenceCase' }),
-                leftSection: <Icon icon="edit" />,
-                onClick: handleManageServersModal,
-                type: 'item',
-            },
-            type: 'conditional-item',
+            icon: 'signOut',
+            id: 'log-off',
+            label: t('page.appMenu.logOff', { postProcess: 'sentenceCase' }),
+            onClick: handleLogOff,
+            type: 'item',
         },
         {
             id: 'divider-3',
@@ -215,6 +221,13 @@ export const AppMenu = () => {
             id: 'settings',
             label: t('page.appMenu.settings', { postProcess: 'sentenceCase' }),
             onClick: () => openSettingsModal(),
+            type: 'item',
+        },
+        {
+            icon: 'info',
+            id: 'help',
+            label: t('page.appMenu.help', { postProcess: 'sentenceCase' }),
+            onClick: handleHelpModal,
             type: 'item',
         },
         {
