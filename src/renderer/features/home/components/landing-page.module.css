@@ -1,0 +1,68 @@
+.fs-landing-page-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+    background: var(--theme-colors-background);
+    text-align: center;
+    gap: 2rem;
+}
+
+.fs-landing-page-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    max-width: 500px;
+}
+
+.fs-landing-page-logo {
+    width: 96px;
+    height: 96px;
+    border-radius: 16px;
+}
+
+.fs-landing-page-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--theme-colors-text-primary);
+    margin: 0;
+}
+
+.fs-landing-page-description {
+    font-size: 1rem;
+    color: var(--theme-colors-text-secondary);
+    line-height: 1.6;
+    margin: 0;
+}
+
+.fs-landing-page-features {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+    text-align: left;
+    padding: 1rem 0;
+}
+
+.fs-landing-page-feature {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--theme-colors-text-secondary);
+}
+
+.fs-landing-page-feature-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--theme-colors-primary);
+    flex-shrink: 0;
+}
+
+.fs-landing-page-enter-button {
+    margin-top: 1rem;
+}
