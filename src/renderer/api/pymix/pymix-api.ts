@@ -145,7 +145,8 @@ export const contract = c.router({
     },
 });
 
-const axiosClient = axios.create({});
+const axiosClient = axios.create({withCredentials: true});
+
 
 axiosClient.defaults.paramsSerializer = (params) => {
     return qs.stringify(params, { arrayFormat: 'repeat' });
