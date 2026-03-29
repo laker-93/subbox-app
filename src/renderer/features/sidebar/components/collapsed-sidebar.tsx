@@ -24,6 +24,8 @@ import {
     useSidebarItems,
     useWindowSettings,
 } from '/@/renderer/store';
+import { useAppMode, useAppStoreActions } from '/@/renderer/store/app.store';
+import { AppMode } from '/@/renderer/store/app.store';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
@@ -41,6 +43,8 @@ export const CollapsedSidebar = () => {
     const sidebarCollapsedNavigation = useSidebarCollapsedNavigation();
     const sidebarItems = useSidebarItems();
     const currentServer = useCurrentServer();
+    const appMode = useAppMode();
+    const { setAppMode } = useAppStoreActions();
 
     const translatedSidebarItemMap = useMemo(
         () => ({
@@ -207,6 +211,20 @@ export const CollapsedSidebar = () => {
                     </DropdownMenu>
                 )}
             </ScrollArea>
+            <Group gap={0} grow style={{ flexShrink: 0, padding: 'var(--theme-spacing-xs) 0' }}>
+                <CollapsedSidebarButton
+                    onClick={() => setAppMode('library')}
+                    style={{ opacity: appMode === 'library' ? 1 : 0.4 }}
+                >
+                    <Icon icon="disc" size="xl" />
+                </CollapsedSidebarButton>
+                <CollapsedSidebarButton
+                    onClick={() => setAppMode('sync')}
+                    style={{ opacity: appMode === 'sync' ? 1 : 0.4 }}
+                >
+                    <Icon icon="refresh" size="xl" />
+                </CollapsedSidebarButton>
+            </Group>
         </motion.div>
     );
 };

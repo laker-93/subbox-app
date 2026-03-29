@@ -51,30 +51,40 @@ In short:
 * Subbox = cloud-based DJ library management + sync platform the backend server is always Navidrome
 
 
-# Subbox Sync & Library UX Specification
+# Subbox Sync & Library UX Specification (Playlist-Driven Sync)
 
 ## Overview
 
-This document defines the user experience and workflow design for Subbox's music library management, focusing on separating **library interaction** from **synchronization operations**.
+This document defines the user experience and workflow design for Subbox's music library management.
 
-The goal is to:
+Key goals:
 
-* Reduce UI clutter
-* Improve user mental models
-* Enable scalable workflows for large music collections
-* Support storage-based pricing
+* Separate **Library** from **Sync**
+* Support large DJ collections
+* Simplify syncing by using **playlists/crates as the only sync unit**
+* Enable intuitive, DJ-native workflows
 
 ---
 
 ## Core Concept
 
-Subbox operates on a **Source → Cloud → Destination** model.
+Subbox operates on a:
 
-### Definitions
+### **Source → Cloud → Destination**
 
-* **Source**: External systems or files (e.g. Serato, Rekordbox, local folders)
-* **Cloud Library**: User’s centralised music and metadata stored in Subbox
-* **Destination**: Export targets (e.g. Rekordbox, Serato, ZIP download)
+* **Source**: Serato, Rekordbox, local files
+* **Cloud**: Subbox (audio + metadata)
+* **Destination**: Export targets or local devices
+
+---
+
+## Core Principle (Updated)
+
+> **If it’s in a playlist or crate, it can be synced.**
+
+* Sync scopes are removed
+* Playlists/crates are the only unit of sync
+* Custom selections are handled via **Playlist Builder**
 
 ---
 
@@ -96,19 +106,19 @@ Features:
 
 Constraints:
 
-* No upload/download UI elements
-* No sync-related actions
+* No upload/download UI clutter
+* No sync actions
 
 ---
 
 #### 2. Sync Mode (Dedicated Workspace)
 
-Purpose: All import/export/sync operations
+Purpose: Data movement and management
 
 Features:
 
-* Import music and metadata
-* Sync with DJ software
+* Sync playlists/crates
+* Upload/download tracks
 * Export libraries
 * Storage management
 
@@ -116,100 +126,274 @@ Features:
 
 ## Desktop Application Design
 
-### Navigation Structure
+### Navigation
 
 * Library
 * Sync
-* Storage (optional surface in Sync)
 * Settings
 
 ---
 
-## Sync Tab Specification (Desktop)
-
-### Section 1: Sources (Import Into Subbox)
-
-Each source is represented as a card.
-
-#### Source Card Structure
-
-* Source Name (e.g. Serato, Rekordbox, Local Folder)
-* Last Synced Timestamp
-* Detected Changes Summary:
-
-  * New tracks
-  * Updated metadata
-  * Removed tracks
-
-#### Actions
-
-* `Sync Changes` (primary)
-* `Full Resync` (secondary, optional)
-* `Configure` (optional)
-
-#### Behaviour
-
-* System detects delta automatically
-* Only changed data is uploaded
-* Metadata-only updates are prioritised when possible
+## Sync Tab Specification
 
 ---
 
-### Section 2: Cloud Library Status
+### Section 1: Sources (Import Into Subbox)
 
-Displays storage and plan usage.
+Each source is represented as a card:
 
-#### Elements
+* Serato
+* Rekordbox
+* Local Files
 
-* Total Storage Used (e.g. 3.2 GB / 5 GB)
-* Plan Tier (Free / Paid)
+---
+
+### Source Card Displays
+
+* Source name
+* Last sync timestamp
+* Change summary:
+
+  * New tracks
+  * Metadata updates
+* Playlist-based summary:
+
+  * “3 playlists with changes”
+
+---
+
+### Actions
+
+* `Sync Changes`
+* `Select Playlists`
+
+---
+
+## Sync Flow (Upload)
+
+### Step 1: User clicks `Sync Changes`
+
+---
+
+### Step 2: Select Playlists / Crates
+
+User selects one or more playlists:
+
+#### UI Displays:
+
+* Playlist name
+* Track count
+* Optional:
+
+  * “Already in cloud”
+  * “Needs upload”
+
+---
+
+### Step 3: Preview Changes
+
+Display:
+
+* Total playlists selected
+* Total tracks
+* Tracks already in cloud
+* New uploads required
+* Metadata updates
+* Storage impact
+
+---
+
+### Step 4: Confirm Sync
+
+Action:
+
+* `Sync Selected Playlists`
+
+---
+
+### Sync Behaviour (Upload)
+
+* Only missing audio files are uploaded
+* Duplicate files are skipped
+* Metadata is always synced (cue points, loops, playlists)
+* Delta detection is automatic
+* Progress bar of upload or download displayed
+
+---
+
+## Section 2: Cloud Library Status
+
+Displays:
+
+* Storage used (e.g. 3.2 GB / 5 GB)
+* Plan tier
 * Breakdown:
 
-  * Audio storage
-  * Metadata storage
+  * Audio
+  * Metadata
 
-#### Actions
+---
+
+### Actions
 
 * `Upgrade Storage`
 
 ---
 
-### Section 3: Destinations (Export From Subbox)
+## Section 3: Destinations (Download / Export)
 
-#### Destination Options
+Supports:
 
 * Export to Rekordbox
 * Export to Serato
 * Download as ZIP
-* Sync to Local Device
-
-#### Destination Card Structure
-
-* Destination Name
-* Last Export Timestamp
-* Pending Changes Indicator
-
-#### Actions
-
-* `Export Now`
-* `Sync Changes`
+* Sync to local device
 
 ---
 
-### Section 4: Activity Feed
+## Download / Export Flow
 
-Chronological log of system actions.
+### Step 1: Select Playlists
 
-#### Example Entries
+User selects playlists from Subbox cloud.
 
-* Uploaded 24 tracks
-* Updated 120 cue points
-* Exported library to Rekordbox
+---
+
+### Step 2: Choose Format
+
+* Rekordbox
+* Serato
+* ZIP
+
+---
+
+### Step 3: Preview
+
+Display:
+
+* Playlist count
+* Track count
+* Download size
+* Already on device
+* Files to download
+
+---
+
+### Step 4: Confirm
+
+Action:
+
+* `Download Selected Playlists`
+
+---
+
+### Sync Behaviour (Download)
+
+* Only missing files are downloaded
+* Existing files are skipped
+* Metadata is updated locally
+* Duplicate downloads are prevented
+
+---
+
+## Section 4: Activity Feed
+
+Displays chronological actions:
+
+* Uploads
+* Metadata updates
+* Exports
 
 Purpose:
 
-* Increase transparency
-* Build user trust
+* Transparency
+* User trust
+
+---
+
+## Playlist Builder (Replaces Custom Selection)
+
+### Purpose
+
+Enable users to create playlists for syncing without relying on external DJ software.
+
+---
+
+### Entry Points
+
+* Sync page → `Create Playlist`
+* Library → `New Playlist`
+* Empty states
+
+---
+
+### Playlist Builder Features
+
+* Search tracks by:
+
+  * Name
+  * Artist
+* Results from:
+
+  * Cloud library
+  * Local indexed tracks (if available)
+
+---
+
+### Interaction Flow
+
+1. User enters search query
+2. Results appear instantly
+3. User clicks:
+
+   * `+ Add`
+4. Tracks added to playlist
+
+---
+
+### Additional Features
+
+* Drag-and-drop ordering
+* Remove tracks
+* Bulk add
+* Real-time summary:
+
+  * Track count
+  * Estimated size
+
+---
+
+### Save Playlist
+
+User inputs:
+
+* Playlist name
+
+Optional:
+
+* Mark as:
+
+  * Sync-enabled (future)
+
+---
+
+## Direct Playlist Actions
+
+Playlists support:
+
+* `Sync to Subbox`
+* `Download to Device`
+* `Export`
+
+---
+
+## Playlist Sync Indicators
+
+Each playlist shows status:
+
+* Synced
+* Out of sync
+* Not in cloud
 
 ---
 
@@ -223,7 +407,7 @@ Purpose:
 
 ---
 
-### Navigation Structure
+### Navigation
 
 * Library
 * Upload
@@ -234,106 +418,65 @@ Purpose:
 
 ## Upload Flow (Web)
 
-### Entry Points
+### Upload Types
 
-* Upload button (global)
-* Drag & drop anywhere
-* Empty state prompts
+#### 1. Audio Upload
 
----
-
-### Upload Modal Structure
-
-#### Section 1: Upload Music Files
-
-* Drag & drop area
-* File selection
-* ZIP upload support
-
-#### UI Feedback
-
-* Upload progress bar
-* Storage usage impact:
-
-  * Example: "+320 MB"
+* Drag & drop
+* ZIP upload
+* Shows storage impact
 
 ---
 
-#### Section 2: Upload Metadata Only
-
-Supported Inputs:
+#### 2. Metadata Upload
 
 * Rekordbox XML
-* Serato metadata
+* Serato data
 
-#### Messaging
+Purpose:
 
-* Emphasise speed:
-
-  * "Updates cues, loops, playlists without uploading audio files"
+* Fast updates without audio upload
 
 ---
 
-## Sync Status Page (Web)
+## Sync Status (Web)
 
-### Purpose
+Displays:
 
-Read-only visibility into sync state.
-
-### Elements
-
-* Last sync timestamps per source
-* Pending changes summary
+* Last sync timestamps
+* Playlist sync states
 * Storage usage
 
-### Constraints
+Constraints:
 
-* No heavy sync operations
-* Prompt user to use desktop for full sync
-
----
-
-## Download Flow (Web)
-
-### Features
-
-* Select:
-
-  * Playlists
-  * Full library
-
-### Output Formats
-
-* Rekordbox
-* Serato
-* ZIP archive
+* Heavy sync actions handled in desktop
 
 ---
 
 ## Storage & Pricing Model
 
-### Principles
+### Pricing
 
-* Pricing based on total stored audio size
-* Metadata storage is lightweight and always allowed
+* Based on total audio storage
+* Metadata is lightweight and always allowed
 
 ---
 
 ### Free Tier
 
-* Includes first 1 GB of storage
+* First 1 GB free
 
 ---
 
-### Behaviour at Storage Limit
+### At Storage Limit
 
-#### Allowed
+Allowed:
 
 * Metadata sync
 * Library browsing
-* Export existing files
+* Export
 
-#### Blocked
+Blocked:
 
 * Uploading new audio files
 
@@ -343,140 +486,116 @@ Read-only visibility into sync state.
 
 Instead of:
 
-* "Storage limit reached"
+* “Storage limit reached”
 
 Use:
 
-* "You’ve run out of space for new tracks. You can still sync metadata."
-
----
-
-### Storage Visibility
-
-Displayed in:
-
-* Sync Tab (Desktop)
-* Upload Modal (Web)
-* Settings / Storage Page
-
----
-
-### Smart Prompts
-
-#### During Upload
-
-* "This upload will use 400 MB (80% of your plan)"
-
-#### Near Limit
-
-* "Upgrade to continue adding tracks to your library"
+* “You’ve run out of space for new tracks. You can still sync metadata.”
 
 ---
 
 ## Key UX Principles
 
-### 1. Replace "Upload" with "Sync"
+### 1. Playlist-Driven Sync
 
-Preferred terminology:
-
-* Sync Changes
-* Import to Cloud
-* Add to Library
-
-Avoid:
-
-* Upload (except in web context where unavoidable)
+* Playlists/crates are the only sync unit
+* No separate sync abstraction exposed
 
 ---
 
-### 2. Metadata is First-Class
+### 2. DJ-Centric Design
 
-System should prioritise:
+Users think in:
 
-* Cue points
-* Loops
+* Sets
+* Crates
 * Playlists
 
-Before:
+---
 
-* Audio file transfer
+### 3. Always Show Impact
+
+Before actions, display:
+
+* Track count
+* File size
 
 ---
 
-### 3. Show Deltas (Changes)
+### 4. Smart Sync
 
-Before any sync, display:
-
-* Number of new tracks
-* Number of metadata updates
-* Number of deletions
+* Skip duplicates
+* Sync only missing files
+* Always sync metadata
 
 ---
 
-### 4. Prevent Redundant Uploads
+### 5. Reusable by Design
 
-System should:
-
-* Detect existing files
-* Skip duplicate uploads
-* Suggest metadata-only sync where possible
+Playlists act as reusable sync definitions
 
 ---
 
 ## Example User Flows
 
-### First-Time User (Desktop)
+---
 
-1. Open Sync tab
-2. Connect Serato or Rekordbox
-3. System scans library
-4. Display:
+### First-Time User
 
-   * Total tracks found
-   * Storage required
-5. User clicks `Sync to Cloud`
+1. Connect Serato
+2. Select playlists
+3. Preview storage impact
+4. Sync to cloud
 
 ---
 
 ### Returning User
 
 1. Open Sync tab
-2. System shows:
+2. See:
 
-   * "12 new tracks"
-   * "34 updated cues"
-3. User clicks `Sync Changes`
-
----
-
-### Cross-Platform Workflow
-
-1. Upload via desktop
-2. Browse via web or mobile
-3. Export via desktop
+   * “+12 tracks”
+   * “30 metadata updates”
+3. Click `Sync Changes`
 
 ---
 
-## Future Considerations
+### Create Custom Sync Playlist
 
-* Device-based sync targets
-* Background sync scheduling
-* Conflict resolution UI
-* Selective sync (playlist-based)
+1. Click `Create Playlist`
+2. Search and add tracks
+3. Save playlist
+4. Sync playlist
+
+---
+
+### Partial Library Workflow
+
+User:
+
+* Has 100GB library
+* Selects 5 playlists (5GB)
+
+Result:
+
+* Faster sync
+* Lower storage usage
+* Better control
 
 ---
 
 ## Summary
 
-The system separates concerns into:
+Subbox separates:
 
-* **Library**: Consumption and organisation
-* **Sync**: Data movement and transformation
+* **Library** → browsing & organisation
+* **Sync** → controlled data movement
 
-This separation:
+With playlist-driven sync:
 
-* Reduces cognitive load
-* Improves scalability
-* Aligns with user expectations of cloud-based systems
+* Users stay in control of large collections
+* Sync is intuitive and predictable
+* System complexity is reduced
+* UX aligns with real DJ workflows
 
 ---

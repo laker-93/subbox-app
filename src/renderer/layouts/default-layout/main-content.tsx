@@ -16,11 +16,13 @@ import {
     useAppStore,
     useAppStoreActions,
     useGlobalExpanded,
+    useAppMode,
     useSideQueueLayout,
     useSideQueueType,
 } from '/@/renderer/store';
 import { constrainRightSidebarWidth, constrainSidebarWidth } from '/@/renderer/utils';
 import { Spinner } from '/@/shared/components/spinner/spinner';
+import { SyncModePlaceholder } from '/@/renderer/features/sync/components/sync-mode-placeholder';
 
 const MINIMUM_SIDEBAR_WIDTH = 260;
 
@@ -228,14 +230,20 @@ function GlobalExpandedPanel() {
 }
 
 function MainContentBody() {
+    const appMode = useAppMode();
+
     return (
         <div className={styles.mainContentBody}>
             <div className={styles.mainContentBodyScroll}>
-                <Suspense fallback={<Spinner container />}>
-                    <Outlet />
-                </Suspense>
+                {appMode === 'sync' ? (
+                    <SyncModePlaceholder />
+                ) : (
+                    <Suspense fallback={<Spinner container />}>
+                        <Outlet />
+                    </Suspense>
+                )}
             </div>
-            <GlobalExpandedPanel />
+            {appMode === 'library' && <GlobalExpandedPanel />}
         </div>
     );
 }
