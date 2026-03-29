@@ -1,5 +1,5 @@
 {
-    "name": "feishin",
+    "name": "subbox",
     "version": "1.9.0",
     "description": "A modern self-hosted music player.",
     "keywords": [
@@ -9,15 +9,15 @@
         "react",
         "electron"
     ],
-    "homepage": "https://github.com/jeffvli/feishin",
+    "homepage": "https://github.com/laker-93/subbox-app",
     "bugs": {
-        "url": "https://github.com/jeffvli/feishin/issues"
+        "url": "https://github.com/laker-93/subbox-app/issues"
     },
     "license": "GPL-3.0",
     "author": {
         "name": "jeffvli",
-        "email": "feishin@users.noreply.github.com",
-        "url": "https://github.com/jeffvli/"
+        "email": "subbox@users.noreply.github.com",
+        "url": "https://github.com/laker-93/"
     },
     "main": "./out/main/index.js",
     "scripts": {
@@ -195,5 +195,5 @@
             "esbuild"
         ]
     },
-    "productName": "feishin"
+    "productName": "subbox"
 }

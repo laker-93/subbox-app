@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
@@ -7,6 +7,7 @@ import { useAuthStoreActions } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Modal, ModalProps } from '/@/shared/components/modal/modal';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
+import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
@@ -15,6 +16,8 @@ import { toast } from '/@/shared/components/toast/toast';
 import { useForm } from '/@/shared/hooks/use-form';
 
 type AuthView = 'create' | 'login' | 'select';
+
+type CreateStatus = 'error' | 'idle' | 'loading' | 'success';
 
 interface PymixAuthModalProps {
     baseUrl: string;
@@ -26,9 +29,31 @@ interface PymixAuthModalProps {
 
 export const PymixAuthModal = ({ baseUrl, handlers, initialView, onSuccess, opened }: PymixAuthModalProps) => {
     const [view, setView] = useState<AuthView>(initialView ?? 'select');
+    const [createStatus, setCreateStatus] = useState<CreateStatus>('idle');
+
+    useEffect(() => {
+        if (initialView) {
+            setView(initialView);
+        }
+    }, [initialView]);
+
+    const isBlocked = createStatus === 'loading';
+
+    const blockedHandlers = {
+        close: isBlocked ? () => {} : handlers.close,
+        open: handlers.open,
+        toggle: isBlocked ? () => {} : handlers.toggle,
+    };
 
     return (
-        <Modal handlers={handlers} opened={opened} size="xs" withCloseButton={false}>
+        <Modal
+            closeOnClickOutside={!isBlocked}
+            closeOnEscape={!isBlocked}
+            handlers={blockedHandlers}
+            opened={opened}
+            size="xs"
+            withCloseButton={false}
+        >
             {view === 'select' && (
                 <SelectView onCreateAccount={() => setView('create')} onLogin={() => setView('login')} />
             )}
@@ -36,7 +61,12 @@ export const PymixAuthModal = ({ baseUrl, handlers, initialView, onSuccess, open
                 <LoginView baseUrl={baseUrl} onSuccess={onSuccess} />
             )}
             {view === 'create' && (
-                <CreateAccountView baseUrl={baseUrl} onSuccess={onSuccess} />
+                <CreateAccountView
+                    baseUrl={baseUrl}
+                    onStatusChange={setCreateStatus}
+                    onSuccess={onSuccess}
+                    status={createStatus}
+                />
             )}
         </Modal>
     );
@@ -89,6 +119,15 @@ function LoginView({
         initialValues: {
             password: '',
             username: '',
+        },
+        validate: {
+            password: (value) =>
+                value.length < 12
+                    ? t('form.validation.minLength', {
+                          count: 12,
+                          defaultValue: 'Must be at least 12 characters',
+                      })
+                    : null,
         },
     });
 
@@ -150,6 +189,7 @@ function LoginView({
                             context: 'password',
                             postProcess: 'titleCase',
                         })}
+                        minLength={12}
                         required
                         size="sm"
                         variant="filled"
@@ -172,13 +212,17 @@ function LoginView({
 
 function CreateAccountView({
     baseUrl,
+    onStatusChange,
     onSuccess,
+    status,
 }: {
     baseUrl: string;
+    onStatusChange: (status: CreateStatus) => void;
     onSuccess: () => void;
+    status: CreateStatus;
 }) {
     const { t } = useTranslation();
-    const [isLoading, setIsLoading] = useState(false);
+    const [statusMessage, setStatusMessage] = useState('');
     const { addServer, setCurrentServer } = useAuthStoreActions();
 
     const form = useForm({
@@ -188,11 +232,25 @@ function CreateAccountView({
             token: '',
             username: '',
         },
+        validate: {
+            password: (value) =>
+                value.length < 12
+                    ? t('form.validation.minLength', {
+                          count: 12,
+                          defaultValue: 'Must be at least 12 characters',
+                      })
+                    : null,
+        },
     });
 
     const handleSubmit = form.onSubmit(async (values) => {
         try {
-            setIsLoading(true);
+            onStatusChange('loading');
+            setStatusMessage(
+                t('page.landing.creatingAccount', {
+                    defaultValue: 'Creating your account. This may take a moment...',
+                }),
+            );
 
             // 1. Create pymix account
             await PymixController.create({
@@ -205,6 +263,12 @@ function CreateAccountView({
                 },
             });
 
+            setStatusMessage(
+                t('page.landing.settingUpServices', {
+                    defaultValue: 'Setting up your services...',
+                }),
+            );
+
             // 2. Authenticate with navidrome + filebrowser and set up server
             const serverItem = await authenticateServices({
                 password: values.password,
@@ -214,19 +278,62 @@ function CreateAccountView({
             addServer(serverItem);
             setCurrentServer(serverItem);
 
+            onStatusChange('success');
+            setStatusMessage(
+                t('page.landing.accountCreated', {
+                    defaultValue: 'Account created successfully!',
+                }),
+            );
+
             toast.success({
                 message: t('form.addServer.success', { postProcess: 'sentenceCase' }),
             });
-            onSuccess();
+
+            // Brief delay so user sees success before closing
+            setTimeout(() => {
+                onSuccess();
+            }, 1000);
         } catch (err: any) {
-            toast.error({ message: err?.message });
-        } finally {
-            setIsLoading(false);
+            onStatusChange('error');
+            setStatusMessage(
+                err?.message ||
+                    t('page.landing.accountError', {
+                        defaultValue: 'Failed to create account. Please try again.',
+                    }),
+            );
         }
     });
 
     const isSubmitDisabled =
         !form.values.username || !form.values.password || !form.values.email || !form.values.token;
+
+    if (status === 'loading' || status === 'success') {
+        return (
+            <Stack align="center" gap="md" p="xl">
+                {status === 'loading' && <Spinner />}
+                <Text c={status === 'success' ? 'green' : 'dimmed'} size="sm" ta="center">
+                    {statusMessage}
+                </Text>
+            </Stack>
+        );
+    }
+
+    if (status === 'error') {
+        return (
+            <Stack align="center" gap="md" p="xl">
+                <Text c="red" size="sm" ta="center">
+                    {statusMessage}
+                </Text>
+                <Button
+                    fullWidth
+                    onClick={() => onStatusChange('idle')}
+                    variant="default"
+                >
+                    {t('common.tryAgain', { defaultValue: 'Try again', postProcess: 'sentenceCase' })}
+                </Button>
+            </Stack>
+        );
+    }
 
     return (
         <form onSubmit={handleSubmit}>
@@ -260,6 +367,7 @@ function CreateAccountView({
                             context: 'password',
                             postProcess: 'titleCase',
                         })}
+                        minLength={12}
                         required
                         size="sm"
                         variant="filled"
@@ -276,7 +384,6 @@ function CreateAccountView({
                 <Button
                     disabled={isSubmitDisabled}
                     fullWidth
-                    loading={isLoading}
                     type="submit"
                     variant="filled"
                 >

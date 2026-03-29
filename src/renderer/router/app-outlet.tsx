@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Outlet } from 'react-router';
 
 import { urlConfig } from '/@/renderer/config/url-config';
@@ -15,7 +15,7 @@ export const AppOutlet = () => {
     const { deleteServer, setCurrentServer } = useAuthStoreActions();
     const [authModalOpened, authModalHandlers] = useDisclosure(false);
     const [showLanding, setShowLanding] = useState(true);
-    const initialViewRef = useRef<'create' | 'login'>('login');
+    const [initialView, setInitialView] = useState<'create' | 'login'>('login');
 
     const isActionsRequired = useMemo(() => {
         // When SERVER_LOCK is enabled and the configured URL has changed,
@@ -42,12 +42,12 @@ export const AppOutlet = () => {
     }, [authModalHandlers]);
 
     const handleLogin = useCallback(() => {
-        initialViewRef.current = 'login';
+        setInitialView('login');
         authModalHandlers.open();
     }, [authModalHandlers]);
 
     const handleCreateAccount = useCallback(() => {
-        initialViewRef.current = 'create';
+        setInitialView('create');
         authModalHandlers.open();
     }, [authModalHandlers]);
 
@@ -63,7 +63,7 @@ export const AppOutlet = () => {
                 <PymixAuthModal
                     baseUrl={urlConfig.pymix}
                     handlers={authModalHandlers}
-                    initialView={initialViewRef.current}
+                    initialView={initialView}
                     opened={authModalOpened}
                     onSuccess={handleAuthSuccess}
                 />

@@ -1,6 +1,6 @@
-# Feishin AI Context Files
+# Subbox AI Context Files
 
-This directory contains context files to help AI coding agents understand and contribute to Feishin effectively.
+This directory contains context files to help AI coding agents understand and contribute to Subbox effectively.
 
 ## Files
 

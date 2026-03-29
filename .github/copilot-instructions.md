@@ -1,8 +1,8 @@
-# Feishin Copilot Instructions
+# Subbox Copilot Instructions
 
 ## Architecture Overview
 
-**Feishin** is an Electron desktop music player with support for multiple server backends (Subsonic, Navidrome, Jellyfin) and web deployment. The codebase follows a monorepo pattern with four distinct runtime environments:
+**Subbox** is an Electron desktop music player with support for multiple server backends (Subsonic, Navidrome, Jellyfin) and web deployment. The codebase follows a monorepo pattern with four distinct runtime environments:
 
 - **`src/main`** - Electron main process (node runtime). Handles window management, IPC, auto-updates, media keys, platform-specific features.
 - **`src/preload`** - Electron preload scripts. Exposes safe APIs to renderer via `contextBridge` (e.g., `window.api.ipc`, `window.api.mpvPlayer`).
