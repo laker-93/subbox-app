@@ -108,7 +108,7 @@ export default defineConfig({
                         type: 'image/png',
                     },
                 ],
-                name: 'Feishin',
+                name: 'Subbox',
                 orientation: 'portrait',
                 screenshots: [
                     {
@@ -119,7 +119,7 @@ export default defineConfig({
                         type: 'image/webp',
                     },
                 ],
-                short_name: 'Feishin',
+                short_name: 'Subbox',
                 start_url: '/',
                 theme_color: '#1E003D',
             },

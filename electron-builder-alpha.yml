@@ -1,5 +1,5 @@
-appId: org.jeffvli.feishin
-productName: Feishin
+appId: org.jeffvli.subbox
+productName: Subbox
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 electronVersion: 39.4.0
 directories:
@@ -67,6 +67,6 @@ npmRebuild: false
 
 publish:
     provider: s3
-    bucket: feishin-nightly
+    bucket: subbox-nightly
     channel: alpha
     endpoint: https://065f090c64de2dc707dd70ac72db9669.r2.cloudflarestorage.com

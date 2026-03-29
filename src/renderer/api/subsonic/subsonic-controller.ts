@@ -58,7 +58,7 @@ const getSubsonicImageRequest = ({
             `?id=${id}` +
             `&${server.credential}` +
             '&v=1.13.0' +
-            '&c=Feishin' +
+            '&c=Subbox' +
             (imageSize ? `&size=${imageSize}` : ''),
     };
 };
@@ -166,7 +166,7 @@ export const SubsonicController: InternalControllerEndpoint = {
 
         const resp = await ssApiClient({ server: null, url: cleanServerUrl }).authenticate({
             query: {
-                c: 'Feishin',
+                c: 'Subbox',
                 f: 'json',
                 username: body.username,
                 v: '1.13.0',
@@ -835,7 +835,7 @@ export const SubsonicController: InternalControllerEndpoint = {
             `?id=${query.id}` +
             `&${apiClientProps.server?.credential}` +
             '&v=1.13.0' +
-            '&c=Feishin'
+            '&c=Subbox'
         );
     },
     getFolder: async ({ apiClientProps, context, query }) => {
@@ -1803,7 +1803,7 @@ export const SubsonicController: InternalControllerEndpoint = {
     },
     getStreamUrl: ({ apiClientProps: { server }, query }) => {
         const { bitrate, format, id, transcode } = query;
-        let url = `${server?.url}/rest/stream.view?id=${id}&v=1.13.0&c=Feishin&${server?.credential}`;
+        let url = `${server?.url}/rest/stream.view?id=${id}&v=1.13.0&c=Subbox&${server?.credential}`;
 
         if (transcode) {
             if (format) {

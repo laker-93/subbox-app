@@ -30,7 +30,7 @@ Feishin is primarily a lightweight music player client for Navidrome/Subsonic se
 
 Subbox extends this concept into a full DJ workflow platform:
 
-### Feishin
+### Subbox
 
 * Music streaming client
 * Connects to an existing server
@@ -47,8 +47,8 @@ Subbox extends this concept into a full DJ workflow platform:
 
 In short:
 
-* Feishin = music player
-* Subbox = cloud-based DJ library management + sync platform
+* Feishin = music player for different backends (navidrome, jelly fin)
+* Subbox = cloud-based DJ library management + sync platform the backend server is always Navidrome
 
 
 # Subbox Sync & Library UX Specification

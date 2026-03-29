@@ -23,12 +23,6 @@ import '/@/shared/styles/global.css';
 import { PlayerProvider } from '/@/renderer/features/player/context/player-context';
 import { AudioPlayers } from '/@/renderer/features/player/components/audio-players';
 
-const ReleaseNotesModal = lazy(() =>
-    import('./release-notes-modal').then((module) => ({
-        default: module.ReleaseNotesModal,
-    })),
-);
-
 const UpdateAvailableDialog = lazy(() =>
     import('./update-available-dialog').then((module) => ({
         default: module.UpdateAvailableDialog,
@@ -123,7 +117,6 @@ export const App = () => {
                 </PlayerProvider>
             </WebAudioContext.Provider>
             <Suspense fallback={null}>
-                <ReleaseNotesModal />
                 <UpdateAvailableDialog />
             </Suspense>
         </MantineProvider>
