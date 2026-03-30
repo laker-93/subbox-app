@@ -10,6 +10,7 @@
         "createRadioStation": "create $t(entity.radioStation, {\"count\": 1})",
         "deletePlaylist": "delete $t(entity.playlist, {\"count\": 1})",
         "deleteRadioStation": "delete $t(entity.radioStation, {\"count\": 1})",
+        "deleteSong": "delete $t(entity.track, {\"count\": 1})",
         "selectAll": "select all",
         "deselectAll": "deselect all",
         "downloadStarted": "started download of {{count}} items",
@@ -367,6 +368,10 @@
             "input_confirm": "type the name of the $t(entity.playlist, {\"count\": 1}) to confirm",
             "success": "$t(entity.playlist, {\"count\": 1}) deleted successfully",
             "title": "delete $t(entity.playlist, {\"count\": 1})"
+        },
+        "deleteSong": {
+            "success": "$t(entity.track, {\"count\": 1}) deleted successfully",
+            "title": "delete $t(entity.track, {\"count\": 1})"
         },
         "editPlaylist": {
             "publicJellyfinNote": "Jellyfin for some reason does not expose whether a playlist is public or not. If you wish for this to remain public, please have the following input selected",

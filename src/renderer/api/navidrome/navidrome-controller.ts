@@ -368,7 +368,7 @@ export const NavidromeController: InternalControllerEndpoint = {
         });
 
         if (res.status !== 200) {
-            throw new Error('Failed to get album list');
+            throw new Error(`Failed to get album list: ${res.status} ${JSON.stringify(res.body?.data)}`);
         }
 
         return {

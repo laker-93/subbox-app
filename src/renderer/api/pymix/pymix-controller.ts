@@ -57,6 +57,10 @@ type SeratoDownloadArgs = {
     body: z.infer<typeof pymixType._parameters.exportJob>;
 };
 
+type SyncPlanArgs = {
+    body: z.infer<typeof pymixType._parameters.syncPlan>;
+};
+
 export const PymixController = {
     create: async (args: PymixClientArgs & CreateArgs) => {
         const { baseUrl, body, signal, token } = args;
@@ -196,6 +200,17 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to sync');
+        }
+
+        return res.body.data;
+    },
+
+    syncPlan: async (args: PymixClientArgs & SyncPlanArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).syncPlan({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get sync plan');
         }
 
         return res.body.data;
