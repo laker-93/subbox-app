@@ -85,6 +85,64 @@ const exportJob = z.object({
     success: z.boolean(),
 });
 
+const syncPlanTrackMissing = z.object({
+    album: z.string().optional(),
+    artist: z.string(),
+    duration: z.number().optional(),
+    fileSize: z.number().optional(),
+    title: z.string(),
+});
+
+const syncPlanTrackExisting = z.object({
+    album: z.string().optional(),
+    artist: z.string(),
+    status: z.string(),
+    title: z.string(),
+});
+
+const syncPlanTrackConflict = z.object({
+    album: z.string().optional(),
+    artist: z.string(),
+    reason: z.string().optional(),
+    status: z.string(),
+    title: z.string(),
+});
+
+const syncPlanMetadataUpdate = z.object({
+    artist: z.string(),
+    fields: z.array(z.string()),
+    title: z.string(),
+});
+
+const syncPlanChunk = z.object({
+    id: z.string(),
+    sizeBytes: z.number(),
+    trackCount: z.number(),
+});
+
+const syncPlan = z.object({
+    download: z.object({
+        chunks: z.array(syncPlanChunk),
+        strategy: z.string(),
+    }),
+    metadata: z.object({
+        updates: z.array(syncPlanMetadataUpdate),
+    }),
+    summary: z.object({
+        downloadSizeBytes: z.number(),
+        metadataUpdates: z.number(),
+        playlists: z.number(),
+        tracksAlreadyPresent: z.number(),
+        tracksMissing: z.number(),
+        tracksRequested: z.number(),
+    }),
+    tracks: z.object({
+        conflicts: z.array(syncPlanTrackConflict),
+        existing: z.array(syncPlanTrackExisting),
+        missing: z.array(syncPlanTrackMissing),
+    }),
+});
+
 // --- Parameter schemas ---
 
 const createParameters = z.object({
@@ -146,6 +204,27 @@ const isValidTokenParameters = z.object({
     token: z.string(),
 });
 
+const syncPlanPlaylist = z.object({
+    id: z.string(),
+    source: z.string(),
+});
+
+const syncPlanLocalTrack = z.object({
+    album: z.string().optional(),
+    artist: z.string(),
+    title: z.string(),
+});
+
+const syncPlanParameters = z.object({
+    direction: z.enum(['download', 'upload']),
+    localTracks: z.array(syncPlanLocalTrack).optional(),
+    options: z.object({
+        fuzzyMatch: z.boolean().optional(),
+        includeMetadata: z.boolean().optional(),
+    }).optional(),
+    playlists: z.array(syncPlanPlaylist),
+});
+
 export const pymixType = {
     _parameters: {
         create: createParameters,
@@ -156,6 +235,7 @@ export const pymixType = {
         importProgress: importProgressParameters,
         isValidToken: isValidTokenParameters,
         login: loginParameters,
+        syncPlan: syncPlanParameters,
         matchTracks: matchTracksParameters,
         rbImport: rbImportParameters,
         sync: syncParameters,
@@ -176,6 +256,7 @@ export const pymixType = {
         rbImport,
         seratoImport,
         sync,
+        syncPlan,
         syncPlaylists,
     },
 };

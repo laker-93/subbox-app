@@ -125,6 +125,15 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    syncPlan: {
+        body: pymixType._parameters.syncPlan,
+        method: 'POST',
+        path: 'sync/plan',
+        responses: {
+            200: resultWithHeaders(pymixType._response.syncPlan),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     syncPlaylists: {
         body: pymixType._parameters.syncPlaylists,
         method: 'POST',

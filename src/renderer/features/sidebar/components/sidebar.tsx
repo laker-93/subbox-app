@@ -21,7 +21,6 @@ import {
     SidebarSharedPlaylistList,
 } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
 import {
-    useAppMode,
     useAppStore,
     useAppStoreActions,
     useFullScreenPlayerStore,
@@ -29,7 +28,6 @@ import {
     usePlayerSong,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
-import { AppMode } from '/@/renderer/store/app.store';
 import {
     SidebarItemType,
     useSidebarItems,
@@ -45,14 +43,11 @@ import { ImageUnloader } from '/@/shared/components/image/image';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Text } from '/@/shared/components/text/text';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
-import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { ExplicitStatus, LibraryItem } from '/@/shared/types/domain-types';
 import { Platform } from '/@/shared/types/types';
 
 export const Sidebar = () => {
     const { t } = useTranslation();
-    const appMode = useAppMode();
-    const { setAppMode } = useAppStoreActions();
 
     const sidebarPlaylistList = useSidebarPlaylistList();
 
@@ -157,29 +152,6 @@ export const Sidebar = () => {
                 </Accordion>
             </ScrollArea>
             <AnimatePresence initial={false} mode="popLayout">
-                <div style={{ flexShrink: 0, padding: '0 var(--theme-spacing-md)' }}>
-                    <SegmentedControl
-                        data={[
-                            {
-                                label: t('page.sidebar.library', {
-                                    defaultValue: 'Library',
-                                    postProcess: 'titleCase',
-                                }),
-                                value: 'library',
-                            },
-                            {
-                                label: t('page.sidebar.sync', {
-                                    defaultValue: 'Sync',
-                                    postProcess: 'titleCase',
-                                }),
-                                value: 'sync',
-                            },
-                        ]}
-                        fullWidth
-                        onChange={(value) => setAppMode(value as AppMode)}
-                        value={appMode}
-                    />
-                </div>
                 <motion.div className={styles.serverSelectorWrapper} key="server-selector" layout>
                     <ServerSelector />
                 </motion.div>
