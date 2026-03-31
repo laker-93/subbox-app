@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
 import { useSuspenseQuery } from '@tanstack/react-query';
+import isElectron from 'is-electron';
 import { z } from 'zod';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
-import { useCurrentServerId } from '/@/renderer/store';
+import { useCurrentServerId, useCurrentServerWithCredential } from '/@/renderer/store';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
@@ -16,6 +17,7 @@ import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
+import { toast } from '/@/shared/components/toast/toast';
 import {
     Playlist,
     PlaylistListSort,
@@ -25,7 +27,7 @@ import { pymixType } from '/@/shared/api/pymix/pymix-types';
 
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
 
-type Step = 'select' | 'planning' | 'preview';
+type Step = 'select' | 'planning' | 'preview' | 'downloading' | 'done';
 
 const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -41,14 +43,27 @@ const formatDuration = (seconds: number): string => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
+type LocalTrack = { album?: string; artist: string; title: string };
+
 export const SyncDownload = () => {
     const serverId = useCurrentServerId();
+    const server = useCurrentServerWithCredential();
 
     const [step, setStep] = useState<Step>('select');
     const [selectedPlaylists, setSelectedPlaylists] = useState<Set<string>>(new Set());
     const [plan, setPlan] = useState<SyncPlanResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'missing' | 'existing' | 'conflicts' | 'metadata'>('missing');
+    const [downloadResult, setDownloadResult] = useState<{ tracksExported: number } | null>(null);
+
+    const getLocalTracks = useCallback(async (): Promise<LocalTrack[]> => {
+        if (!isElectron()) return [];
+        try {
+            return await window.api.ipc.invoke('sync:get-local-tracks') as LocalTrack[];
+        } catch {
+            return [];
+        }
+    }, []);
 
     const playlistQuery = useSuspenseQuery(
         playlistsQueries.list({
@@ -90,10 +105,13 @@ export const SyncDownload = () => {
         setError(null);
 
         try {
+            const localTracks = await getLocalTracks();
+
             const result = await PymixController.syncPlan({
                 baseUrl: urlConfig.pymix,
                 body: {
                     direction: 'download',
+                    localTracks,
                     options: {
                         fuzzyMatch: true,
                         includeMetadata: true,
@@ -111,13 +129,71 @@ export const SyncDownload = () => {
             setError(err?.message || 'Failed to get sync plan');
             setStep('select');
         }
-    }, [selectedPlaylists]);
+    }, [getLocalTracks, selectedPlaylists]);
 
     const handleBack = useCallback(() => {
         setStep('select');
         setPlan(null);
         setError(null);
+        setDownloadResult(null);
     }, []);
+
+    const handleDownload = useCallback(async () => {
+        setStep('downloading');
+        setError(null);
+
+        try {
+            if (isElectron()) {
+                const result = await window.api.ipc.invoke('sync:download-playlists', {
+                    filebrowserToken: server.fbToken ?? '',
+                    filebrowserUrl: urlConfig.filebrowser,
+                    playlistIds: Array.from(selectedPlaylists),
+                    pymixUrl: urlConfig.pymix,
+                });
+                setDownloadResult(result as { tracksExported: number });
+                setStep('done');
+            } else {
+                // Web: call syncPlaylists to get zipPath, then trigger browser download
+                const result = await PymixController.syncPlaylists({
+                    baseUrl: urlConfig.pymix,
+                    body: {
+                        direction: 'download',
+                        localTracks: [],
+                        options: {
+                            fuzzyMatch: true,
+                            includeMetadata: true,
+                        },
+                        playlists: Array.from(selectedPlaylists).map((id) => ({
+                            id,
+                            source: 'subbox',
+                        })),
+                    },
+                });
+
+                if (!result.success) {
+                    throw new Error(result.reason || 'Sync failed');
+                }
+
+                const zipFileName = result.zipPath.split('/').pop();
+                const downloadUrl = `${urlConfig.filebrowser}/api/raw/downloads/${zipFileName}`;
+
+                // Trigger browser download via hidden anchor
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = zipFileName || 'music.zip';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                setDownloadResult({ tracksExported: result.nTracksExported });
+                setStep('done');
+            }
+        } catch (err: any) {
+            toast.error({ message: err?.message || 'Download failed' });
+            setError(err?.message || 'Download failed');
+            setStep('preview');
+        }
+    }, [selectedPlaylists, server.fbToken]);
 
     // ── Select playlists ───────────────────────────────────────────────────
     if (step === 'select') {
@@ -212,6 +288,41 @@ export const SyncDownload = () => {
                     <Text c="dimmed" size="sm">
                         Generating sync plan...
                     </Text>
+                </Stack>
+            </Center>
+        );
+    }
+
+    // ── Downloading ────────────────────────────────────────────────────────
+    if (step === 'downloading') {
+        return (
+            <Center style={{ height: '100%' }}>
+                <Stack align="center" gap="md">
+                    <Spinner />
+                    <Text c="dimmed" size="sm">
+                        {isElectron()
+                            ? 'Downloading and extracting tracks...'
+                            : 'Preparing download...'}
+                    </Text>
+                </Stack>
+            </Center>
+        );
+    }
+
+    // ── Done ───────────────────────────────────────────────────────────────
+    if (step === 'done') {
+        return (
+            <Center style={{ height: '100%' }}>
+                <Stack align="center" gap="md">
+                    <TextTitle order={3}>Download Complete</TextTitle>
+                    <Text c="dimmed" size="sm">
+                        {downloadResult
+                            ? `${downloadResult.tracksExported} track${downloadResult.tracksExported === 1 ? '' : 's'} exported.`
+                            : 'Download finished.'}
+                    </Text>
+                    <Button onClick={handleBack} size="md" variant="filled">
+                        Start Over
+                    </Button>
                 </Stack>
             </Center>
         );
@@ -397,6 +508,22 @@ export const SyncDownload = () => {
                     </Stack>
                 )}
             </ScrollArea>
+
+            {error && (
+                <Text c="red" size="sm">
+                    {error}
+                </Text>
+            )}
+
+            <Button
+                disabled={summary.tracksMissing === 0 && metadata.updates.length === 0}
+                fullWidth
+                onClick={handleDownload}
+                size="md"
+                variant="filled"
+            >
+                {isElectron() ? 'Download & Extract' : 'Download Zip'}
+            </Button>
         </Stack>
     );
 };

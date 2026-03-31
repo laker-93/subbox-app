@@ -114,15 +114,8 @@ const syncPlanMetadataUpdate = z.object({
     title: z.string(),
 });
 
-const syncPlanChunk = z.object({
-    id: z.string(),
-    sizeBytes: z.number(),
-    trackCount: z.number(),
-});
-
 const syncPlan = z.object({
     download: z.object({
-        chunks: z.array(syncPlanChunk),
         strategy: z.string(),
     }),
     metadata: z.object({
@@ -170,10 +163,6 @@ const syncParameters = z.object({
     tracks: z.array(track),
 });
 
-const syncPlaylistsParameters = z.object({
-    ids: z.array(z.string()),
-});
-
 const importParameters = z.object({
     public: z.boolean(),
 });
@@ -217,13 +206,15 @@ const syncPlanLocalTrack = z.object({
 
 const syncPlanParameters = z.object({
     direction: z.enum(['download', 'upload']),
-    localTracks: z.array(syncPlanLocalTrack).optional(),
+    localTracks: z.array(syncPlanLocalTrack),
     options: z.object({
         fuzzyMatch: z.boolean().optional(),
         includeMetadata: z.boolean().optional(),
     }).optional(),
     playlists: z.array(syncPlanPlaylist),
 });
+
+const syncPlaylistsParameters = syncPlanParameters;
 
 export const pymixType = {
     _parameters: {
