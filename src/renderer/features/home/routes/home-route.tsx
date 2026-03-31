@@ -12,6 +12,7 @@ import { LibraryContainer } from '/@/renderer/features/shared/components/library
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
 import { SongInfiniteCarousel } from '/@/renderer/features/songs/components/song-infinite-carousel';
+import { urlConfig } from '/@/renderer/config/url-config';
 import {
     HomeFeatureStyle,
     HomeItem,
@@ -23,6 +24,7 @@ import {
 } from '/@/renderer/store';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
+import { Button } from '/@/shared/components/button/button';
 import {
     AlbumListSort,
     LibraryItem,
@@ -115,6 +117,20 @@ const HomeRoute = () => {
                         px="2rem"
                         ref={containerQuery.ref}
                     >
+                        <Button
+                            component="a"
+                            href={urlConfig.discord}
+                            rel="noopener noreferrer"
+                            size="sm"
+                            style={{ alignSelf: 'flex-start' }}
+                            target="_blank"
+                            variant="subtle"
+                        >
+                            {t('common.joinTheCommunity', {
+                                defaultValue: 'Join the Community',
+                                postProcess: 'titleCase',
+                            })}
+                        </Button>
                         {homeFeature && homeFeatureStyle === HomeFeatureStyle.SINGLE && (
                             <AlbumInfiniteSingleFeatureCarousel />
                         )}
