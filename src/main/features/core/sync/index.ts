@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as https from 'https';
 import * as path from 'path';
 import axios from 'axios';
-import { ipcMain, session } from 'electron';
+import { app, ipcMain, session } from 'electron';
+import * as unzipper from 'unzipper';
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
@@ -269,5 +270,200 @@ ipcMain.handle(
         sendProgress({ currentTrack: '', phase: 'done', total: missingTracks.length, uploaded: uploadedCount });
 
         return { skipped: skippedCount, uploaded: uploadedCount };
+    },
+);
+
+// ── Download playlists from cloud ──────────────────────────────────────────
+
+function getAppPath(): string {
+    const userPath = app.getPath('userData');
+    return path.join(path.dirname(userPath), 'subbox');
+}
+
+function getMusicPath(): string {
+    return path.join(getAppPath(), 'music');
+}
+
+/**
+ * Scan the local music directory and return track metadata parsed from the
+ * directory structure: music/<artist>/<album>/<title>.<ext>
+ */
+function scanLocalTracks(): Array<{ album?: string; artist: string; title: string }> {
+    const musicDir = getMusicPath();
+    if (!fs.existsSync(musicDir)) return [];
+
+    const tracks: Array<{ album?: string; artist: string; title: string }> = [];
+
+    let artistDirs: string[];
+    try {
+        artistDirs = fs.readdirSync(musicDir);
+    } catch {
+        return [];
+    }
+
+    for (const artistName of artistDirs) {
+        const artistPath = path.join(musicDir, artistName);
+        if (!fs.statSync(artistPath).isDirectory()) continue;
+
+        let albumDirs: string[];
+        try {
+            albumDirs = fs.readdirSync(artistPath);
+        } catch {
+            continue;
+        }
+
+        for (const albumName of albumDirs) {
+            const albumPath = path.join(artistPath, albumName);
+            if (!fs.statSync(albumPath).isDirectory()) continue;
+
+            let files: string[];
+            try {
+                files = fs.readdirSync(albumPath);
+            } catch {
+                continue;
+            }
+
+            for (const fileName of files) {
+                const filePath = path.join(albumPath, fileName);
+                if (fs.statSync(filePath).isDirectory()) continue;
+
+                const ext = path.extname(fileName);
+                if (!['.mp3', '.flac', '.m4a', '.ogg', '.opus', '.wav', '.aac', '.wma'].includes(ext.toLowerCase())) continue;
+
+                const title = path.basename(fileName, ext);
+                tracks.push({
+                    album: albumName,
+                    artist: artistName,
+                    title,
+                });
+            }
+        }
+    }
+
+    return tracks;
+}
+
+async function downloadFileFromFilebrowser(
+    filebrowserUrl: string,
+    filebrowserToken: string,
+    fileName: string,
+    destPath: string,
+): Promise<void> {
+    const url = `${filebrowserUrl}/api/raw/downloads/${fileName}`;
+    const response = await axios.get(url, {
+        headers: { 'X-Auth': filebrowserToken },
+        httpsAgent,
+        responseType: 'stream',
+    });
+
+    const writer = fs.createWriteStream(destPath);
+    response.data.pipe(writer);
+
+    return new Promise<void>((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+    });
+}
+
+async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        fs.createReadStream(zipFilePath)
+            .pipe(unzipper.Parse())
+            .on('entry', (entry: unzipper.Entry) => {
+                const entryPath = entry.path;
+                const type = entry.type; // 'Directory' or 'File'
+
+                if (type === 'Directory') {
+                    const dir = path.join(targetDirPath, entryPath);
+                    if (!fs.existsSync(dir)) {
+                        fs.mkdirSync(dir, { recursive: true });
+                    }
+                    entry.autodrain();
+                    return;
+                }
+
+                const filePath = path.join(targetDirPath, entryPath);
+                const dir = path.dirname(filePath);
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                }
+
+                if (fs.existsSync(filePath)) {
+                    // Skip existing files
+                    entry.autodrain();
+                } else {
+                    entry.pipe(fs.createWriteStream(filePath));
+                }
+            })
+            .on('finish', resolve)
+            .on('error', reject);
+    });
+}
+
+ipcMain.handle(
+    'sync:download-playlists',
+    async (
+        _event,
+        args: {
+            filebrowserToken: string;
+            filebrowserUrl: string;
+            playlistIds: string[];
+            pymixUrl: string;
+        },
+    ): Promise<{ tracksExported: number }> => {
+        const { filebrowserToken, filebrowserUrl, playlistIds, pymixUrl } = args;
+        const pymixCookies = await getCookiesForUrl(pymixUrl);
+
+        // Scan local music directory for existing tracks
+        const localTracks = scanLocalTracks();
+
+        // Step 1: Call syncPlaylists to prepare the zip on the server
+        const syncResponse = await axios.post(
+            `${pymixUrl}/sync/playlists`,
+            {
+                direction: 'download',
+                localTracks,
+                options: {
+                    fuzzyMatch: true,
+                    includeMetadata: true,
+                },
+                playlists: playlistIds.map((id) => ({ id, source: 'subbox' })),
+            },
+            { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
+        );
+
+        if (!syncResponse.data.success) {
+            throw new Error(`Sync failed: ${syncResponse.data.reason}`);
+        }
+
+        const { nTracksExported, zipPath } = syncResponse.data;
+        const zipFileName = `${path.basename(zipPath)}.zip`;
+
+        // Step 2: Download the zip from filebrowser
+        const appPath = getAppPath();
+        if (!fs.existsSync(appPath)) {
+            fs.mkdirSync(appPath, { recursive: true });
+        }
+        const localZipPath = path.join(appPath, zipFileName);
+        await downloadFileFromFilebrowser(filebrowserUrl, filebrowserToken, zipFileName, localZipPath);
+
+        // Step 3: Unzip and merge into app directory (zip contains music/ prefix)
+        await unzipAndMerge(localZipPath, appPath);
+
+        // Clean up the zip
+        try {
+            fs.unlinkSync(localZipPath);
+        } catch {
+            // ignore cleanup errors
+        }
+
+        return { tracksExported: nTracksExported };
+    },
+);
+
+ipcMain.handle(
+    'sync:get-local-tracks',
+    async (): Promise<Array<{ album?: string; artist: string; title: string }>> => {
+        return scanLocalTracks();
     },
 );
