@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
+import { urlConfig } from '/@/renderer/config/url-config';
 import { Button } from '/@/shared/components/button/button';
 import { Stack } from '/@/shared/components/stack/stack';
 
@@ -51,6 +52,21 @@ export const LandingPage = ({ onCreateAccount, onLogin }: LandingPageProps) => {
                     </div>
                 </div>
                 <Stack className={styles['fs-landing-page-enter-button']} gap="md">
+                    <Button
+                        component="a"
+                        fullWidth
+                        href={urlConfig.discord}
+                        rel="noopener noreferrer"
+                        size="lg"
+                        style={{ border: '1px solid var(--theme-colors-primary)' }}
+                        target="_blank"
+                        variant="default"
+                    >
+                        {t('common.joinTheCommunity', {
+                            defaultValue: 'Join the Community',
+                            postProcess: 'titleCase',
+                        })}
+                    </Button>
                     <Button
                         fullWidth
                         onClick={onLogin}

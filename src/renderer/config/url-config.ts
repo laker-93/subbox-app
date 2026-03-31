@@ -8,6 +8,7 @@
  * with the actual username via `getNavidromeUrl()`.
  */
 export const urlConfig = {
+    discord: 'https://discord.gg/mqrRbex3hs',
     filebrowser: import.meta.env.VITE_FILEBROWSER_URL as string,
     navidromeUser: import.meta.env.VITE_NAVIDROME_USER_URL as string,
     pymix: import.meta.env.VITE_PYMIX_URL as string,
