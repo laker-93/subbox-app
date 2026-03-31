@@ -55,6 +55,7 @@ export const SyncDownload = () => {
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'missing' | 'existing' | 'conflicts' | 'metadata'>('missing');
     const [downloadResult, setDownloadResult] = useState<{ tracksExported: number } | null>(null);
+    const [includeRekordboxXml, setIncludeRekordboxXml] = useState(true);
 
     const getLocalTracks = useCallback(async (): Promise<LocalTrack[]> => {
         if (!isElectron()) return [];
@@ -147,6 +148,7 @@ export const SyncDownload = () => {
                 const result = await window.api.ipc.invoke('sync:download-playlists', {
                     filebrowserToken: server.fbToken ?? '',
                     filebrowserUrl: urlConfig.filebrowser,
+                    includeRekordboxXml,
                     playlistIds: Array.from(selectedPlaylists),
                     pymixUrl: urlConfig.pymix,
                 });
@@ -185,6 +187,21 @@ export const SyncDownload = () => {
                 a.click();
                 document.body.removeChild(a);
 
+                // Optionally export and download Rekordbox XML
+                if (includeRekordboxXml) {
+                    await PymixController.rbDownload({
+                        baseUrl: urlConfig.pymix,
+                        body: { user_root: '' },
+                    });
+
+                    const xmlLink = document.createElement('a');
+                    xmlLink.href = `${urlConfig.filebrowser}/api/raw/downloads/subbox_rb_export.xml`;
+                    xmlLink.download = 'subbox_rb_export.xml';
+                    document.body.appendChild(xmlLink);
+                    xmlLink.click();
+                    document.body.removeChild(xmlLink);
+                }
+
                 setDownloadResult({ tracksExported: result.nTracksExported });
                 setStep('done');
             }
@@ -193,7 +210,7 @@ export const SyncDownload = () => {
             setError(err?.message || 'Download failed');
             setStep('preview');
         }
-    }, [selectedPlaylists, server.fbToken]);
+    }, [includeRekordboxXml, selectedPlaylists, server.fbToken]);
 
     // ── Select playlists ───────────────────────────────────────────────────
     if (step === 'select') {
@@ -508,6 +525,19 @@ export const SyncDownload = () => {
                     </Stack>
                 )}
             </ScrollArea>
+
+            <Group
+                gap="md"
+                onClick={() => setIncludeRekordboxXml((v) => !v)}
+                style={{ cursor: 'pointer' }}
+            >
+                <Checkbox
+                    checked={includeRekordboxXml}
+                    label="Include Rekordbox XML"
+                    readOnly
+                    size="sm"
+                />
+            </Group>
 
             {error && (
                 <Text c="red" size="sm">

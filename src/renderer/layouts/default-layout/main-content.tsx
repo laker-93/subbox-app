@@ -6,6 +6,8 @@ import { shallow } from 'zustand/shallow';
 
 import styles from './main-content.module.css';
 
+import { useTranslation } from 'react-i18next';
+
 import { ExpandedListContainer } from '/@/renderer/components/item-list/expanded-list-container';
 import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list-item';
 import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-screen-overlay';
@@ -20,13 +22,16 @@ import {
     useSideQueueLayout,
     useSideQueueType,
 } from '/@/renderer/store';
+import { AppMode } from '/@/renderer/store/app.store';
 import { constrainRightSidebarWidth, constrainSidebarWidth } from '/@/renderer/utils';
+import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { SyncModePlaceholder } from '/@/renderer/features/sync/components/sync-mode-placeholder';
 
 const MINIMUM_SIDEBAR_WIDTH = 260;
 
 export const MainContent = ({ shell }: { shell?: boolean }) => {
+    const appMode = useAppMode();
     const { collapsed, leftWidth, rightExpanded, rightHeight, rightWidth } = useAppStore(
         (state) => ({
             collapsed: state.sidebar.collapsed,
@@ -190,8 +195,9 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
             className={clsx(styles.mainContentContainer, {
                 [styles.rightExpanded]: rightExpanded && sideQueueType === 'sideQueue',
                 [styles.shell]: shell,
-                [styles.sidebarCollapsed]: collapsed,
-                [styles.sidebarExpanded]: !collapsed,
+                [styles.sidebarCollapsed]: collapsed && appMode === 'library',
+                [styles.sidebarExpanded]: !collapsed && appMode === 'library',
+                [styles.sidebarHidden]: appMode === 'sync',
                 [styles.verticalLayout]:
                     rightExpanded &&
                     sideQueueType === 'sideQueue' &&
@@ -204,7 +210,9 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
                 <>
                     <FullScreenVisualizerOverlay />
                     <FullScreenOverlay />
-                    <LeftSidebar isResizing={isResizing} startResizing={startResizing} />
+                    {appMode === 'library' && (
+                        <LeftSidebar isResizing={isResizing} startResizing={startResizing} />
+                    )}
                     <RightSidebar
                         isResizing={isResizingRight}
                         ref={rightSidebarRef}
@@ -229,11 +237,44 @@ function GlobalExpandedPanel() {
     );
 }
 
+function ModeToggle() {
+    const { t } = useTranslation();
+    const appMode = useAppMode();
+    const { setAppMode } = useAppStoreActions();
+
+    return (
+        <div className={styles.modeToggleBar}>
+            <SegmentedControl
+                data={[
+                    {
+                        label: t('page.sidebar.library', {
+                            defaultValue: 'Library',
+                            postProcess: 'titleCase',
+                        }),
+                        value: 'library',
+                    },
+                    {
+                        label: t('page.sidebar.sync', {
+                            defaultValue: 'Sync',
+                            postProcess: 'titleCase',
+                        }),
+                        value: 'sync',
+                    },
+                ]}
+                onChange={(value) => setAppMode(value as AppMode)}
+                size="xs"
+                value={appMode}
+            />
+        </div>
+    );
+}
+
 function MainContentBody() {
     const appMode = useAppMode();
 
     return (
         <div className={styles.mainContentBody}>
+            <ModeToggle />
             <div className={styles.mainContentBodyScroll}>
                 {appMode === 'sync' ? (
                     <SyncModePlaceholder />
