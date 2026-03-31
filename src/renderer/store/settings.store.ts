@@ -1025,12 +1025,6 @@ export const sidebarItems: SidebarItemType[] = [
         route: '',
     },
     {
-        disabled: false,
-        id: 'Radio',
-        label: i18n.t('page.sidebar.radio'),
-        route: AppRoute.RADIO,
-    },
-    {
         disabled: true,
         id: 'Settings',
         label: i18n.t('page.sidebar.settings'),

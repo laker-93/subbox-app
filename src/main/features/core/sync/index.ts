@@ -407,11 +407,12 @@ ipcMain.handle(
         args: {
             filebrowserToken: string;
             filebrowserUrl: string;
+            includeRekordboxXml?: boolean;
             playlistIds: string[];
             pymixUrl: string;
         },
     ): Promise<{ tracksExported: number }> => {
-        const { filebrowserToken, filebrowserUrl, playlistIds, pymixUrl } = args;
+        const { filebrowserToken, filebrowserUrl, includeRekordboxXml, playlistIds, pymixUrl } = args;
         const pymixCookies = await getCookiesForUrl(pymixUrl);
 
         // Scan local music directory for existing tracks
@@ -455,6 +456,27 @@ ipcMain.handle(
             fs.unlinkSync(localZipPath);
         } catch {
             // ignore cleanup errors
+        }
+
+        // Step 4: Optionally export and download Rekordbox XML
+        if (includeRekordboxXml) {
+            const musicPath = getMusicPath();
+
+            // Call pymix to prepare the Rekordbox XML on the server
+            await axios.post(
+                `${pymixUrl}/rekordbox/export`,
+                { user_root: musicPath },
+                { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
+            );
+
+            // Download the XML from filebrowser
+            const xmlDestPath = path.join(appPath, 'subbox_rb_export.xml');
+            await downloadFileFromFilebrowser(
+                filebrowserUrl,
+                filebrowserToken,
+                'subbox_rb_export.xml',
+                xmlDestPath,
+            );
         }
 
         return { tracksExported: nTracksExported };
