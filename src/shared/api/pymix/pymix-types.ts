@@ -85,6 +85,15 @@ const exportJob = z.object({
     success: z.boolean(),
 });
 
+const storageCheck = z.object({
+    allowed: z.boolean(),
+    currentUsageBytes: z.number(),
+    maxStorageBytes: z.number(),
+    reason: z.string(),
+    remainingBytes: z.number(),
+    success: z.boolean(),
+});
+
 const syncPlanTrackMissing = z.object({
     album: z.string().optional(),
     artist: z.string(),
@@ -172,7 +181,7 @@ const matchTracksParameters = z.object({
 });
 
 const rbImportParameters = z.object({
-    username: z.string(),
+    playlistNames: z.array(z.array(z.string()))
 });
 
 const importProgressParameters = z.object({
@@ -191,6 +200,10 @@ const deleteSongParameters = z.object({
 
 const isValidTokenParameters = z.object({
     token: z.string(),
+});
+
+const storageCheckParameters = z.object({
+    uploadSizeBytes: z.number(),
 });
 
 const syncPlanPlaylist = z.object({
@@ -226,6 +239,7 @@ export const pymixType = {
         importProgress: importProgressParameters,
         isValidToken: isValidTokenParameters,
         login: loginParameters,
+        storageCheck: storageCheckParameters,
         syncPlan: syncPlanParameters,
         matchTracks: matchTracksParameters,
         rbImport: rbImportParameters,
@@ -246,6 +260,7 @@ export const pymixType = {
         matchTracks,
         rbImport,
         seratoImport,
+        storageCheck,
         sync,
         syncPlan,
         syncPlaylists,

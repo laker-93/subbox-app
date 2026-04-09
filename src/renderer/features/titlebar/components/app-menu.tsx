@@ -4,11 +4,8 @@ import { Fragment, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 
-import packageJson from '../../../../../package.json';
-
 import { HelpModalContent } from '/@/renderer/features/help/components/help-modal-content';
 import { openSettingsModal } from '/@/renderer/features/settings/utils/open-settings-modal';
-import { openReleaseNotesModal } from '/@/renderer/release-notes-modal';
 import {
     useAppStore,
     useAppStoreActions,
@@ -22,7 +19,6 @@ import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { DropdownMenu, MenuItemProps } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
-import { toast } from '/@/shared/components/toast/toast';
 
 const browser = isElectron() ? window.api.browser : null;
 
@@ -81,8 +77,7 @@ export const AppMenu = () => {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const collapsed = useAppStore((state) => state.sidebar.collapsed);
-    const privateMode = useAppStore((state) => state.privateMode);
-    const { setPrivateMode, setSideBar } = useAppStoreActions();
+    const { setSideBar } = useAppStoreActions();
     const { setSettings } = useSettingsStoreActions();
     const settings = useGeneralSettings();
     const { open: openCommandPalette } = useCommandPalette();
@@ -99,22 +94,6 @@ export const AppMenu = () => {
 
     const handleExpandSidebar = () => {
         setSideBar({ collapsed: false });
-    };
-
-    const handlePrivateModeOff = () => {
-        setPrivateMode(false);
-        toast.info({
-            message: t('form.privateMode.disabled', { postProcess: 'sentenceCase' }),
-            title: t('form.privateMode.title', { postProcess: 'sentenceCase' }),
-        });
-    };
-
-    const handlePrivateModeOn = () => {
-        setPrivateMode(true);
-        toast.info({
-            message: t('form.privateMode.enabled', { postProcess: 'sentenceCase' }),
-            title: t('form.privateMode.title', { postProcess: 'sentenceCase' }),
-        });
     };
 
     const handleLogOff = () => {
@@ -231,47 +210,8 @@ export const AppMenu = () => {
             type: 'item',
         },
         {
-            condition: privateMode,
-            id: 'private-mode-off',
-            item: {
-                icon: 'lock',
-                iconColor: 'error',
-                label: t('page.appMenu.privateModeOff', { postProcess: 'sentenceCase' }),
-                onClick: handlePrivateModeOff,
-                type: 'item',
-            },
-            type: 'conditional-item',
-        },
-        {
-            condition: !privateMode,
-            id: 'private-mode-on',
-            item: {
-                icon: 'lockOpen',
-                label: t('page.appMenu.privateModeOn', { postProcess: 'sentenceCase' }),
-                onClick: handlePrivateModeOn,
-                type: 'item',
-            },
-            type: 'conditional-item',
-        },
-        {
             id: 'divider-4',
             type: 'divider',
-        },
-        {
-            icon: 'brandGitHub',
-            id: 'version',
-            label: t('page.appMenu.version', {
-                postProcess: 'sentenceCase',
-                version: packageJson.version,
-            }),
-            onClick: () =>
-                openReleaseNotesModal(
-                    t('common.newVersion', {
-                        postProcess: 'sentenceCase',
-                        version: packageJson.version,
-                    }) as string,
-                ),
-            type: 'item',
         },
         {
             condition: isElectron(),

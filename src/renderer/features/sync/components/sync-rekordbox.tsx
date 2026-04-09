@@ -19,6 +19,10 @@ import { toast } from '/@/shared/components/toast/toast';
 
 const ipc = isElectron() ? window.api.ipc : null;
 
+function playlistKey(pl: PlaylistPreview): string {
+    return [...pl.path, pl.name].join('/');
+}
+
 interface PlaylistPreview {
     name: string;
     path: string[];
@@ -41,7 +45,7 @@ interface ImportProgress {
     result: boolean;
 }
 
-type SyncStep = 'idle' | 'parsing' | 'preview' | 'uploading' | 'importing' | 'done';
+type SyncStep = 'idle' | 'parsing' | 'preview' | 'uploading' | 'importing' | 'done' | 'storage-exceeded';
 
 export const SyncRekordbox = () => {
     const { t } = useTranslation();
@@ -56,6 +60,11 @@ export const SyncRekordbox = () => {
     const [jobId, setJobId] = useState<string | null>(null);
     const [uploadResult, setUploadResult] = useState<{ skipped: number; uploaded: number } | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [storageInfo, setStorageInfo] = useState<{
+        currentUsageBytes: number;
+        maxStorageBytes: number;
+        remainingBytes: number;
+    } | null>(null);
 
     // Listen for upload progress events
     useEffect(() => {
@@ -85,7 +94,7 @@ export const SyncRekordbox = () => {
 
             const previews: PlaylistPreview[] = await ipc.invoke('sync:parse-rekordbox-xml', filePath);
             setPlaylists(previews);
-            setSelectedPlaylists(new Set(previews.map((p) => p.name)));
+            setSelectedPlaylists(new Set(previews.map((p) => playlistKey(p))));
             setStep('preview');
         } catch (err: any) {
             setError(err?.message || 'Failed to parse XML');
@@ -93,20 +102,20 @@ export const SyncRekordbox = () => {
         }
     }, []);
 
-    const handleTogglePlaylist = useCallback((name: string) => {
+    const handleTogglePlaylist = useCallback((key: string) => {
         setSelectedPlaylists((prev) => {
             const next = new Set(prev);
-            if (next.has(name)) {
-                next.delete(name);
+            if (next.has(key)) {
+                next.delete(key);
             } else {
-                next.add(name);
+                next.add(key);
             }
             return next;
         });
     }, []);
 
     const handleSelectAll = useCallback(() => {
-        setSelectedPlaylists(new Set(playlists.map((p) => p.name)));
+        setSelectedPlaylists(new Set(playlists.map((p) => playlistKey(p))));
     }, [playlists]);
 
     const handleSelectNone = useCallback(() => {
@@ -116,15 +125,41 @@ export const SyncRekordbox = () => {
     const handleUpload = useCallback(async () => {
         if (!ipc || !xmlPath || !currentServer) return;
 
+        // Pre-flight storage check (renderer-side, works for both Electron and web)
+        try {
+            const storage = await PymixController.checkStorage({
+                baseUrl: urlConfig.pymix,
+                query: { uploadSizeBytes: 0 },
+            });
+
+            if (!storage.allowed) {
+                setStorageInfo({
+                    currentUsageBytes: storage.currentUsageBytes,
+                    maxStorageBytes: storage.maxStorageBytes,
+                    remainingBytes: storage.remainingBytes,
+                });
+                setStep('storage-exceeded');
+                return;
+            }
+        } catch {
+            // If the check fails, proceed anyway — the main process will do a precise check
+        }
+
         setStep('uploading');
         setError(null);
         setUploadResult(null);
 
         try {
+            const selectedPlaylistPaths = playlists
+                .filter((p) => selectedPlaylists.has(playlistKey(p)))
+                .map((p) => [...p.path, p.name]);
+
             const result = await ipc.invoke('sync:upload-from-xml', {
                 filebrowserToken: currentServer.fbToken,
                 filebrowserUrl: urlConfig.filebrowser,
-                playlistNames: Array.from(selectedPlaylists),
+                playlistNames: playlists
+                    .filter((p) => selectedPlaylists.has(playlistKey(p)))
+                    .map((p) => p.name),
                 pymixUrl: urlConfig.pymix,
                 username: currentServer.username,
                 xmlPath,
@@ -137,7 +172,9 @@ export const SyncRekordbox = () => {
             try {
                 const importResult = await PymixController.rbImport({
                     baseUrl: urlConfig.pymix,
-                    body: { username: currentServer.username },
+                    body: {
+                        playlistNames: selectedPlaylistPaths,
+                    },
                 });
 
                 const jobId = importResult?.job_id;
@@ -154,8 +191,14 @@ export const SyncRekordbox = () => {
                 setStep('done');
             }
         } catch (err: any) {
-            setError(err?.message || 'Upload failed');
-            setStep('preview');
+            const msg = err?.message || 'Upload failed';
+            if (msg.startsWith('STORAGE_LIMIT_EXCEEDED:')) {
+                setError(msg.slice('STORAGE_LIMIT_EXCEEDED:'.length));
+                setStep('storage-exceeded');
+            } else {
+                setError(msg);
+                setStep('preview');
+            }
         }
     }, [xmlPath, currentServer, selectedPlaylists]);
 
@@ -210,10 +253,11 @@ export const SyncRekordbox = () => {
         setJobId(null);
         setUploadResult(null);
         setError(null);
+        setStorageInfo(null);
     }, []);
 
     const totalSelectedTracks = playlists
-        .filter((p) => selectedPlaylists.has(p.name))
+        .filter((p) => selectedPlaylists.has(playlistKey(p)))
         .reduce((sum, p) => sum + p.trackCount, 0);
 
     // ── Idle: source selection ─────────────────────────────────────────────
@@ -313,19 +357,21 @@ export const SyncRekordbox = () => {
                 </Group>
 
                 <Stack gap="xs">
-                    {playlists.map((pl) => (
+                    {playlists.map((pl) => {
+                        const key = playlistKey(pl);
+                        return (
                         <Group
                             gap="md"
-                            key={pl.name}
+                            key={key}
                             style={{
                                 borderRadius: 'var(--theme-radius-sm)',
                                 cursor: 'pointer',
                                 padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
                             }}
-                            onClick={() => handleTogglePlaylist(pl.name)}
+                            onClick={() => handleTogglePlaylist(key)}
                         >
                             <Checkbox
-                                checked={selectedPlaylists.has(pl.name)}
+                                checked={selectedPlaylists.has(key)}
                                 readOnly
                                 size="sm"
                             />
@@ -343,7 +389,8 @@ export const SyncRekordbox = () => {
                                 {pl.trackCount} {pl.trackCount === 1 ? 'track' : 'tracks'}
                             </Text>
                         </Group>
-                    ))}
+                        );
+                    })}
                 </Stack>
 
                 <Button
@@ -409,6 +456,52 @@ export const SyncRekordbox = () => {
                     <Text c="dimmed" size="xs" ta="center">
                         This may take a while for large libraries.
                     </Text>
+                </Stack>
+            </Center>
+        );
+    }
+
+    // ── Storage Exceeded ───────────────────────────────────────────────────
+    if (step === 'storage-exceeded') {
+        const currentMB = storageInfo ? Math.round(storageInfo.currentUsageBytes / (1024 * 1024)) : null;
+        const maxMB = storageInfo ? Math.round(storageInfo.maxStorageBytes / (1024 * 1024)) : null;
+
+        return (
+            <Center style={{ height: '100%' }}>
+                <Stack align="center" gap="md" maw={400}>
+                    <Icon color="warn" icon="error" size="3rem" />
+                    <TextTitle order={3}>
+                        {t('page.sync.rekordbox.storageLimitTitle', {
+                            defaultValue: 'Storage Limit Reached',
+                            postProcess: 'titleCase',
+                        })}
+                    </TextTitle>
+                    <Text c="dimmed" size="sm" ta="center">
+                        {error || t('page.sync.rekordbox.storageLimitDescription', {
+                            defaultValue: 'Your upload would exceed your storage limit. To continue uploading, request more storage from the Subbox team.',
+                        })}
+                    </Text>
+                    {currentMB !== null && maxMB !== null && (
+                        <Text size="sm" ta="center">
+                            Current usage: {currentMB} MB / {maxMB} MB
+                        </Text>
+                    )}
+                    <Button
+                        component="a"
+                        fullWidth
+                        href={urlConfig.discord}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                        variant="filled"
+                    >
+                        {t('page.sync.rekordbox.requestStorage', {
+                            defaultValue: 'Request More Storage',
+                            postProcess: 'titleCase',
+                        })}
+                    </Button>
+                    <Button fullWidth onClick={handleReset} variant="subtle">
+                        {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
+                    </Button>
                 </Stack>
             </Center>
         );
