@@ -177,6 +177,40 @@ ipcMain.handle(
             trackKeyToTrack[key] = track;
         }
 
+        // Step 2.5: Check storage quota before uploading
+        let totalUploadBytes = 0;
+        for (const missingTrack of missingTracks) {
+            const trackName = `${missingTrack.artist} - ${missingTrack.title}`;
+            const track = trackKeyToTrack[trackName];
+            if (track?.location && fs.existsSync(track.location)) {
+                totalUploadBytes += fs.statSync(track.location).size;
+            }
+        }
+
+        if (totalUploadBytes > 0) {
+            const storageRes = await axios.get(
+                `${pymixUrl}/user/storage_check`,
+                {
+                    headers: { Cookie: pymixCookies },
+                    httpsAgent,
+                    params: { uploadSizeBytes: totalUploadBytes },
+                },
+            );
+
+            if (storageRes.data?.allowed === false) {
+                const maxBytes = storageRes.data?.maxStorageBytes ?? 0;
+                const currentBytes = storageRes.data?.currentUsageBytes ?? 0;
+                const maxMB = Math.round(maxBytes / (1024 * 1024));
+                const currentMB = Math.round(currentBytes / (1024 * 1024));
+                const uploadMB = Math.round(totalUploadBytes / (1024 * 1024));
+                throw new Error(
+                    `STORAGE_LIMIT_EXCEEDED:Upload of ${uploadMB} MB would exceed your storage limit. ` +
+                    `Current usage: ${currentMB} MB / ${maxMB} MB. ` +
+                    `Request more storage via the Subbox Discord community.`,
+                );
+            }
+        }
+
         // Step 3: Upload missing tracks
         sendProgress({ currentTrack: '', phase: 'uploading', total: missingTracks.length, uploaded: 0 });
 

@@ -45,6 +45,10 @@ type ValidateTokenArgs = {
     query: z.infer<typeof pymixType._parameters.isValidToken>;
 };
 
+type StorageCheckArgs = {
+    query: z.infer<typeof pymixType._parameters.storageCheck>;
+};
+
 type RbImportArgs = {
     body: z.infer<typeof pymixType._parameters.rbImport>;
 };
@@ -62,6 +66,17 @@ type SyncPlanArgs = {
 };
 
 export const PymixController = {
+    checkStorage: async (args: PymixClientArgs & StorageCheckArgs) => {
+        const { baseUrl, query, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).storageCheck({ query });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to check storage');
+        }
+
+        return res.body.data;
+    },
+
     create: async (args: PymixClientArgs & CreateArgs) => {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).create({ body });

@@ -116,6 +116,15 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    storageCheck: {
+        method: 'GET',
+        path: 'user/storage_check',
+        query: pymixType._parameters.storageCheck,
+        responses: {
+            200: resultWithHeaders(pymixType._response.storageCheck),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     sync: {
         body: pymixType._parameters.sync,
         method: 'POST',

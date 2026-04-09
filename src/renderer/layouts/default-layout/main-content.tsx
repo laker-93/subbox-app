@@ -14,6 +14,7 @@ import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-scree
 import { FullScreenVisualizerOverlay } from '/@/renderer/layouts/default-layout/full-screen-visualizer-overlay';
 import { LeftSidebar } from '/@/renderer/layouts/default-layout/left-sidebar';
 import { RightSidebar } from '/@/renderer/layouts/default-layout/right-sidebar';
+import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import {
     useAppStore,
     useAppStoreActions,
@@ -27,6 +28,9 @@ import { constrainRightSidebarWidth, constrainSidebarWidth } from '/@/renderer/u
 import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { SyncModePlaceholder } from '/@/renderer/features/sync/components/sync-mode-placeholder';
+import { Button } from '/@/shared/components/button/button';
+import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
+import { Icon } from '/@/shared/components/icon/icon';
 
 const MINIMUM_SIDEBAR_WIDTH = 260;
 
@@ -244,6 +248,18 @@ function ModeToggle() {
 
     return (
         <div className={styles.modeToggleBar}>
+            {appMode === 'sync' && (
+                <DropdownMenu position="bottom-start">
+                    <DropdownMenu.Target>
+                        <Button p="0">
+                            <Icon icon="menu" size="lg" />
+                        </Button>
+                    </DropdownMenu.Target>
+                    <DropdownMenu.Dropdown>
+                        <AppMenu />
+                    </DropdownMenu.Dropdown>
+                </DropdownMenu>
+            )}
             <SegmentedControl
                 data={[
                     {

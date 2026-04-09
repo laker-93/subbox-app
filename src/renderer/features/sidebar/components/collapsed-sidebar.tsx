@@ -6,12 +6,8 @@ import { Link, NavLink, useNavigate } from 'react-router';
 
 import styles from './collapsed-sidebar.module.css';
 
-import JellyfinLogo from '/@/renderer/features/servers/assets/jellyfin.png';
-import NavidromeLogo from '/@/renderer/features/servers/assets/navidrome.png';
-import OpenSubsonicLogo from '/@/renderer/features/servers/assets/opensubsonic.png';
 import { CollapsedSidebarButton } from '/@/renderer/features/sidebar/components/collapsed-sidebar-button';
 import { CollapsedSidebarItem } from '/@/renderer/features/sidebar/components/collapsed-sidebar-item';
-import { ServerSelectorItems } from '/@/renderer/features/sidebar/components/server-selector-items';
 import { getCollectionTo } from '/@/renderer/features/sidebar/components/sidebar-collection-list';
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
 import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
@@ -19,20 +15,18 @@ import { AppRoute } from '/@/renderer/router/routes';
 import {
     SidebarItemType,
     useCollections,
-    useCurrentServer,
     useSidebarCollapsedNavigation,
     useSidebarItems,
     useWindowSettings,
 } from '/@/renderer/store';
 import { useAppMode, useAppStoreActions } from '/@/renderer/store/app.store';
-import { AppMode } from '/@/renderer/store/app.store';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Stack } from '/@/shared/components/stack/stack';
-import { LibraryItem, ServerType } from '/@/shared/types/domain-types';
+import { LibraryItem } from '/@/shared/types/domain-types';
 import { Platform } from '/@/shared/types/types';
 
 export const CollapsedSidebar = () => {
@@ -42,7 +36,6 @@ export const CollapsedSidebar = () => {
     const { windowBarStyle } = useWindowSettings();
     const sidebarCollapsedNavigation = useSidebarCollapsedNavigation();
     const sidebarItems = useSidebarItems();
-    const currentServer = useCurrentServer();
     const appMode = useAppMode();
     const { setAppMode } = useAppStoreActions();
 
@@ -177,38 +170,6 @@ export const CollapsedSidebar = () => {
                             to={item.route}
                         />
                     ),
-                )}
-                {currentServer && (
-                    <DropdownMenu offset={0} position="right-end" width={240}>
-                        <DropdownMenu.Target>
-                            <CollapsedSidebarItem
-                                activeIcon={null}
-                                component={Flex}
-                                icon={
-                                    <img
-                                        className={styles.serverIcon}
-                                        src={
-                                            currentServer.type === ServerType.NAVIDROME
-                                                ? NavidromeLogo
-                                                : currentServer.type === ServerType.JELLYFIN
-                                                  ? JellyfinLogo
-                                                  : OpenSubsonicLogo
-                                        }
-                                    />
-                                }
-                                label={''}
-                                py="md"
-                                style={{
-                                    cursor: 'pointer',
-                                }}
-                            />
-                        </DropdownMenu.Target>
-                        <DropdownMenu.Dropdown>
-                            <ScrollArea style={{ maxHeight: '95vh' }}>
-                                <ServerSelectorItems />
-                            </ScrollArea>
-                        </DropdownMenu.Dropdown>
-                    </DropdownMenu>
                 )}
             </ScrollArea>
             <Group gap={0} grow style={{ flexShrink: 0, padding: 'var(--theme-spacing-xs) 0' }}>
