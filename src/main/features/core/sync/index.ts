@@ -523,3 +523,144 @@ ipcMain.handle(
         return scanLocalTracks();
     },
 );
+
+// ── Watch directory for auto-upload ────────────────────────────────────────
+
+const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.m4a', '.ogg', '.opus', '.wav', '.aac', '.wma']);
+
+export interface WatchProgress {
+    currentFile: string;
+    phase: 'scanning' | 'uploading' | 'idle' | 'error';
+    total: number;
+    uploaded: number;
+}
+
+let watchInterval: ReturnType<typeof setInterval> | null = null;
+const uploadedFiles = new Set<string>();
+
+function getAudioFiles(dirPath: string): string[] {
+    if (!fs.existsSync(dirPath)) return [];
+
+    const files: string[] = [];
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+            files.push(...getAudioFiles(fullPath));
+        } else if (entry.isFile()) {
+            const ext = path.extname(entry.name).toLowerCase();
+            if (AUDIO_EXTENSIONS.has(ext)) {
+                files.push(fullPath);
+            }
+        }
+    }
+
+    return files;
+}
+
+ipcMain.handle(
+    'sync:select-watch-directory',
+    async (): Promise<string | null> => {
+        const { dialog: electronDialog } = await import('electron');
+        const result = await electronDialog.showOpenDialog({
+            properties: ['openDirectory'],
+            title: 'Select Watch Directory',
+        });
+        return result.filePaths[0] || null;
+    },
+);
+
+ipcMain.handle(
+    'sync:start-watch',
+    async (
+        event,
+        args: {
+            filebrowserToken: string;
+            filebrowserUrl: string;
+            pollIntervalMs?: number;
+            watchDir: string;
+        },
+    ): Promise<void> => {
+        const { filebrowserToken, filebrowserUrl, pollIntervalMs = 10000, watchDir } = args;
+
+        // Stop any existing watcher
+        if (watchInterval) {
+            clearInterval(watchInterval);
+            watchInterval = null;
+        }
+
+        const sendProgress = (progress: WatchProgress) => {
+            event.sender.send('sync:watch-progress', progress);
+        };
+
+        const pollAndUpload = async () => {
+            try {
+                sendProgress({ currentFile: '', phase: 'scanning', total: 0, uploaded: 0 });
+
+                const audioFiles = getAudioFiles(watchDir);
+                const newFiles = audioFiles.filter((f) => !uploadedFiles.has(f));
+
+                if (newFiles.length === 0) {
+                    sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
+                    return;
+                }
+
+                let uploaded = 0;
+                for (const filePath of newFiles) {
+                    const fileName = path.basename(filePath);
+                    const resourcePath = `${filebrowserUrl}/api/resources/watch/${encodeURIComponent(fileName)}?override=false`;
+                    const fileContents = fs.readFileSync(filePath);
+
+                    sendProgress({
+                        currentFile: fileName,
+                        phase: 'uploading',
+                        total: newFiles.length,
+                        uploaded,
+                    });
+
+                    try {
+                        await axios.post(resourcePath, fileContents, {
+                            headers: {
+                                'Content-Type': 'application/octet-stream',
+                                'X-Auth': filebrowserToken,
+                            },
+                            httpsAgent,
+                        });
+                    } catch (err) {
+                        if (axios.isAxiosError(err) && err.response?.status === 409) {
+                            // File already exists on server, mark as uploaded
+                        } else {
+                            console.error(`Failed to upload ${fileName}:`, err);
+                            sendProgress({ currentFile: fileName, phase: 'error', total: newFiles.length, uploaded });
+                            continue;
+                        }
+                    }
+
+                    uploadedFiles.add(filePath);
+                    uploaded++;
+                }
+
+                sendProgress({ currentFile: '', phase: 'idle', total: newFiles.length, uploaded });
+            } catch (err) {
+                console.error('Watch poll error:', err);
+                sendProgress({ currentFile: '', phase: 'error', total: 0, uploaded: 0 });
+            }
+        };
+
+        // Run immediately on start
+        await pollAndUpload();
+
+        // Then poll at interval
+        watchInterval = setInterval(() => {
+            pollAndUpload().catch(console.error);
+        }, pollIntervalMs);
+    },
+);
+
+ipcMain.handle('sync:stop-watch', async (): Promise<void> => {
+    if (watchInterval) {
+        clearInterval(watchInterval);
+        watchInterval = null;
+    }
+});

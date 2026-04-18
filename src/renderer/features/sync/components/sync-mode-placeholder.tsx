@@ -3,13 +3,14 @@ import isElectron from 'is-electron';
 
 import { SyncDownload } from '/@/renderer/features/sync/components/sync-download';
 import { SyncRekordbox } from '/@/renderer/features/sync/components/sync-rekordbox';
+import { SyncWatch } from '/@/renderer/features/sync/components/sync-watch';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 
-type SyncTab = 'upload' | 'download';
+type SyncTab = 'upload' | 'download' | 'watch';
 
 export const SyncModePlaceholder = () => {
     const electron = isElectron();
@@ -32,6 +33,13 @@ export const SyncModePlaceholder = () => {
                 >
                     Download
                 </Button>
+                <Button
+                    onClick={() => setTab('watch')}
+                    size="sm"
+                    variant={tab === 'watch' ? 'filled' : 'subtle'}
+                >
+                    Watch
+                </Button>
             </Group>
             <div style={{ flex: 1, overflow: 'hidden' }}>
                 {tab === 'upload' && (
@@ -49,6 +57,17 @@ export const SyncModePlaceholder = () => {
                     <Suspense fallback={<Center style={{ height: '100%' }}><Spinner /></Center>}>
                         <SyncDownload />
                     </Suspense>
+                )}
+                {tab === 'watch' && (
+                    electron ? (
+                        <SyncWatch />
+                    ) : (
+                        <Center style={{ height: '100%' }}>
+                            <Text c="dimmed">
+                                Watch directory is only available in the desktop app.
+                            </Text>
+                        </Center>
+                    )
                 )}
             </div>
         </div>

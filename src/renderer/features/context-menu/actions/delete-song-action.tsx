@@ -24,12 +24,19 @@ export const DeleteSongAction = ({ disabled, items }: DeleteSongActionProps) => 
         if (items.length === 0 || !serverId) return;
 
         const subboxIds = items
-            .map((song) => song.tags?.subbox_id?.[0])
+            .map((song) => {
+                const id = song.tags?.subboxid?.[0] || song.tags?.subbox_id?.[0];
+                if (!id) {
+                    console.warn('[DeleteSong] No subboxid found for song:', song.name, 'Available tags:', Object.keys(song.tags || {}));
+                }
+                return id;
+            })
             .filter((id): id is string => !!id);
 
         if (subboxIds.length === 0) {
+            console.error('[DeleteSong] No subboxid found for any selected tracks. Items:', items.map((s) => ({ name: s.name, tags: s.tags })));
             toast.error({
-                message: 'No subbox_id found for the selected tracks',
+                message: 'No subboxid found for the selected tracks',
                 title: t('error.genericError', { postProcess: 'sentenceCase' }),
             });
             closeAllModals();

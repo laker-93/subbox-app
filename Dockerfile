@@ -11,7 +11,12 @@ RUN pnpm install
 
 # Copy code and build with cached modules
 COPY . .
-RUN pnpm run build:web
+ARG BUILD_MODE=production
+RUN if [ "$BUILD_MODE" = "production" ]; then \
+      pnpm run build:web; \
+    else \
+      pnpm run build:web:${BUILD_MODE}; \
+    fi
 
 # --- Production stage
 FROM nginxinc/nginx-unprivileged:alpine-slim
