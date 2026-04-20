@@ -10,7 +10,24 @@ on:
             - 'electron-builder*.yml'
 
 jobs:
+    wait-for-lint:
+        if: github.event_name == 'pull_request'
+        runs-on: ubuntu-latest
+        permissions:
+            checks: read
+        steps:
+            - name: Wait for Test workflow to complete
+              uses: lewagon/wait-on-check-action@v1.4.1
+              with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+                  check-name: 'lint'
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+                  wait-interval: 10
+                  allowed-conclusions: success
+
     publish:
+        needs: wait-for-lint
+        if: always() && (needs.wait-for-lint.result == 'success' || needs.wait-for-lint.result == 'skipped')
         runs-on: ${{ matrix.os }}
 
         strategy:
