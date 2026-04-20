@@ -19,11 +19,7 @@ export const authenticateServices = async (args: {
     const navidromeUrl = getNavidromeUrl(username);
 
     const [authData, fbToken] = await Promise.all([
-        api.controller.authenticate(
-            navidromeUrl,
-            { password, username },
-            ServerType.NAVIDROME,
-        ),
+        api.controller.authenticate(navidromeUrl, { password, username }, ServerType.NAVIDROME),
         FilebrowserController.authenticate({
             baseUrl: urlConfig.filebrowser,
             body: { password, username },

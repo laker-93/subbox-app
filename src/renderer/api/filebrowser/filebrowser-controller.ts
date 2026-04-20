@@ -1,13 +1,7 @@
 import { z } from 'zod';
 
 import { fbApiClient } from '/@/renderer/api/filebrowser/filebrowser-api';
-import { fbType, FBResponseType } from '/@/shared/api/filebrowser/filebrowser-types';
-
-type FBClientArgs = {
-    baseUrl: string;
-    signal?: AbortSignal;
-    token?: string;
-};
+import { FBResponseType, fbType } from '/@/shared/api/filebrowser/filebrowser-types';
 
 type AuthenticateArgs = {
     body: z.infer<typeof fbType._parameters.authenticate>;
@@ -18,13 +12,19 @@ type DownloadArgs = {
     responseType?: FBResponseType;
 };
 
+type FBClientArgs = {
+    baseUrl: string;
+    signal?: AbortSignal;
+    token?: string;
+};
+
 type UploadArgs = {
     body: ArrayBuffer;
     filename: string;
 };
 
 export const FilebrowserController = {
-    authenticate: async (args: FBClientArgs & AuthenticateArgs) => {
+    authenticate: async (args: AuthenticateArgs & FBClientArgs) => {
         const { baseUrl, body, signal, token } = args;
         const res = await fbApiClient({ baseUrl, signal, token }).authenticate({ body });
 
@@ -35,7 +35,7 @@ export const FilebrowserController = {
         return res.body.data;
     },
 
-    download: async (args: FBClientArgs & DownloadArgs) => {
+    download: async (args: DownloadArgs & FBClientArgs) => {
         const { baseUrl, filename, responseType, signal, token } = args;
         const res = await fbApiClient({ baseUrl, responseType, signal, token }).download({
             params: { filename },

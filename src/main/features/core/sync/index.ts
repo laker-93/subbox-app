@@ -1,22 +1,11 @@
+import axios from 'axios';
+import { app, ipcMain, session } from 'electron';
 import * as fs from 'fs';
 import * as https from 'https';
 import * as path from 'path';
-import axios from 'axios';
-import { app, ipcMain, session } from 'electron';
 import * as unzipper from 'unzipper';
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
-
-async function getCookiesForUrl(url: string): Promise<string> {
-    const cookies = await session.defaultSession.cookies.get({ url });
-    return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-}
-import {
-    extractPlaylists,
-    ParsedPlaylist,
-    ParsedTrack,
-} from '/@/main/features/core/sync/rekordbox-xml';
-import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 
 /** Lightweight playlist info sent to renderer for preview (no file paths). */
 export interface PlaylistPreview {
@@ -24,10 +13,16 @@ export interface PlaylistPreview {
     path: string[];
     trackCount: number;
 }
+import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
+import {
+    extractPlaylists,
+    ParsedPlaylist,
+    ParsedTrack,
+} from '/@/main/features/core/sync/rekordbox-xml';
 
 export interface UploadProgress {
     currentTrack: string;
-    phase: 'matching' | 'uploading' | 'mapping-metadata' | 'done' | 'error';
+    phase: 'done' | 'error' | 'mapping-metadata' | 'matching' | 'uploading';
     total: number;
     uploaded: number;
 }
@@ -35,6 +30,11 @@ export interface UploadProgress {
 export interface UploadResult {
     skipped: number;
     uploaded: number;
+}
+
+async function getCookiesForUrl(url: string): Promise<string> {
+    const cookies = await session.defaultSession.cookies.get({ url });
+    return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
 }
 
 // ── Parse XML → return playlist previews ───────────────────────────────────
@@ -51,7 +51,10 @@ ipcMain.handle(
         }
 
         // Recursively collect from folders
-        function collectFromFolder(folder: { name: string; playlists: ParsedPlaylist[]; subfolders: any[] }, parentPath: string[]) {
+        function collectFromFolder(
+            folder: { name: string; playlists: ParsedPlaylist[]; subfolders: any[] },
+            parentPath: string[],
+        ) {
             const currentPath = [...parentPath, folder.name];
             for (const pl of folder.playlists) {
                 previews.push({ name: pl.name, path: currentPath, trackCount: pl.trackCount });
@@ -107,7 +110,8 @@ ipcMain.handle(
             xmlPath: string;
         },
     ): Promise<UploadResult> => {
-        const { filebrowserToken, filebrowserUrl, playlistNames, pymixUrl, username, xmlPath } = args;
+        const { filebrowserToken, filebrowserUrl, playlistNames, pymixUrl, username, xmlPath } =
+            args;
         const pymixCookies = await getCookiesForUrl(pymixUrl);
         const result = extractPlaylists(xmlPath);
         const selectedNames = new Set(playlistNames);
@@ -118,7 +122,11 @@ ipcMain.handle(
         for (const pl of selectedPlaylists) {
             for (const track of pl.tracks) {
                 if (!track.name || !track.artist) continue;
-                const cleanName = extractTrackName(track.name, track.artist, track.album ?? undefined);
+                const cleanName = extractTrackName(
+                    track.name,
+                    track.artist,
+                    track.album ?? undefined,
+                );
                 track.cleanName = cleanName;
                 const key = `${track.artist} - ${cleanName}`;
                 if (!trackMap.has(key)) {
@@ -188,14 +196,11 @@ ipcMain.handle(
         }
 
         if (totalUploadBytes > 0) {
-            const storageRes = await axios.get(
-                `${pymixUrl}/user/storage_check`,
-                {
-                    headers: { Cookie: pymixCookies },
-                    httpsAgent,
-                    params: { uploadSizeBytes: totalUploadBytes },
-                },
-            );
+            const storageRes = await axios.get(`${pymixUrl}/user/storage_check`, {
+                headers: { Cookie: pymixCookies },
+                httpsAgent,
+                params: { uploadSizeBytes: totalUploadBytes },
+            });
 
             if (storageRes.data?.allowed === false) {
                 const maxBytes = storageRes.data?.maxStorageBytes ?? 0;
@@ -205,21 +210,26 @@ ipcMain.handle(
                 const uploadMB = Math.round(totalUploadBytes / (1024 * 1024));
                 throw new Error(
                     `STORAGE_LIMIT_EXCEEDED:Upload of ${uploadMB} MB would exceed your storage limit. ` +
-                    `Current usage: ${currentMB} MB / ${maxMB} MB. ` +
-                    `Request more storage via the Subbox Discord community.`,
+                        `Current usage: ${currentMB} MB / ${maxMB} MB. ` +
+                        `Request more storage via the Subbox Discord community.`,
                 );
             }
         }
 
         // Step 3: Upload missing tracks
-        sendProgress({ currentTrack: '', phase: 'uploading', total: missingTracks.length, uploaded: 0 });
+        sendProgress({
+            currentTrack: '',
+            phase: 'uploading',
+            total: missingTracks.length,
+            uploaded: 0,
+        });
 
         let uploadedCount = 0;
         let skippedCount = 0;
         const originalTrackMetaData: Array<{
-            originalAlbum: string | null;
-            originalArtist: string | null;
-            originalName: string | null;
+            originalAlbum: null | string;
+            originalArtist: null | string;
+            originalName: null | string;
             stagingLocation: string;
             userLocation: string;
         }> = [];
@@ -235,7 +245,9 @@ ipcMain.handle(
             }
 
             if (!fs.existsSync(track.location)) {
-                console.warn(`Track file does not exist at ${track.location}, skipping "${trackName}"`);
+                console.warn(
+                    `Track file does not exist at ${track.location}, skipping "${trackName}"`,
+                );
                 skippedCount++;
                 continue;
             }
@@ -293,7 +305,12 @@ ipcMain.handle(
         }
 
         // Step 4: Map metadata
-        sendProgress({ currentTrack: '', phase: 'mapping-metadata', total: missingTracks.length, uploaded: uploadedCount });
+        sendProgress({
+            currentTrack: '',
+            phase: 'mapping-metadata',
+            total: missingTracks.length,
+            uploaded: uploadedCount,
+        });
 
         await axios.post(
             `${pymixUrl}/sync/map_meta`,
@@ -301,13 +318,40 @@ ipcMain.handle(
             { headers: { Cookie: pymixCookies }, httpsAgent, params: { username } },
         );
 
-        sendProgress({ currentTrack: '', phase: 'done', total: missingTracks.length, uploaded: uploadedCount });
+        sendProgress({
+            currentTrack: '',
+            phase: 'done',
+            total: missingTracks.length,
+            uploaded: uploadedCount,
+        });
 
         return { skipped: skippedCount, uploaded: uploadedCount };
     },
 );
 
 // ── Download playlists from cloud ──────────────────────────────────────────
+
+async function downloadFileFromFilebrowser(
+    filebrowserUrl: string,
+    filebrowserToken: string,
+    fileName: string,
+    destPath: string,
+): Promise<void> {
+    const url = `${filebrowserUrl}/api/raw/downloads/${fileName}`;
+    const response = await axios.get(url, {
+        headers: { 'X-Auth': filebrowserToken },
+        httpsAgent,
+        responseType: 'stream',
+    });
+
+    const writer = fs.createWriteStream(destPath);
+    response.data.pipe(writer);
+
+    return new Promise<void>((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+    });
+}
 
 function getAppPath(): string {
     const userPath = app.getPath('userData');
@@ -362,7 +406,12 @@ function scanLocalTracks(): Array<{ album?: string; artist: string; title: strin
                 if (fs.statSync(filePath).isDirectory()) continue;
 
                 const ext = path.extname(fileName);
-                if (!['.mp3', '.flac', '.m4a', '.ogg', '.opus', '.wav', '.aac', '.wma'].includes(ext.toLowerCase())) continue;
+                if (
+                    !['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.wma'].includes(
+                        ext.toLowerCase(),
+                    )
+                )
+                    continue;
 
                 const title = path.basename(fileName, ext);
                 tracks.push({
@@ -375,28 +424,6 @@ function scanLocalTracks(): Array<{ album?: string; artist: string; title: strin
     }
 
     return tracks;
-}
-
-async function downloadFileFromFilebrowser(
-    filebrowserUrl: string,
-    filebrowserToken: string,
-    fileName: string,
-    destPath: string,
-): Promise<void> {
-    const url = `${filebrowserUrl}/api/raw/downloads/${fileName}`;
-    const response = await axios.get(url, {
-        headers: { 'X-Auth': filebrowserToken },
-        httpsAgent,
-        responseType: 'stream',
-    });
-
-    const writer = fs.createWriteStream(destPath);
-    response.data.pipe(writer);
-
-    return new Promise<void>((resolve, reject) => {
-        writer.on('finish', resolve);
-        writer.on('error', reject);
-    });
 }
 
 async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promise<void> {
@@ -446,7 +473,8 @@ ipcMain.handle(
             pymixUrl: string;
         },
     ): Promise<{ tracksExported: number }> => {
-        const { filebrowserToken, filebrowserUrl, includeRekordboxXml, playlistIds, pymixUrl } = args;
+        const { filebrowserToken, filebrowserUrl, includeRekordboxXml, playlistIds, pymixUrl } =
+            args;
         const pymixCookies = await getCookiesForUrl(pymixUrl);
 
         // Scan local music directory for existing tracks
@@ -480,7 +508,12 @@ ipcMain.handle(
             fs.mkdirSync(appPath, { recursive: true });
         }
         const localZipPath = path.join(appPath, zipFileName);
-        await downloadFileFromFilebrowser(filebrowserUrl, filebrowserToken, zipFileName, localZipPath);
+        await downloadFileFromFilebrowser(
+            filebrowserUrl,
+            filebrowserToken,
+            zipFileName,
+            localZipPath,
+        );
 
         // Step 3: Unzip and merge into app directory (zip contains music/ prefix)
         await unzipAndMerge(localZipPath, appPath);
@@ -527,16 +560,25 @@ ipcMain.handle(
 
 // ── Watch directory for auto-upload ────────────────────────────────────────
 
-const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.m4a', '.ogg', '.opus', '.wav', '.aac', '.wma']);
+const AUDIO_EXTENSIONS = new Set([
+    '.aac',
+    '.flac',
+    '.m4a',
+    '.mp3',
+    '.ogg',
+    '.opus',
+    '.wav',
+    '.wma',
+]);
 
 export interface WatchProgress {
     currentFile: string;
-    phase: 'scanning' | 'uploading' | 'idle' | 'error';
+    phase: 'error' | 'idle' | 'scanning' | 'uploading';
     total: number;
     uploaded: number;
 }
 
-let watchInterval: ReturnType<typeof setInterval> | null = null;
+let watchInterval: null | ReturnType<typeof setInterval> = null;
 const uploadedFiles = new Set<string>();
 
 function getAudioFiles(dirPath: string): string[] {
@@ -560,17 +602,14 @@ function getAudioFiles(dirPath: string): string[] {
     return files;
 }
 
-ipcMain.handle(
-    'sync:select-watch-directory',
-    async (): Promise<string | null> => {
-        const { dialog: electronDialog } = await import('electron');
-        const result = await electronDialog.showOpenDialog({
-            properties: ['openDirectory'],
-            title: 'Select Watch Directory',
-        });
-        return result.filePaths[0] || null;
-    },
-);
+ipcMain.handle('sync:select-watch-directory', async (): Promise<null | string> => {
+    const { dialog: electronDialog } = await import('electron');
+    const result = await electronDialog.showOpenDialog({
+        properties: ['openDirectory'],
+        title: 'Select Watch Directory',
+    });
+    return result.filePaths[0] || null;
+});
 
 ipcMain.handle(
     'sync:start-watch',
@@ -633,7 +672,12 @@ ipcMain.handle(
                             // File already exists on server, mark as uploaded
                         } else {
                             console.error(`Failed to upload ${fileName}:`, err);
-                            sendProgress({ currentFile: fileName, phase: 'error', total: newFiles.length, uploaded });
+                            sendProgress({
+                                currentFile: fileName,
+                                phase: 'error',
+                                total: newFiles.length,
+                                uploaded,
+                            });
                             continue;
                         }
                     }

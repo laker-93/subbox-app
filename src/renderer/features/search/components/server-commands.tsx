@@ -28,7 +28,10 @@ export const ServerCommands = ({ handleClose, setPages, setQuery }: ServerComman
     return (
         <>
             <Command.Group
-                heading={t('common.account', { defaultValue: 'Account', postProcess: 'sentenceCase' })}
+                heading={t('common.account', {
+                    defaultValue: 'Account',
+                    postProcess: 'sentenceCase',
+                })}
             >
                 <Command.Item onSelect={handleLogOff}>
                     {t('page.appMenu.logOff', { postProcess: 'sentenceCase' })}

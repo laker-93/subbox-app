@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
 import isElectron from 'is-electron';
+import { useCallback, useEffect, useState } from 'react';
 
 import { urlConfig } from '/@/renderer/config/url-config';
 import { useCurrentServerWithCredential } from '/@/renderer/store';
@@ -14,16 +14,16 @@ const localSettings = isElectron() ? window.api.localSettings : null;
 
 interface WatchProgress {
     currentFile: string;
-    phase: 'scanning' | 'uploading' | 'idle' | 'error';
+    phase: 'error' | 'idle' | 'scanning' | 'uploading';
     total: number;
     uploaded: number;
 }
 
 export const SyncWatch = () => {
     const currentServer = useCurrentServerWithCredential();
-    const [watchDir, setWatchDir] = useState<string | null>(null);
+    const [watchDir, setWatchDir] = useState<null | string>(null);
     const [watching, setWatching] = useState(false);
-    const [progress, setProgress] = useState<WatchProgress | null>(null);
+    const [progress, setProgress] = useState<null | WatchProgress>(null);
 
     // Load persisted watch directory on mount
     useEffect(() => {
@@ -84,9 +84,12 @@ export const SyncWatch = () => {
 
     return (
         <Stack gap="md" p="md">
-            <Text fw={600} size="lg">Watch Directory</Text>
+            <Text fw={600} size="lg">
+                Watch Directory
+            </Text>
             <Text c="dimmed" size="sm">
-                Select a local folder to watch. New audio files will be automatically uploaded to your cloud storage.
+                Select a local folder to watch. New audio files will be automatically uploaded to
+                your cloud storage.
             </Text>
 
             <Group gap="sm">
@@ -117,10 +120,14 @@ export const SyncWatch = () => {
             {progress && watching && (
                 <Stack gap="xs">
                     {progress.phase === 'idle' && (
-                        <Text c="dimmed" size="sm">Watching for new files...</Text>
+                        <Text c="dimmed" size="sm">
+                            Watching for new files...
+                        </Text>
                     )}
                     {progress.phase === 'scanning' && (
-                        <Text c="dimmed" size="sm">Scanning directory...</Text>
+                        <Text c="dimmed" size="sm">
+                            Scanning directory...
+                        </Text>
                     )}
                     {progress.phase === 'uploading' && (
                         <Text size="sm">
@@ -137,9 +144,7 @@ export const SyncWatch = () => {
 
             {!isElectron() && (
                 <Center style={{ height: '100%' }}>
-                    <Text c="dimmed">
-                        Watch directory is only available in the desktop app.
-                    </Text>
+                    <Text c="dimmed">Watch directory is only available in the desktop app.</Text>
                 </Center>
             )}
         </Stack>

@@ -3,7 +3,7 @@ import axios, { AxiosError, AxiosResponse, isAxiosError, Method } from 'axios';
 import qs from 'qs';
 
 import i18n from '/@/i18n/i18n';
-import { fbType, FBResponseType } from '/@/shared/api/filebrowser/filebrowser-types';
+import { FBResponseType, fbType } from '/@/shared/api/filebrowser/filebrowser-types';
 import { resultWithHeaders } from '/@/shared/api/utils';
 
 const c = initContract();

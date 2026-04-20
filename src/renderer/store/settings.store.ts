@@ -780,8 +780,8 @@ export enum BindingActions {
 
 export enum DiscordDisplayType {
     ARTIST_NAME = 'artist',
-    SUBBOX = 'subbox',
     SONG_NAME = 'song',
+    SUBBOX = 'subbox',
 }
 
 export enum DiscordLinkType {

@@ -55,17 +55,14 @@ export const AppOutlet = () => {
         return (
             <>
                 {showLanding && (
-                    <LandingPage
-                        onCreateAccount={handleCreateAccount}
-                        onLogin={handleLogin}
-                    />
+                    <LandingPage onCreateAccount={handleCreateAccount} onLogin={handleLogin} />
                 )}
                 <PymixAuthModal
                     baseUrl={urlConfig.pymix}
                     handlers={authModalHandlers}
                     initialView={initialView}
-                    opened={authModalOpened}
                     onSuccess={handleAuthSuccess}
+                    opened={authModalOpened}
                 />
             </>
         );
