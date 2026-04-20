@@ -17,7 +17,7 @@ export default class MenuBuilder {
             label: 'Electron',
             submenu: [
                 {
-                    label: 'About Feishin',
+                    label: 'About Subbox',
                     selector: 'orderFrontStandardAboutPanel:',
                 },
                 { type: 'separator' },
@@ -33,7 +33,7 @@ export default class MenuBuilder {
                 { type: 'separator' },
                 {
                     accelerator: 'Command+H',
-                    label: 'Hide Feishin',
+                    label: 'Hide Subbox',
                     selector: 'hide:',
                 },
                 {
@@ -124,27 +124,27 @@ export default class MenuBuilder {
             submenu: [
                 {
                     click() {
-                        shell.openExternal('https://github.com/jeffvli/feishin');
+                        shell.openExternal('https://github.com/jeffvli/subbox');
                     },
                     label: 'Learn More',
                 },
                 {
                     click() {
                         shell.openExternal(
-                            'https://github.com/jeffvli/feishin?tab=readme-ov-file#getting-started',
+                            'https://github.com/jeffvli/subbox?tab=readme-ov-file#getting-started',
                         );
                     },
                     label: 'Documentation',
                 },
                 {
                     click() {
-                        shell.openExternal('https://github.com/jeffvli/feishin/discussions');
+                        shell.openExternal('https://github.com/jeffvli/subbox/discussions');
                     },
                     label: 'Community Discussions',
                 },
                 {
                     click() {
-                        shell.openExternal('https://github.com/jeffvli/feishin/issues');
+                        shell.openExternal('https://github.com/jeffvli/subbox/issues');
                     },
                     label: 'Search Issues',
                 },
@@ -231,27 +231,27 @@ export default class MenuBuilder {
                 submenu: [
                     {
                         click() {
-                            shell.openExternal('https://github.com/jeffvli/feishin');
+                            shell.openExternal('https://github.com/jeffvli/subbox');
                         },
                         label: 'Learn More',
                     },
                     {
                         click() {
                             shell.openExternal(
-                                'https://github.com/jeffvli/feishin?tab=readme-ov-file#getting-started',
+                                'https://github.com/jeffvli/subbox?tab=readme-ov-file#getting-started',
                             );
                         },
                         label: 'Documentation',
                     },
                     {
                         click() {
-                            shell.openExternal('https://github.com/jeffvli/feishin/discussions');
+                            shell.openExternal('https://github.com/jeffvli/subbox/discussions');
                         },
                         label: 'Community Discussions',
                     },
                     {
                         click() {
-                            shell.openExternal('https://github.com/jeffvli/feishin/issues');
+                            shell.openExternal('https://github.com/jeffvli/subbox/issues');
                         },
                         label: 'Search Issues',
                     },

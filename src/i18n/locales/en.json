@@ -10,6 +10,7 @@
         "createRadioStation": "create $t(entity.radioStation, {\"count\": 1})",
         "deletePlaylist": "delete $t(entity.playlist, {\"count\": 1})",
         "deleteRadioStation": "delete $t(entity.radioStation, {\"count\": 1})",
+        "deleteSong": "delete $t(entity.track, {\"count\": 1})",
         "selectAll": "select all",
         "deselectAll": "deselect all",
         "downloadStarted": "started download of {{count}} items",
@@ -333,7 +334,7 @@
             "input_savePassword": "save password",
             "input_url": "url",
             "input_username": "username",
-            "success": "server added successfully",
+            "success": "logged in successfully",
             "title": "add server"
         },
         "largeFetchConfirmation": {
@@ -367,6 +368,10 @@
             "input_confirm": "type the name of the $t(entity.playlist, {\"count\": 1}) to confirm",
             "success": "$t(entity.playlist, {\"count\": 1}) deleted successfully",
             "title": "delete $t(entity.playlist, {\"count\": 1})"
+        },
+        "deleteSong": {
+            "success": "$t(entity.track, {\"count\": 1}) deleted successfully",
+            "title": "delete $t(entity.track, {\"count\": 1})"
         },
         "editPlaylist": {
             "publicJellyfinNote": "Jellyfin for some reason does not expose whether a playlist is public or not. If you wish for this to remain public, please have the following input selected",
@@ -479,7 +484,8 @@
             "expandSidebar": "expand sidebar",
             "goBack": "go back",
             "goForward": "go forward",
-            "manageServers": "manage servers",
+            "logOff": "log off",
+            "help": "help",
             "privateModeOff": "turn off private mode",
             "privateModeOn": "turn on private mode",
             "openBrowserDevtools": "open browser devtools",
@@ -574,6 +580,26 @@
             "recentlyPlayed": "recently played",
             "recentlyReleased": "recently released",
             "title": "$t(common.home)"
+        },
+        "help": {
+            "gettingStarted": "getting started",
+            "gettingStartedDescription": "Subbox is a cloud-based music library management platform for DJs. After logging in, you can browse your music collection, manage playlists, and stream tracks.",
+            "sidebar": "sidebar",
+            "sidebarDescription": "Use the sidebar to navigate between your library sections: albums, artists, playlists, genres, and folders. You can collapse or expand it from the menu.",
+            "search": "search & command palette",
+            "searchDescription": "Press the search icon or use the command palette to quickly find tracks, albums, or artists. You can also use it to access app actions like settings or log off.",
+            "playback": "playback",
+            "playbackDescription": "The player bar at the bottom controls playback. You can queue tracks, adjust volume, and view the current queue from the side panel.",
+            "settings": "settings",
+            "settingsDescription": "Open settings from the menu to customise playback behaviour, appearance, and other preferences."
+        },
+        "landing": {
+            "createAccount": "create account",
+            "description": "a cloud-based music library management platform built for DJs. Upload, stream, sync, and manage your music collection across devices and DJ software.",
+            "featureCloudLibrary": "Upload and store your music collection in the cloud",
+            "featureMetadata": "Manage cue points, loops, and playlists with metadata-first syncing",
+            "featureStreaming": "Stream your library across desktop, web, and mobile",
+            "featureSync": "Sync and convert libraries between Serato, Rekordbox, and more"
         },
         "itemDetail": {
             "copyPath": "copy path to clipboard",
@@ -764,11 +790,11 @@
         "audioPlayer": "audio player",
         "buttonSize_description": "the size of the player bar buttons",
         "buttonSize": "player bar button size",
-        "clearCache_description": "a 'hard clear' of feishin. in addition to clearing feishin's cache, empty the browser cache (saved images and other assets). server credentials and settings are preserved",
+        "clearCache_description": "a 'hard clear' of subbox. in addition to clearing subbox's cache, empty the browser cache (saved images and other assets). server credentials and settings are preserved",
         "clearCache": "clear browser cache",
         "clearCacheSuccess": "cache cleared successfully",
-        "clearQueryCache_description": "a 'soft clear' of feishin. this will refresh playlists, track metadata, and reset saved lyrics. settings, server credentials and cached images are preserved",
-        "clearQueryCache": "clear feishin cache",
+        "clearQueryCache_description": "a 'soft clear' of subbox. this will refresh playlists, track metadata, and reset saved lyrics. settings, server credentials and cached images are preserved",
+        "clearQueryCache": "clear subbox cache",
         "contextMenu_description": "allows you to hide items that are shown in the menu when you right click on an item. items that are unchecked will be hidden",
         "contextMenu": "context menu (right click) configuration",
         "crossfadeDuration_description": "sets the duration of the crossfade effect",
@@ -826,7 +852,7 @@
         "exportImportSettings_control_title": "import / export settings",
         "exportImportSettings_destructiveWarning": "importing settings is destructive, please review the above before clicking \"import\" below!",
         "exportImportSettings_importBtn": "import settings",
-        "exportImportSettings_importModalTitle": "import feishin settings",
+        "exportImportSettings_importModalTitle": "import subbox settings",
         "exportImportSettings_importSuccess": "settings have been imported successfully!",
         "exportImportSettings_notValidJSON": "the file passed is not valid JSON",
         "exportImportSettings_offendingKeyError": "\"{{offendingKey}}\" is incorrect - {{reason}}",
@@ -838,7 +864,7 @@
         "followLyric": "follow current lyric",
         "font_description": "sets the font to use for the application",
         "font": "font",
-        "fontType_description": "built-in font selects one of the fonts provided by feishin. system font allows you to select any font provided by your operating system. custom allows you to provide your own font",
+        "fontType_description": "built-in font selects one of the fonts provided by subbox. system font allows you to select any font provided by your operating system. custom allows you to provide your own font",
         "fontType_optionBuiltIn": "built-in font",
         "fontType_optionCustom": "custom font",
         "fontType_optionSystem": "system font",

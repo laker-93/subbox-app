@@ -1,5 +1,5 @@
-appId: org.jeffvli.feishin
-productName: Feishin
+appId: org.jeffvli.subbox
+productName: Subbox
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 electronVersion: 39.4.0
 directories:
@@ -67,6 +67,6 @@ afterAllArtifactBuild: scripts/after-all-artifact-build.mjs
 publish:
     provider: github
     owner: jeffvli
-    repo: feishin
+    repo: subbox
     channel: latest
     releaseType: draft

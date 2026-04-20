@@ -1,5 +1,5 @@
 {
-    "name": "feishin",
+    "name": "subbox",
     "version": "1.9.0",
     "description": "A modern self-hosted music player.",
     "keywords": [
@@ -9,25 +9,32 @@
         "react",
         "electron"
     ],
-    "homepage": "https://github.com/jeffvli/feishin",
+    "homepage": "https://github.com/laker-93/subbox-app",
     "bugs": {
-        "url": "https://github.com/jeffvli/feishin/issues"
+        "url": "https://github.com/laker-93/subbox-app/issues"
     },
     "license": "GPL-3.0",
     "author": {
         "name": "jeffvli",
-        "email": "feishin@users.noreply.github.com",
-        "url": "https://github.com/jeffvli/"
+        "email": "subbox@users.noreply.github.com",
+        "url": "https://github.com/laker-93/"
     },
     "main": "./out/main/index.js",
     "scripts": {
         "build": "pnpm run build:electron && pnpm run build:remote",
         "build:electron": "electron-vite build",
         "build:remote": "vite build --config remote.vite.config.ts",
+        "build:staging": "pnpm run build:electron:staging && pnpm run build:remote:staging",
+        "build:electron:staging": "electron-vite build --mode staging",
+        "build:remote:staging": "vite build --config remote.vite.config.ts --mode staging",
         "build:web": "vite build --config web.vite.config.ts",
+        "build:web:staging": "vite build --config web.vite.config.ts --mode staging",
         "dev": "electron-vite dev",
         "dev:remote": "vite dev --config remote.vite.config.ts",
+        "dev:staging": "electron-vite dev --mode staging",
         "dev:watch": "electron-vite dev --watch",
+        "dev:web": "vite dev --config web.vite.config.ts",
+        "dev:web:staging": "vite dev --config web.vite.config.ts --mode staging",
         "i18next": "i18next -c src/i18n/i18next-parser.config.js",
         "postinstall": "electron-builder install-app-deps",
         "lint": "pnpm run typecheck && pnpm run lint-code && pnpm run lint-styles",
@@ -88,6 +95,7 @@
         "@ts-rest/core": "^3.52.1",
         "@wavesurfer/react": "^1.0.11",
         "@xhayper/discord-rpc": "^1.3.0",
+        "@xmldom/xmldom": "^0.8.11",
         "audiomotion-analyzer": "^4.5.1",
         "axios": "^1.13.5",
         "butterchurn": "^3.0.0-beta.5",
@@ -135,8 +143,10 @@
         "react-window-v2": "npm:react-window@^2.2.3",
         "semver": "^7.5.4",
         "string-to-color": "^2.2.2",
+        "unzipper": "^0.12.3",
         "wavesurfer.js": "^7.11.1",
         "ws": "^8.18.2",
+        "xpath": "^0.0.34",
         "zod": "^3.22.3",
         "zustand": "^5.0.5"
     },
@@ -152,6 +162,7 @@
         "@types/react-dom": "^19.2.3",
         "@types/react-window": "^1.8.8",
         "@types/source-map-support": "^0.5.10",
+        "@types/unzipper": "^0.10.11",
         "@types/ws": "^8.18.1",
         "@vitejs/plugin-react": "^5.1.1",
         "concurrently": "^9.2.1",
@@ -188,5 +199,5 @@
             "esbuild"
         ]
     },
-    "productName": "feishin"
+    "productName": "subbox"
 }

@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { motion } from 'motion/react';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
 import { shallow } from 'zustand/shallow';
 
@@ -8,23 +9,32 @@ import styles from './main-content.module.css';
 
 import { ExpandedListContainer } from '/@/renderer/components/item-list/expanded-list-container';
 import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list-item';
+import { SyncModePlaceholder } from '/@/renderer/features/sync/components/sync-mode-placeholder';
+import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-screen-overlay';
 import { FullScreenVisualizerOverlay } from '/@/renderer/layouts/default-layout/full-screen-visualizer-overlay';
 import { LeftSidebar } from '/@/renderer/layouts/default-layout/left-sidebar';
 import { RightSidebar } from '/@/renderer/layouts/default-layout/right-sidebar';
 import {
+    useAppMode,
     useAppStore,
     useAppStoreActions,
     useGlobalExpanded,
     useSideQueueLayout,
     useSideQueueType,
 } from '/@/renderer/store';
+import { AppMode } from '/@/renderer/store/app.store';
 import { constrainRightSidebarWidth, constrainSidebarWidth } from '/@/renderer/utils';
+import { Button } from '/@/shared/components/button/button';
+import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
+import { Icon } from '/@/shared/components/icon/icon';
+import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 
 const MINIMUM_SIDEBAR_WIDTH = 260;
 
 export const MainContent = ({ shell }: { shell?: boolean }) => {
+    const appMode = useAppMode();
     const { collapsed, leftWidth, rightExpanded, rightHeight, rightWidth } = useAppStore(
         (state) => ({
             collapsed: state.sidebar.collapsed,
@@ -188,8 +198,9 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
             className={clsx(styles.mainContentContainer, {
                 [styles.rightExpanded]: rightExpanded && sideQueueType === 'sideQueue',
                 [styles.shell]: shell,
-                [styles.sidebarCollapsed]: collapsed,
-                [styles.sidebarExpanded]: !collapsed,
+                [styles.sidebarCollapsed]: collapsed && appMode === 'library',
+                [styles.sidebarExpanded]: !collapsed && appMode === 'library',
+                [styles.sidebarHidden]: appMode === 'sync',
                 [styles.verticalLayout]:
                     rightExpanded &&
                     sideQueueType === 'sideQueue' &&
@@ -202,7 +213,9 @@ export const MainContent = ({ shell }: { shell?: boolean }) => {
                 <>
                     <FullScreenVisualizerOverlay />
                     <FullScreenOverlay />
-                    <LeftSidebar isResizing={isResizing} startResizing={startResizing} />
+                    {appMode === 'library' && (
+                        <LeftSidebar isResizing={isResizing} startResizing={startResizing} />
+                    )}
                     <RightSidebar
                         isResizing={isResizingRight}
                         ref={rightSidebarRef}
@@ -228,14 +241,65 @@ function GlobalExpandedPanel() {
 }
 
 function MainContentBody() {
+    const appMode = useAppMode();
+
     return (
         <div className={styles.mainContentBody}>
+            <ModeToggle />
             <div className={styles.mainContentBodyScroll}>
-                <Suspense fallback={<Spinner container />}>
-                    <Outlet />
-                </Suspense>
+                {appMode === 'sync' ? (
+                    <SyncModePlaceholder />
+                ) : (
+                    <Suspense fallback={<Spinner container />}>
+                        <Outlet />
+                    </Suspense>
+                )}
             </div>
-            <GlobalExpandedPanel />
+            {appMode === 'library' && <GlobalExpandedPanel />}
+        </div>
+    );
+}
+
+function ModeToggle() {
+    const { t } = useTranslation();
+    const appMode = useAppMode();
+    const { setAppMode } = useAppStoreActions();
+
+    return (
+        <div className={styles.modeToggleBar}>
+            {appMode === 'sync' && (
+                <DropdownMenu position="bottom-start">
+                    <DropdownMenu.Target>
+                        <Button p="0">
+                            <Icon icon="menu" size="lg" />
+                        </Button>
+                    </DropdownMenu.Target>
+                    <DropdownMenu.Dropdown>
+                        <AppMenu />
+                    </DropdownMenu.Dropdown>
+                </DropdownMenu>
+            )}
+            <SegmentedControl
+                data={[
+                    {
+                        label: t('page.sidebar.library', {
+                            defaultValue: 'Library',
+                            postProcess: 'titleCase',
+                        }),
+                        value: 'library',
+                    },
+                    {
+                        label: t('page.sidebar.sync', {
+                            defaultValue: 'Sync',
+                            postProcess: 'titleCase',
+                        }),
+                        value: 'sync',
+                    },
+                ]}
+                onChange={(value) => setAppMode(value as AppMode)}
+                size="xs"
+                value={appMode}
+            />
         </div>
     );
 }

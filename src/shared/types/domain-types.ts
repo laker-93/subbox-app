@@ -102,6 +102,7 @@ export type ServerListItem = {
 
 export type ServerListItemWithCredential = ServerListItem & {
     credential: string;
+    fbToken?: string;
     ndCredential?: string;
 };
 

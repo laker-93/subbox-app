@@ -53,14 +53,9 @@ export default defineConfig({
             localsConvention: 'camelCase',
         },
     },
+    envDir: path.resolve(__dirname),
     optimizeDeps: {
-        exclude: [
-            '@atlaskit/pragmatic-drag-and-drop',
-            '@atlaskit/pragmatic-drag-and-drop-auto-scroll',
-            '@atlaskit/pragmatic-drag-and-drop-hitbox',
-            '@tanstack/react-query-persist-client',
-            'idb-keyval',
-        ],
+        exclude: ['@tanstack/react-query-persist-client', 'idb-keyval'],
     },
     plugins: [
         react(),
@@ -111,7 +106,7 @@ export default defineConfig({
                         type: 'image/png',
                     },
                 ],
-                name: 'Feishin',
+                name: 'Subbox',
                 orientation: 'portrait',
                 screenshots: [
                     {
@@ -122,7 +117,7 @@ export default defineConfig({
                         type: 'image/webp',
                     },
                 ],
-                short_name: 'Feishin',
+                short_name: 'Subbox',
                 start_url: '/',
                 theme_color: '#1E003D',
             },
@@ -147,4 +142,7 @@ export default defineConfig({
         },
     },
     root: path.resolve(__dirname, './src/renderer'),
+    server: {
+        port: 4343,
+    },
 });
