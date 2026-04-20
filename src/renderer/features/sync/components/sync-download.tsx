@@ -145,6 +145,7 @@ export const SyncDownload = () => {
 
         try {
             if (isElectron()) {
+                console.log('[Subbox] Download (Electron) - selectedPlaylists:', Array.from(selectedPlaylists), 'includeRekordboxXml:', includeRekordboxXml);
                 const result = await window.api.ipc.invoke('sync:download-playlists', {
                     filebrowserToken: server.fbToken ?? '',
                     filebrowserUrl: urlConfig.filebrowser,
@@ -189,9 +190,10 @@ export const SyncDownload = () => {
 
                 // Optionally export and download Rekordbox XML
                 if (includeRekordboxXml) {
+                    console.log('[Subbox] rbDownload (web) - playlistIds:', Array.from(selectedPlaylists));
                     await PymixController.rbDownload({
                         baseUrl: urlConfig.pymix,
-                        body: { user_root: '' },
+                        body: { playlistIds: Array.from(selectedPlaylists), user_root: '' },
                     });
 
                     const xmlLink = document.createElement('a');

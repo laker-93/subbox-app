@@ -160,6 +160,7 @@ const loginParameters = z.object({
 });
 
 const rbExportParameters = z.object({
+    playlistIds: z.array(z.string()).optional(),
     user_root: z.string(),
 });
 

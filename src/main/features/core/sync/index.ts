@@ -315,7 +315,7 @@ function getAppPath(): string {
 }
 
 function getMusicPath(): string {
-    return path.join(getAppPath(), 'music');
+    return path.join(getAppPath());
 }
 
 /**
@@ -497,9 +497,10 @@ ipcMain.handle(
             const musicPath = getMusicPath();
 
             // Call pymix to prepare the Rekordbox XML on the server
+            console.log('[Subbox] Exporting Rekordbox XML with playlistIds:', playlistIds);
             await axios.post(
                 `${pymixUrl}/rekordbox/export`,
-                { user_root: musicPath },
+                { playlistIds, user_root: musicPath },
                 { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
             );
 
