@@ -2,7 +2,7 @@ export function extractTrackName(
     fullString: string,
     artist: string,
     album?: string,
-): string | null {
+): null | string {
     const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     const artistEscaped = escapeRegex(artist);

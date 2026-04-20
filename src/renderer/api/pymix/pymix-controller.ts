@@ -3,30 +3,12 @@ import { z } from 'zod';
 import { pymixApiClient } from '/@/renderer/api/pymix/pymix-api';
 import { pymixType } from '/@/shared/api/pymix/pymix-types';
 
-type PymixClientArgs = {
-    baseUrl: string;
-    signal?: AbortSignal;
-    token?: string;
-};
-
 type CreateArgs = {
     body: z.infer<typeof pymixType._parameters.create>;
 };
 
-type LoginArgs = {
-    body: z.infer<typeof pymixType._parameters.login>;
-};
-
-type SyncArgs = {
-    body: z.infer<typeof pymixType._parameters.sync>;
-};
-
-type SyncPlaylistsArgs = {
-    body: z.infer<typeof pymixType._parameters.syncPlaylists>;
-};
-
-type MatchTracksArgs = {
-    body: z.infer<typeof pymixType._parameters.matchTracks>;
+type DeleteSongArgs = {
+    body: z.infer<typeof pymixType._parameters.deleteSong>;
 };
 
 type ImportArgs = {
@@ -37,32 +19,50 @@ type ImportProgressArgs = {
     query: z.infer<typeof pymixType._parameters.importProgress>;
 };
 
-type DeleteSongArgs = {
-    body: z.infer<typeof pymixType._parameters.deleteSong>;
+type LoginArgs = {
+    body: z.infer<typeof pymixType._parameters.login>;
 };
 
-type ValidateTokenArgs = {
-    query: z.infer<typeof pymixType._parameters.isValidToken>;
+type MatchTracksArgs = {
+    body: z.infer<typeof pymixType._parameters.matchTracks>;
 };
 
-type StorageCheckArgs = {
-    query: z.infer<typeof pymixType._parameters.storageCheck>;
-};
-
-type RbImportArgs = {
-    body: z.infer<typeof pymixType._parameters.rbImport>;
+type PymixClientArgs = {
+    baseUrl: string;
+    signal?: AbortSignal;
+    token?: string;
 };
 
 type RbDownloadArgs = {
     body: z.infer<typeof pymixType._parameters.exportJob>;
 };
 
+type RbImportArgs = {
+    body: z.infer<typeof pymixType._parameters.rbImport>;
+};
+
 type SeratoDownloadArgs = {
     body: z.infer<typeof pymixType._parameters.exportJob>;
 };
 
+type StorageCheckArgs = {
+    query: z.infer<typeof pymixType._parameters.storageCheck>;
+};
+
+type SyncArgs = {
+    body: z.infer<typeof pymixType._parameters.sync>;
+};
+
 type SyncPlanArgs = {
     body: z.infer<typeof pymixType._parameters.syncPlan>;
+};
+
+type SyncPlaylistsArgs = {
+    body: z.infer<typeof pymixType._parameters.syncPlaylists>;
+};
+
+type ValidateTokenArgs = {
+    query: z.infer<typeof pymixType._parameters.isValidToken>;
 };
 
 export const PymixController = {
@@ -77,7 +77,7 @@ export const PymixController = {
         return res.body.data;
     },
 
-    create: async (args: PymixClientArgs & CreateArgs) => {
+    create: async (args: CreateArgs & PymixClientArgs) => {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).create({ body });
 
@@ -99,7 +99,7 @@ export const PymixController = {
         return res.body.data;
     },
 
-    deleteSong: async (args: PymixClientArgs & DeleteSongArgs) => {
+    deleteSong: async (args: DeleteSongArgs & PymixClientArgs) => {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).deleteSong({ body });
 
@@ -121,7 +121,7 @@ export const PymixController = {
         return res.body.data;
     },
 
-    import: async (args: PymixClientArgs & ImportArgs) => {
+    import: async (args: ImportArgs & PymixClientArgs) => {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).import({ body });
 
@@ -132,7 +132,7 @@ export const PymixController = {
         return res.body.data;
     },
 
-    importProgress: async (args: PymixClientArgs & ImportProgressArgs) => {
+    importProgress: async (args: ImportProgressArgs & PymixClientArgs) => {
         const { baseUrl, query, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).importProgress({ query });
 
@@ -143,7 +143,7 @@ export const PymixController = {
         return res.body.data;
     },
 
-    login: async (args: PymixClientArgs & LoginArgs) => {
+    login: async (args: LoginArgs & PymixClientArgs) => {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).login({ body });
 
@@ -154,7 +154,7 @@ export const PymixController = {
         return res.body.data;
     },
 
-    matchTracks: async (args: PymixClientArgs & MatchTracksArgs) => {
+    matchTracks: async (args: MatchTracksArgs & PymixClientArgs) => {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).matchTracks({ body });
 

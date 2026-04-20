@@ -53,11 +53,9 @@ export default defineConfig({
             localsConvention: 'camelCase',
         },
     },
+    envDir: path.resolve(__dirname),
     optimizeDeps: {
-        exclude: [
-            '@tanstack/react-query-persist-client',
-            'idb-keyval',
-        ],
+        exclude: ['@tanstack/react-query-persist-client', 'idb-keyval'],
     },
     plugins: [
         react(),
@@ -143,7 +141,6 @@ export default defineConfig({
             '/@/shared': path.resolve(__dirname, './src/shared'),
         },
     },
-    envDir: path.resolve(__dirname),
     root: path.resolve(__dirname, './src/renderer'),
     server: {
         port: 4343,

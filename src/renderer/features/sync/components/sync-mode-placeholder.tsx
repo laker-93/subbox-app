@@ -1,5 +1,5 @@
-import { Suspense, useState } from 'react';
 import isElectron from 'is-electron';
+import { Suspense, useState } from 'react';
 
 import { SyncDownload } from '/@/renderer/features/sync/components/sync-download';
 import { SyncRekordbox } from '/@/renderer/features/sync/components/sync-rekordbox';
@@ -10,7 +10,7 @@ import { Group } from '/@/shared/components/group/group';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 
-type SyncTab = 'upload' | 'download' | 'watch';
+type SyncTab = 'download' | 'upload' | 'watch';
 
 export const SyncModePlaceholder = () => {
     const electron = isElectron();
@@ -42,8 +42,8 @@ export const SyncModePlaceholder = () => {
                 </Button>
             </Group>
             <div style={{ flex: 1, overflow: 'hidden' }}>
-                {tab === 'upload' && (
-                    electron ? (
+                {tab === 'upload' &&
+                    (electron ? (
                         <SyncRekordbox />
                     ) : (
                         <Center style={{ height: '100%' }}>
@@ -51,15 +51,20 @@ export const SyncModePlaceholder = () => {
                                 Rekordbox XML upload is only available in the desktop app.
                             </Text>
                         </Center>
-                    )
-                )}
+                    ))}
                 {tab === 'download' && (
-                    <Suspense fallback={<Center style={{ height: '100%' }}><Spinner /></Center>}>
+                    <Suspense
+                        fallback={
+                            <Center style={{ height: '100%' }}>
+                                <Spinner />
+                            </Center>
+                        }
+                    >
                         <SyncDownload />
                     </Suspense>
                 )}
-                {tab === 'watch' && (
-                    electron ? (
+                {tab === 'watch' &&
+                    (electron ? (
                         <SyncWatch />
                     ) : (
                         <Center style={{ height: '100%' }}>
@@ -67,8 +72,7 @@ export const SyncModePlaceholder = () => {
                                 Watch directory is only available in the desktop app.
                             </Text>
                         </Center>
-                    )
-                )}
+                    ))}
             </div>
         </div>
     );

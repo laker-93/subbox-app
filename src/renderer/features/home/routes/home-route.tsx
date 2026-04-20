@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useGridCarouselContainerQuery } from '/@/renderer/components/grid-carousel/grid-carousel-v2';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
+import { urlConfig } from '/@/renderer/config/url-config';
 import { AlbumInfiniteCarousel } from '/@/renderer/features/albums/components/album-infinite-carousel';
 import { AlbumInfiniteFeatureCarousel } from '/@/renderer/features/home/components/album-infinite-feature-carousel';
 import { AlbumInfiniteSingleFeatureCarousel } from '/@/renderer/features/home/components/album-infinite-single-feature-carousel';
@@ -12,7 +13,6 @@ import { LibraryContainer } from '/@/renderer/features/shared/components/library
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
 import { SongInfiniteCarousel } from '/@/renderer/features/songs/components/song-infinite-carousel';
-import { urlConfig } from '/@/renderer/config/url-config';
 import {
     HomeFeatureStyle,
     HomeItem,
@@ -22,9 +22,9 @@ import {
     useHomeItems,
     useWindowSettings,
 } from '/@/renderer/store';
+import { Button } from '/@/shared/components/button/button';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
-import { Button } from '/@/shared/components/button/button';
 import {
     AlbumListSort,
     LibraryItem,

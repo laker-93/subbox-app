@@ -2,8 +2,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Divider } from '/@/shared/components/divider/divider';
 import { Stack } from '/@/shared/components/stack/stack';
-import { Text } from '/@/shared/components/text/text';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
+import { Text } from '/@/shared/components/text/text';
 
 export const HelpModalContent = () => {
     const { t } = useTranslation();

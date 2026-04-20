@@ -23,11 +23,17 @@ interface PymixAuthModalProps {
     baseUrl: string;
     handlers: ModalProps['handlers'];
     initialView?: 'create' | 'login';
-    opened: boolean;
     onSuccess: () => void;
+    opened: boolean;
 }
 
-export const PymixAuthModal = ({ baseUrl, handlers, initialView, onSuccess, opened }: PymixAuthModalProps) => {
+export const PymixAuthModal = ({
+    baseUrl,
+    handlers,
+    initialView,
+    onSuccess,
+    opened,
+}: PymixAuthModalProps) => {
     const [view, setView] = useState<AuthView>(initialView ?? 'select');
     const [createStatus, setCreateStatus] = useState<CreateStatus>('idle');
 
@@ -55,11 +61,12 @@ export const PymixAuthModal = ({ baseUrl, handlers, initialView, onSuccess, open
             withCloseButton={false}
         >
             {view === 'select' && (
-                <SelectView onCreateAccount={() => setView('create')} onLogin={() => setView('login')} />
+                <SelectView
+                    onCreateAccount={() => setView('create')}
+                    onLogin={() => setView('login')}
+                />
             )}
-            {view === 'login' && (
-                <LoginView baseUrl={baseUrl} onSuccess={onSuccess} />
-            )}
+            {view === 'login' && <LoginView baseUrl={baseUrl} onSuccess={onSuccess} />}
             {view === 'create' && (
                 <CreateAccountView
                     baseUrl={baseUrl}
@@ -71,144 +78,6 @@ export const PymixAuthModal = ({ baseUrl, handlers, initialView, onSuccess, open
         </Modal>
     );
 };
-
-function SelectView({
-    onCreateAccount,
-    onLogin,
-}: {
-    onCreateAccount: () => void;
-    onLogin: () => void;
-}) {
-    const { t } = useTranslation();
-
-    return (
-        <Stack gap="lg" p="md">
-            <Stack align="center" gap="xs">
-                <TextTitle order={4}>
-                    {t('common.welcome', { defaultValue: 'Welcome', postProcess: 'sentenceCase' })}
-                </TextTitle>
-                <Text c="dimmed" size="sm" ta="center">
-                    Login to an existing account or create a new one.
-                </Text>
-            </Stack>
-            <Stack gap="sm">
-                <Button fullWidth onClick={onLogin} variant="filled">
-                    {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
-                </Button>
-                <Button fullWidth onClick={onCreateAccount} variant="default">
-                    {t('common.create', { defaultValue: 'Create', postProcess: 'titleCase' })}{' '}
-                    Account
-                </Button>
-            </Stack>
-        </Stack>
-    );
-}
-
-function LoginView({
-    baseUrl,
-    onSuccess,
-}: {
-    baseUrl: string;
-    onSuccess: () => void;
-}) {
-    const { t } = useTranslation();
-    const [isLoading, setIsLoading] = useState(false);
-    const { addServer, setCurrentServer } = useAuthStoreActions();
-
-    const form = useForm({
-        initialValues: {
-            password: '',
-            username: '',
-        },
-        validate: {
-            password: (value) =>
-                value.length < 12
-                    ? t('form.validation.minLength', {
-                          count: 12,
-                          defaultValue: 'Must be at least 12 characters',
-                      })
-                    : null,
-        },
-    });
-
-    const handleSubmit = form.onSubmit(async (values) => {
-        try {
-            setIsLoading(true);
-
-            // 1. Authenticate with pymix
-            await PymixController.login({
-                baseUrl,
-                body: {
-                    password: values.password,
-                    username: values.username,
-                },
-            });
-
-            // 2. Authenticate with navidrome + filebrowser and set up server
-            const serverItem = await authenticateServices({
-                password: values.password,
-                username: values.username,
-            });
-
-            addServer(serverItem);
-            setCurrentServer(serverItem);
-
-            toast.success({
-                message: t('form.addServer.success', { postProcess: 'sentenceCase' }),
-            });
-            onSuccess();
-        } catch (err: any) {
-            toast.error({ message: err?.message });
-        } finally {
-            setIsLoading(false);
-        }
-    });
-
-    const isSubmitDisabled = !form.values.username || !form.values.password;
-
-    return (
-        <form onSubmit={handleSubmit}>
-            <Stack gap="md" p="md">
-                <TextTitle order={4}>
-                    {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
-                </TextTitle>
-                <Stack gap="sm">
-                    <TextInput
-                        data-autofocus
-                        label={t('form.addServer.input', {
-                            context: 'username',
-                            postProcess: 'titleCase',
-                        })}
-                        required
-                        size="sm"
-                        variant="filled"
-                        {...form.getInputProps('username')}
-                    />
-                    <PasswordInput
-                        label={t('form.addServer.input', {
-                            context: 'password',
-                            postProcess: 'titleCase',
-                        })}
-                        minLength={12}
-                        required
-                        size="sm"
-                        variant="filled"
-                        {...form.getInputProps('password')}
-                    />
-                </Stack>
-                <Button
-                    disabled={isSubmitDisabled}
-                    fullWidth
-                    loading={isLoading}
-                    type="submit"
-                    variant="filled"
-                >
-                    {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
-                </Button>
-            </Stack>
-        </form>
-    );
-}
 
 function CreateAccountView({
     baseUrl,
@@ -324,12 +193,11 @@ function CreateAccountView({
                 <Text c="red" size="sm" ta="center">
                     {statusMessage}
                 </Text>
-                <Button
-                    fullWidth
-                    onClick={() => onStatusChange('idle')}
-                    variant="default"
-                >
-                    {t('common.tryAgain', { defaultValue: 'Try again', postProcess: 'sentenceCase' })}
+                <Button fullWidth onClick={() => onStatusChange('idle')} variant="default">
+                    {t('common.tryAgain', {
+                        defaultValue: 'Try again',
+                        postProcess: 'sentenceCase',
+                    })}
                 </Button>
             </Stack>
         );
@@ -381,16 +249,143 @@ function CreateAccountView({
                         {...form.getInputProps('token')}
                     />
                 </Stack>
-                <Button
-                    disabled={isSubmitDisabled}
-                    fullWidth
-                    type="submit"
-                    variant="filled"
-                >
+                <Button disabled={isSubmitDisabled} fullWidth type="submit" variant="filled">
                     {t('common.create', { defaultValue: 'Create', postProcess: 'titleCase' })}{' '}
                     Account
                 </Button>
             </Stack>
         </form>
+    );
+}
+
+function LoginView({ baseUrl, onSuccess }: { baseUrl: string; onSuccess: () => void }) {
+    const { t } = useTranslation();
+    const [isLoading, setIsLoading] = useState(false);
+    const { addServer, setCurrentServer } = useAuthStoreActions();
+
+    const form = useForm({
+        initialValues: {
+            password: '',
+            username: '',
+        },
+        validate: {
+            password: (value) =>
+                value.length < 12
+                    ? t('form.validation.minLength', {
+                          count: 12,
+                          defaultValue: 'Must be at least 12 characters',
+                      })
+                    : null,
+        },
+    });
+
+    const handleSubmit = form.onSubmit(async (values) => {
+        try {
+            setIsLoading(true);
+
+            // 1. Authenticate with pymix
+            await PymixController.login({
+                baseUrl,
+                body: {
+                    password: values.password,
+                    username: values.username,
+                },
+            });
+
+            // 2. Authenticate with navidrome + filebrowser and set up server
+            const serverItem = await authenticateServices({
+                password: values.password,
+                username: values.username,
+            });
+
+            addServer(serverItem);
+            setCurrentServer(serverItem);
+
+            toast.success({
+                message: t('form.addServer.success', { postProcess: 'sentenceCase' }),
+            });
+            onSuccess();
+        } catch (err: any) {
+            toast.error({ message: err?.message });
+        } finally {
+            setIsLoading(false);
+        }
+    });
+
+    const isSubmitDisabled = !form.values.username || !form.values.password;
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <Stack gap="md" p="md">
+                <TextTitle order={4}>
+                    {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
+                </TextTitle>
+                <Stack gap="sm">
+                    <TextInput
+                        data-autofocus
+                        label={t('form.addServer.input', {
+                            context: 'username',
+                            postProcess: 'titleCase',
+                        })}
+                        required
+                        size="sm"
+                        variant="filled"
+                        {...form.getInputProps('username')}
+                    />
+                    <PasswordInput
+                        label={t('form.addServer.input', {
+                            context: 'password',
+                            postProcess: 'titleCase',
+                        })}
+                        minLength={12}
+                        required
+                        size="sm"
+                        variant="filled"
+                        {...form.getInputProps('password')}
+                    />
+                </Stack>
+                <Button
+                    disabled={isSubmitDisabled}
+                    fullWidth
+                    loading={isLoading}
+                    type="submit"
+                    variant="filled"
+                >
+                    {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
+                </Button>
+            </Stack>
+        </form>
+    );
+}
+
+function SelectView({
+    onCreateAccount,
+    onLogin,
+}: {
+    onCreateAccount: () => void;
+    onLogin: () => void;
+}) {
+    const { t } = useTranslation();
+
+    return (
+        <Stack gap="lg" p="md">
+            <Stack align="center" gap="xs">
+                <TextTitle order={4}>
+                    {t('common.welcome', { defaultValue: 'Welcome', postProcess: 'sentenceCase' })}
+                </TextTitle>
+                <Text c="dimmed" size="sm" ta="center">
+                    Login to an existing account or create a new one.
+                </Text>
+            </Stack>
+            <Stack gap="sm">
+                <Button fullWidth onClick={onLogin} variant="filled">
+                    {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
+                </Button>
+                <Button fullWidth onClick={onCreateAccount} variant="default">
+                    {t('common.create', { defaultValue: 'Create', postProcess: 'titleCase' })}{' '}
+                    Account
+                </Button>
+            </Stack>
+        </Stack>
     );
 }

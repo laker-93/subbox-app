@@ -1,6 +1,6 @@
+import isElectron from 'is-electron';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import isElectron from 'is-electron';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
@@ -13,28 +13,11 @@ import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
-import { Text } from '/@/shared/components/text/text';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
+import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
 
 const ipc = isElectron() ? window.api.ipc : null;
-
-function playlistKey(pl: PlaylistPreview): string {
-    return [...pl.path, pl.name].join('/');
-}
-
-interface PlaylistPreview {
-    name: string;
-    path: string[];
-    trackCount: number;
-}
-
-interface UploadProgress {
-    currentTrack: string;
-    phase: 'matching' | 'uploading' | 'mapping-metadata' | 'done' | 'error';
-    total: number;
-    uploaded: number;
-}
 
 interface ImportProgress {
     in_progress: boolean;
@@ -45,26 +28,52 @@ interface ImportProgress {
     result: boolean;
 }
 
-type SyncStep = 'idle' | 'parsing' | 'preview' | 'uploading' | 'importing' | 'done' | 'storage-exceeded';
+interface PlaylistPreview {
+    name: string;
+    path: string[];
+    trackCount: number;
+}
+
+type SyncStep =
+    | 'done'
+    | 'idle'
+    | 'importing'
+    | 'parsing'
+    | 'preview'
+    | 'storage-exceeded'
+    | 'uploading';
+
+interface UploadProgress {
+    currentTrack: string;
+    phase: 'done' | 'error' | 'mapping-metadata' | 'matching' | 'uploading';
+    total: number;
+    uploaded: number;
+}
+
+function playlistKey(pl: PlaylistPreview): string {
+    return [...pl.path, pl.name].join('/');
+}
 
 export const SyncRekordbox = () => {
     const { t } = useTranslation();
     const currentServer = useCurrentServerWithCredential();
 
     const [step, setStep] = useState<SyncStep>('idle');
-    const [xmlPath, setXmlPath] = useState<string | null>(null);
+    const [xmlPath, setXmlPath] = useState<null | string>(null);
     const [playlists, setPlaylists] = useState<PlaylistPreview[]>([]);
     const [selectedPlaylists, setSelectedPlaylists] = useState<Set<string>>(new Set());
-    const [progress, setProgress] = useState<UploadProgress | null>(null);
+    const [progress, setProgress] = useState<null | UploadProgress>(null);
     const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
-    const [jobId, setJobId] = useState<string | null>(null);
-    const [uploadResult, setUploadResult] = useState<{ skipped: number; uploaded: number } | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [storageInfo, setStorageInfo] = useState<{
+    const [jobId, setJobId] = useState<null | string>(null);
+    const [uploadResult, setUploadResult] = useState<null | { skipped: number; uploaded: number }>(
+        null,
+    );
+    const [error, setError] = useState<null | string>(null);
+    const [storageInfo, setStorageInfo] = useState<null | {
         currentUsageBytes: number;
         maxStorageBytes: number;
         remainingBytes: number;
-    } | null>(null);
+    }>(null);
 
     // Listen for upload progress events
     useEffect(() => {
@@ -92,7 +101,10 @@ export const SyncRekordbox = () => {
             setStep('parsing');
             setError(null);
 
-            const previews: PlaylistPreview[] = await ipc.invoke('sync:parse-rekordbox-xml', filePath);
+            const previews: PlaylistPreview[] = await ipc.invoke(
+                'sync:parse-rekordbox-xml',
+                filePath,
+            );
             setPlaylists(previews);
             setSelectedPlaylists(new Set(previews.map((p) => playlistKey(p))));
             setStep('preview');
@@ -200,7 +212,7 @@ export const SyncRekordbox = () => {
                 setStep('preview');
             }
         }
-    }, [xmlPath, currentServer, selectedPlaylists]);
+    }, [currentServer, playlists, selectedPlaylists, xmlPath]);
 
     // Poll import progress when in importing step
     useEffect(() => {
@@ -274,7 +286,8 @@ export const SyncRekordbox = () => {
                     </TextTitle>
                     <Text c="dimmed" size="sm" ta="center">
                         {t('page.sync.rekordbox.description', {
-                            defaultValue: 'Select your Rekordbox XML export file to preview and upload playlists to your Subbox cloud library.',
+                            defaultValue:
+                                'Select your Rekordbox XML export file to preview and upload playlists to your Subbox cloud library.',
                         })}
                     </Text>
                     {error && (
@@ -360,35 +373,31 @@ export const SyncRekordbox = () => {
                     {playlists.map((pl) => {
                         const key = playlistKey(pl);
                         return (
-                        <Group
-                            gap="md"
-                            key={key}
-                            style={{
-                                borderRadius: 'var(--theme-radius-sm)',
-                                cursor: 'pointer',
-                                padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
-                            }}
-                            onClick={() => handleTogglePlaylist(key)}
-                        >
-                            <Checkbox
-                                checked={selectedPlaylists.has(key)}
-                                readOnly
-                                size="sm"
-                            />
-                            <Stack gap={2} style={{ flex: 1 }}>
-                                <Text size="sm" fw={500}>
-                                    {pl.path.length > 0 && (
-                                        <Text c="dimmed" component="span" size="xs">
-                                            {pl.path.join(' / ')} /{' '}
-                                        </Text>
-                                    )}
-                                    {pl.name}
+                            <Group
+                                gap="md"
+                                key={key}
+                                onClick={() => handleTogglePlaylist(key)}
+                                style={{
+                                    borderRadius: 'var(--theme-radius-sm)',
+                                    cursor: 'pointer',
+                                    padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
+                                }}
+                            >
+                                <Checkbox checked={selectedPlaylists.has(key)} readOnly size="sm" />
+                                <Stack gap={2} style={{ flex: 1 }}>
+                                    <Text fw={500} size="sm">
+                                        {pl.path.length > 0 && (
+                                            <Text c="dimmed" component="span" size="xs">
+                                                {pl.path.join(' / ')} /{' '}
+                                            </Text>
+                                        )}
+                                        {pl.name}
+                                    </Text>
+                                </Stack>
+                                <Text c="dimmed" size="xs">
+                                    {pl.trackCount} {pl.trackCount === 1 ? 'track' : 'tracks'}
                                 </Text>
-                            </Stack>
-                            <Text c="dimmed" size="xs">
-                                {pl.trackCount} {pl.trackCount === 1 ? 'track' : 'tracks'}
-                            </Text>
-                        </Group>
+                            </Group>
                         );
                     })}
                 </Stack>
@@ -413,12 +422,12 @@ export const SyncRekordbox = () => {
     if (step === 'uploading') {
         const phaseLabel = progress
             ? {
-                  'done': 'Complete!',
-                  'error': 'Error',
-                  'importing': 'Starting import...',
+                  done: 'Complete!',
+                  error: 'Error',
+                  importing: 'Starting import...',
                   'mapping-metadata': 'Mapping metadata...',
-                  'matching': 'Matching tracks with cloud library...',
-                  'uploading': `Uploading tracks (${progress.uploaded}/${progress.total})...`,
+                  matching: 'Matching tracks with cloud library...',
+                  uploading: `Uploading tracks (${progress.uploaded}/${progress.total})...`,
               }[progress.phase]
             : 'Starting...';
 
@@ -447,9 +456,7 @@ export const SyncRekordbox = () => {
             <Center style={{ height: '100%' }}>
                 <Stack align="center" gap="md" maw={400}>
                     <Spinner />
-                    <TextTitle order={4}>
-                        Importing into library...
-                    </TextTitle>
+                    <TextTitle order={4}>Importing into library...</TextTitle>
                     <Text size="sm">
                         {processed} / {total} tracks ({Math.round(pct)}%)
                     </Text>
@@ -463,7 +470,9 @@ export const SyncRekordbox = () => {
 
     // ── Storage Exceeded ───────────────────────────────────────────────────
     if (step === 'storage-exceeded') {
-        const currentMB = storageInfo ? Math.round(storageInfo.currentUsageBytes / (1024 * 1024)) : null;
+        const currentMB = storageInfo
+            ? Math.round(storageInfo.currentUsageBytes / (1024 * 1024))
+            : null;
         const maxMB = storageInfo ? Math.round(storageInfo.maxStorageBytes / (1024 * 1024)) : null;
 
         return (
@@ -477,9 +486,11 @@ export const SyncRekordbox = () => {
                         })}
                     </TextTitle>
                     <Text c="dimmed" size="sm" ta="center">
-                        {error || t('page.sync.rekordbox.storageLimitDescription', {
-                            defaultValue: 'Your upload would exceed your storage limit. To continue uploading, request more storage from the Subbox team.',
-                        })}
+                        {error ||
+                            t('page.sync.rekordbox.storageLimitDescription', {
+                                defaultValue:
+                                    'Your upload would exceed your storage limit. To continue uploading, request more storage from the Subbox team.',
+                            })}
                     </Text>
                     {currentMB !== null && maxMB !== null && (
                         <Text size="sm" ta="center">
@@ -520,9 +531,7 @@ export const SyncRekordbox = () => {
                 </TextTitle>
                 {uploadResult && (
                     <Stack align="center" gap="xs">
-                        <Text size="sm">
-                            {uploadResult.uploaded} tracks uploaded
-                        </Text>
+                        <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
                         {uploadResult.skipped > 0 && (
                             <Text c="dimmed" size="sm">
                                 {uploadResult.skipped} tracks skipped (files not found)

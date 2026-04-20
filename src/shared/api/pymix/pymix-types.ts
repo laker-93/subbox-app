@@ -182,7 +182,7 @@ const matchTracksParameters = z.object({
 });
 
 const rbImportParameters = z.object({
-    playlistNames: z.array(z.array(z.string()))
+    playlistNames: z.array(z.array(z.string())),
 });
 
 const importProgressParameters = z.object({
@@ -221,10 +221,12 @@ const syncPlanLocalTrack = z.object({
 const syncPlanParameters = z.object({
     direction: z.enum(['download', 'upload']),
     localTracks: z.array(syncPlanLocalTrack),
-    options: z.object({
-        fuzzyMatch: z.boolean().optional(),
-        includeMetadata: z.boolean().optional(),
-    }).optional(),
+    options: z
+        .object({
+            fuzzyMatch: z.boolean().optional(),
+            includeMetadata: z.boolean().optional(),
+        })
+        .optional(),
     playlists: z.array(syncPlanPlaylist),
 });
 
@@ -240,11 +242,11 @@ export const pymixType = {
         importProgress: importProgressParameters,
         isValidToken: isValidTokenParameters,
         login: loginParameters,
-        storageCheck: storageCheckParameters,
-        syncPlan: syncPlanParameters,
         matchTracks: matchTracksParameters,
         rbImport: rbImportParameters,
+        storageCheck: storageCheckParameters,
         sync: syncParameters,
+        syncPlan: syncPlanParameters,
         syncPlaylists: syncPlaylistsParameters,
     },
     _response: {

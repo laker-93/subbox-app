@@ -163,8 +163,7 @@ export const contract = c.router({
     },
 });
 
-const axiosClient = axios.create({withCredentials: true});
-
+const axiosClient = axios.create({ withCredentials: true });
 
 axiosClient.defaults.paramsSerializer = (params) => {
     return qs.stringify(params, { arrayFormat: 'repeat' });
@@ -202,11 +201,7 @@ axiosClient.interceptors.response.use(
     },
 );
 
-export const pymixApiClient = (args: {
-    baseUrl: string;
-    signal?: AbortSignal;
-    token?: string;
-}) => {
+export const pymixApiClient = (args: { baseUrl: string; signal?: AbortSignal; token?: string }) => {
     const { baseUrl, signal, token } = args;
 
     return initClient(contract, {

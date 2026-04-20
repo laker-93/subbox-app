@@ -49,9 +49,6 @@ const config: UserConfig = {
         },
     },
     renderer: {
-        server: {
-            port: 4343,
-        },
         build: {
             cssMinify: 'esbuild',
             minify: 'esbuild',
@@ -75,6 +72,9 @@ const config: UserConfig = {
                 '/@/renderer': resolve('src/renderer'),
                 '/@/shared': resolve('src/shared'),
             },
+        },
+        server: {
+            port: 4343,
         },
     },
 };

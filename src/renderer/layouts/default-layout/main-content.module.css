@@ -41,8 +41,8 @@
 }
 
 .main-content-container.sidebar-hidden {
-    grid-template-columns: 1fr;
     grid-template-areas: '. right-sidebar';
+    grid-template-columns: 1fr;
 }
 
 .main-content-container.sidebar-hidden.right-expanded {
@@ -70,10 +70,10 @@
 
 .mode-toggle-bar {
     display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: var(--theme-spacing-xs) var(--theme-spacing-md);
     flex-shrink: 0;
+    align-items: center;
+    justify-content: flex-end;
+    padding: var(--theme-spacing-xs) var(--theme-spacing-md);
     -webkit-app-region: drag;
 
     &:has(> :nth-child(2)) {

@@ -39,7 +39,6 @@ export interface AppState {
         sortBy: SongListSort;
         sortOrder: SortOrder;
     };
-    appMode: AppMode;
     albumArtistDetailSort: {
         groupingType: 'all' | 'primary';
         sortBy: AlbumListSort;
@@ -47,6 +46,7 @@ export interface AppState {
     };
     albumArtistIdsMode: 'and' | 'or';
     albumArtistSelectMode: 'multi' | 'single';
+    appMode: AppMode;
     artistIdsMode: 'and' | 'or';
     artistSelectMode: 'multi' | 'single';
     commandPalette: CommandPaletteProps;

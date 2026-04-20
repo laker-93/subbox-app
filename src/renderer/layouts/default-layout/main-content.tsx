@@ -1,36 +1,35 @@
 import clsx from 'clsx';
 import { motion } from 'motion/react';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
 import { shallow } from 'zustand/shallow';
 
 import styles from './main-content.module.css';
 
-import { useTranslation } from 'react-i18next';
-
 import { ExpandedListContainer } from '/@/renderer/components/item-list/expanded-list-container';
 import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list-item';
+import { SyncModePlaceholder } from '/@/renderer/features/sync/components/sync-mode-placeholder';
+import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-screen-overlay';
 import { FullScreenVisualizerOverlay } from '/@/renderer/layouts/default-layout/full-screen-visualizer-overlay';
 import { LeftSidebar } from '/@/renderer/layouts/default-layout/left-sidebar';
 import { RightSidebar } from '/@/renderer/layouts/default-layout/right-sidebar';
-import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import {
+    useAppMode,
     useAppStore,
     useAppStoreActions,
     useGlobalExpanded,
-    useAppMode,
     useSideQueueLayout,
     useSideQueueType,
 } from '/@/renderer/store';
 import { AppMode } from '/@/renderer/store/app.store';
 import { constrainRightSidebarWidth, constrainSidebarWidth } from '/@/renderer/utils';
-import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
-import { Spinner } from '/@/shared/components/spinner/spinner';
-import { SyncModePlaceholder } from '/@/renderer/features/sync/components/sync-mode-placeholder';
 import { Button } from '/@/shared/components/button/button';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Icon } from '/@/shared/components/icon/icon';
+import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
+import { Spinner } from '/@/shared/components/spinner/spinner';
 
 const MINIMUM_SIDEBAR_WIDTH = 260;
 
@@ -241,6 +240,26 @@ function GlobalExpandedPanel() {
     );
 }
 
+function MainContentBody() {
+    const appMode = useAppMode();
+
+    return (
+        <div className={styles.mainContentBody}>
+            <ModeToggle />
+            <div className={styles.mainContentBodyScroll}>
+                {appMode === 'sync' ? (
+                    <SyncModePlaceholder />
+                ) : (
+                    <Suspense fallback={<Spinner container />}>
+                        <Outlet />
+                    </Suspense>
+                )}
+            </div>
+            {appMode === 'library' && <GlobalExpandedPanel />}
+        </div>
+    );
+}
+
 function ModeToggle() {
     const { t } = useTranslation();
     const appMode = useAppMode();
@@ -281,26 +300,6 @@ function ModeToggle() {
                 size="xs"
                 value={appMode}
             />
-        </div>
-    );
-}
-
-function MainContentBody() {
-    const appMode = useAppMode();
-
-    return (
-        <div className={styles.mainContentBody}>
-            <ModeToggle />
-            <div className={styles.mainContentBodyScroll}>
-                {appMode === 'sync' ? (
-                    <SyncModePlaceholder />
-                ) : (
-                    <Suspense fallback={<Spinner container />}>
-                        <Outlet />
-                    </Suspense>
-                )}
-            </div>
-            {appMode === 'library' && <GlobalExpandedPanel />}
         </div>
     );
 }

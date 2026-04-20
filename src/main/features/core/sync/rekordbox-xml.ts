@@ -1,17 +1,14 @@
+import { DOMParser } from '@xmldom/xmldom';
 import * as fs from 'fs';
 import * as path from 'path';
-import { DOMParser } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
-import { Track, isFolder, isTrack, isTrackReference } from './rekordbox-xml-types';
 
-export interface ParsedTrack {
-    album: string | null;
-    artist: string | null;
-    cleanName: string | null;
-    fileExtension: string;
-    location: string;
-    name: string | null;
-    totalTime: string;
+import { isFolder, isTrack, isTrackReference, Track } from './rekordbox-xml-types';
+
+export interface ParsedFolder {
+    name: string;
+    playlists: ParsedPlaylist[];
+    subfolders: ParsedFolder[];
 }
 
 export interface ParsedPlaylist {
@@ -20,40 +17,20 @@ export interface ParsedPlaylist {
     tracks: ParsedTrack[];
 }
 
-export interface ParsedFolder {
-    name: string;
-    playlists: ParsedPlaylist[];
-    subfolders: ParsedFolder[];
+export interface ParsedTrack {
+    album: null | string;
+    artist: null | string;
+    cleanName: null | string;
+    fileExtension: string;
+    location: string;
+    name: null | string;
+    totalTime: string;
 }
 
 export interface ParsedXmlResult {
     folders: ParsedFolder[];
     playlists: ParsedPlaylist[];
     tracks: ParsedTrack[];
-}
-
-function sanitizeName(name: string | null): string {
-    return (name || '').replace(/[/\\?%*:|"<>]/g, '-');
-}
-
-function parseNodes<T, R>(nodes: Node[], callback: (node: T) => R): R[] {
-    return Array.from(nodes as T[]).map(callback);
-}
-
-function parseTrack(track: Track): ParsedTrack {
-    let location = decodeURIComponent(track.getAttribute('Location') || '');
-    location = location.replace(/^file:\/\/localhost/, '');
-    location = path.resolve(location);
-
-    return {
-        album: track.getAttribute('Album') || null,
-        artist: track.getAttribute('Artist') || null,
-        cleanName: null,
-        fileExtension: path.extname(location),
-        location,
-        name: track.getAttribute('Name') || null,
-        totalTime: track.getAttribute('TotalTime') || '',
-    };
 }
 
 export function extractPlaylists(filePath: string): ParsedXmlResult {
@@ -119,4 +96,28 @@ export function extractPlaylists(filePath: string): ParsedXmlResult {
         playlists: parseNodes(xpath.select("./NODE[@Type='1']", root) as Node[], parsePlaylist),
         tracks: parseNodes(tracks, parseTrack),
     };
+}
+
+function parseNodes<T, R>(nodes: Node[], callback: (node: T) => R): R[] {
+    return Array.from(nodes as T[]).map(callback);
+}
+
+function parseTrack(track: Track): ParsedTrack {
+    let location = decodeURIComponent(track.getAttribute('Location') || '');
+    location = location.replace(/^file:\/\/localhost/, '');
+    location = path.resolve(location);
+
+    return {
+        album: track.getAttribute('Album') || null,
+        artist: track.getAttribute('Artist') || null,
+        cleanName: null,
+        fileExtension: path.extname(location),
+        location,
+        name: track.getAttribute('Name') || null,
+        totalTime: track.getAttribute('TotalTime') || '',
+    };
+}
+
+function sanitizeName(name: null | string): string {
+    return (name || '').replace(/[/\\?%*:|"<>]/g, '-');
 }

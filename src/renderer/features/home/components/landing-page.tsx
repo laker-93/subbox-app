@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next';
 
+import styles from './landing-page.module.css';
+
 import { urlConfig } from '/@/renderer/config/url-config';
 import { Button } from '/@/shared/components/button/button';
 import { Stack } from '/@/shared/components/stack/stack';
-
-import styles from './landing-page.module.css';
 
 interface LandingPageProps {
     onCreateAccount: () => void;
@@ -35,7 +35,8 @@ export const LandingPage = ({ onCreateAccount, onLogin }: LandingPageProps) => {
                     <div className={styles['fs-landing-page-feature']}>
                         <span className={styles['fs-landing-page-feature-dot']} />
                         {t('page.landing.featureSync', {
-                            defaultValue: 'Sync and convert libraries between Serato, Rekordbox, and more',
+                            defaultValue:
+                                'Sync and convert libraries between Serato, Rekordbox, and more',
                         })}
                     </div>
                     <div className={styles['fs-landing-page-feature']}>
@@ -67,23 +68,13 @@ export const LandingPage = ({ onCreateAccount, onLogin }: LandingPageProps) => {
                             postProcess: 'titleCase',
                         })}
                     </Button>
-                    <Button
-                        fullWidth
-                        onClick={onLogin}
-                        size="lg"
-                        variant="filled"
-                    >
+                    <Button fullWidth onClick={onLogin} size="lg" variant="filled">
                         {t('common.login', {
                             defaultValue: 'Login',
                             postProcess: 'titleCase',
                         })}
                     </Button>
-                    <Button
-                        fullWidth
-                        onClick={onCreateAccount}
-                        size="lg"
-                        variant="default"
-                    >
+                    <Button fullWidth onClick={onCreateAccount} size="lg" variant="default">
                         {t('page.landing.createAccount', {
                             defaultValue: 'Create account',
                             postProcess: 'titleCase',
