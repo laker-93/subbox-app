@@ -1,7 +1,7 @@
 services:
-    feishin:
-        container_name: feishin
-        image: "ghcr.io/jeffvli/feishin:latest"
+    subbox:
+        container_name: subbox
+        image: "ghcr.io/jeffvli/subbox:latest"
         restart: unless-stopped
         environment:
             - SERVER_NAME=jellyfin # pre-defined server name

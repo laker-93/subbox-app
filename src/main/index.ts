@@ -51,14 +51,14 @@ const ALPHA_UPDATER_CONFIG: {
 } = {
     bucket: '',
     channel: 'alpha',
-    endpoint: 'https://feishin-nightly-bucket.jeffvli.org',
+    endpoint: 'https://subbox-nightly-bucket.jeffvli.org',
     provider: 's3',
 };
 
 const GITHUB_UPDATER_CONFIG = {
     owner: 'jeffvli',
     provider: 'github' as const,
-    repo: 'feishin',
+    repo: 'subbox',
 };
 
 type UpdaterInstance = AppImageUpdater | MacUpdater | NsisUpdater | typeof autoUpdater;
@@ -256,7 +256,7 @@ function createAlphaUpdaterInstance(): AppImageUpdater | MacUpdater | NsisUpdate
     return new NsisUpdater(ALPHA_UPDATER_CONFIG);
 }
 
-protocol.registerSchemesAsPrivileged([{ privileges: { bypassCSP: true }, scheme: 'feishin' }]);
+protocol.registerSchemesAsPrivileged([{ privileges: { bypassCSP: true }, scheme: 'subbox' }]);
 
 process.on('uncaughtException', (error: any) => {
     console.error('Error in main process', error);
@@ -272,7 +272,7 @@ if (isLinux() && !process.argv.some((a) => a.startsWith('--password-store='))) {
     app.commandLine.appendSwitch('password-store', passwordStore);
 }
 
-// Handle fractional scaling issue from Wayland https://github.com/jeffvli/feishin/issues/1271#issuecomment-4063326712
+// Handle fractional scaling issue from Wayland https://github.com/jeffvli/subbox/issues/1271#issuecomment-4063326712
 if (isLinux()) {
     app.commandLine.appendSwitch('disable-features', 'WaylandFractionalScaleV1');
 }
@@ -450,7 +450,7 @@ const createTray = () => {
         }
     });
 
-    tray.setToolTip('Feishin');
+    tray.setToolTip('Subbox');
     tray.setContextMenu(contextMenu);
 };
 
@@ -693,7 +693,7 @@ async function createWindow(first = true): Promise<void> {
     });
 
     if (isWindows()) {
-        app.setAppUserModelId('org.jeffvli.feishin');
+        app.setAppUserModelId('org.jeffvli.subbox');
     }
 
     if (isMacOS()) {
@@ -914,8 +914,8 @@ if (!singleInstance) {
 
     app.whenReady()
         .then(() => {
-            protocol.handle('feishin', async (request) => {
-                const filePath = `file:${request.url.slice('feishin:'.length)}`;
+            protocol.handle('subbox', async (request) => {
+                const filePath = `file:${request.url.slice('subbox:'.length)}`;
                 const response = await net.fetch(filePath);
                 const contentType = response.headers.get('content-type');
 

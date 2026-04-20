@@ -73,6 +73,9 @@ const config: UserConfig = {
                 '/@/shared': resolve('src/shared'),
             },
         },
+        server: {
+            port: 4343,
+        },
     },
 };
 

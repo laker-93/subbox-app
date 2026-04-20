@@ -1,4 +1,3 @@
-import { openModal } from '@mantine/modals';
 import { useTranslation } from 'react-i18next';
 import { Navigate } from 'react-router';
 
@@ -8,11 +7,10 @@ import { ServerCredentialRequired } from '/@/renderer/features/action-required/c
 import { ServerRequired } from '/@/renderer/features/action-required/components/server-required';
 import { isServerLock } from '/@/renderer/features/action-required/utils/window-properties';
 import LoginRoute from '/@/renderer/features/login/routes/login-route';
-import { ServerList } from '/@/renderer/features/servers/components/server-list';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
 import { AppRoute } from '/@/renderer/router/routes';
-import { useCurrentServerWithCredential } from '/@/renderer/store';
+import { useAuthStoreActions, useCurrentServerWithCredential } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
@@ -23,6 +21,7 @@ import { Stack } from '/@/shared/components/stack/stack';
 const ActionRequiredRoute = () => {
     const { t } = useTranslation();
     const currentServer = useCurrentServerWithCredential();
+    const { deleteServer, setCurrentServer } = useAuthStoreActions();
     const isServerRequired = !currentServer;
     const isCredentialRequired = currentServer && !currentServer.credential;
 
@@ -44,11 +43,11 @@ const ActionRequiredRoute = () => {
     const canReturnHome = checks.every((c) => c.valid);
     const displayedCheck = checks.find((c) => !c.valid);
 
-    const handleManageServersModal = () => {
-        openModal({
-            children: <ServerList />,
-            title: t('page.appMenu.manageServers', { postProcess: 'sentenceCase' }),
-        });
+    const handleLogOff = () => {
+        if (currentServer) {
+            deleteServer(currentServer.id);
+            setCurrentServer(null);
+        }
     };
 
     if (isLoginRequired) {
@@ -75,11 +74,11 @@ const ActionRequiredRoute = () => {
                                 <Group justify="center" wrap="nowrap">
                                     <Button
                                         fullWidth
-                                        leftSection={<Icon icon="edit" />}
-                                        onClick={handleManageServersModal}
+                                        leftSection={<Icon icon="signOut" />}
+                                        onClick={handleLogOff}
                                         variant="filled"
                                     >
-                                        {t('page.appMenu.manageServers', {
+                                        {t('page.appMenu.logOff', {
                                             postProcess: 'sentenceCase',
                                         })}
                                     </Button>

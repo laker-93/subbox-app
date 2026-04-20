@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useGridCarouselContainerQuery } from '/@/renderer/components/grid-carousel/grid-carousel-v2';
 import { NativeScrollArea } from '/@/renderer/components/native-scroll-area/native-scroll-area';
+import { urlConfig } from '/@/renderer/config/url-config';
 import { AlbumInfiniteCarousel } from '/@/renderer/features/albums/components/album-infinite-carousel';
 import { AlbumInfiniteFeatureCarousel } from '/@/renderer/features/home/components/album-infinite-feature-carousel';
 import { AlbumInfiniteSingleFeatureCarousel } from '/@/renderer/features/home/components/album-infinite-single-feature-carousel';
@@ -21,6 +22,7 @@ import {
     useHomeItems,
     useWindowSettings,
 } from '/@/renderer/store';
+import { Button } from '/@/shared/components/button/button';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import {
@@ -115,6 +117,20 @@ const HomeRoute = () => {
                         px="2rem"
                         ref={containerQuery.ref}
                     >
+                        <Button
+                            component="a"
+                            href={urlConfig.discord}
+                            rel="noopener noreferrer"
+                            size="sm"
+                            style={{ alignSelf: 'flex-start' }}
+                            target="_blank"
+                            variant="subtle"
+                        >
+                            {t('common.joinTheCommunity', {
+                                defaultValue: 'Join the Community',
+                                postProcess: 'titleCase',
+                            })}
+                        </Button>
                         {homeFeature && homeFeatureStyle === HomeFeatureStyle.SINGLE && (
                             <AlbumInfiniteSingleFeatureCarousel />
                         )}

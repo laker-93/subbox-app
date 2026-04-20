@@ -26,10 +26,6 @@ const PlaylistListRoute = lazy(
     () => import('/@/renderer/features/playlists/routes/playlist-list-route'),
 );
 
-const ActionRequiredRoute = lazy(
-    () => import('/@/renderer/features/action-required/routes/action-required-route'),
-);
-
 const InvalidRoute = lazy(
     () => import('/@/renderer/features/action-required/routes/invalid-route'),
 );
@@ -325,10 +321,6 @@ export const AppRouter = () => {
                         </Route>
                         <Route element={<TitlebarOutlet />}>
                             <Route element={<ResponsiveLayout shell />}>
-                                <Route
-                                    element={<ActionRequiredRoute />}
-                                    path={AppRoute.ACTION_REQUIRED}
-                                />
                                 <Route element={<LoginRoute />} path={AppRoute.LOGIN} />
                             </Route>
                             <Route element={<ResponsiveLayout />}>

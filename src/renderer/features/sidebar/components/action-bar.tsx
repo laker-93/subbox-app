@@ -24,7 +24,7 @@ export const ActionBar = () => {
                 style={{ padding: '0 var(--theme-spacing-md)' }}
                 w="100%"
             >
-                <Grid.Col span={7}>
+                <Grid.Col span="auto">
                     <TextInput
                         leftSection={<Icon icon="search" />}
                         onClick={open}
@@ -37,8 +37,8 @@ export const ActionBar = () => {
                         readOnly
                     />
                 </Grid.Col>
-                <Grid.Col span={5}>
-                    <Group gap="sm" grow wrap="nowrap">
+                <Grid.Col span="content">
+                    <Group gap="sm" wrap="nowrap">
                         <DropdownMenu position="bottom-start">
                             <DropdownMenu.Target>
                                 <Button p="0">

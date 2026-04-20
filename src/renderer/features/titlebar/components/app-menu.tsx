@@ -4,16 +4,14 @@ import { Fragment, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 
-import packageJson from '../../../../../package.json';
-
-import { isServerLock } from '/@/renderer/features/action-required/utils/window-properties';
-import { ServerList } from '/@/renderer/features/servers/components/server-list';
+import { HelpModalContent } from '/@/renderer/features/help/components/help-modal-content';
 import { openSettingsModal } from '/@/renderer/features/settings/utils/open-settings-modal';
-import { openReleaseNotesModal } from '/@/renderer/release-notes-modal';
 import {
     useAppStore,
     useAppStoreActions,
+    useAuthStoreActions,
     useCommandPalette,
+    useCurrentServer,
     useGeneralSettings,
     useSettingsStoreActions,
 } from '/@/renderer/store';
@@ -21,7 +19,6 @@ import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { DropdownMenu, MenuItemProps } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
-import { toast } from '/@/shared/components/toast/toast';
 
 const browser = isElectron() ? window.api.browser : null;
 
@@ -80,11 +77,12 @@ export const AppMenu = () => {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const collapsed = useAppStore((state) => state.sidebar.collapsed);
-    const privateMode = useAppStore((state) => state.privateMode);
-    const { setPrivateMode, setSideBar } = useAppStoreActions();
+    const { setSideBar } = useAppStoreActions();
     const { setSettings } = useSettingsStoreActions();
     const settings = useGeneralSettings();
     const { open: openCommandPalette } = useCommandPalette();
+    const currentServer = useCurrentServer();
+    const { deleteServer, setCurrentServer } = useAuthStoreActions();
 
     const handleBrowserDevTools = () => {
         browser?.devtools();
@@ -98,31 +96,22 @@ export const AppMenu = () => {
         setSideBar({ collapsed: false });
     };
 
-    const handlePrivateModeOff = () => {
-        setPrivateMode(false);
-        toast.info({
-            message: t('form.privateMode.disabled', { postProcess: 'sentenceCase' }),
-            title: t('form.privateMode.title', { postProcess: 'sentenceCase' }),
-        });
-    };
-
-    const handlePrivateModeOn = () => {
-        setPrivateMode(true);
-        toast.info({
-            message: t('form.privateMode.enabled', { postProcess: 'sentenceCase' }),
-            title: t('form.privateMode.title', { postProcess: 'sentenceCase' }),
-        });
-    };
-
-    const handleManageServersModal = () => {
-        openModal({
-            children: <ServerList />,
-            title: t('page.manageServers.title', { postProcess: 'titleCase' }),
-        });
+    const handleLogOff = () => {
+        if (currentServer) {
+            deleteServer(currentServer.id);
+            setCurrentServer(null);
+        }
     };
 
     const handleQuit = () => {
         browser?.quit();
+    };
+
+    const handleHelpModal = () => {
+        openModal({
+            children: <HelpModalContent />,
+            title: t('page.appMenu.help', { postProcess: 'sentenceCase' }),
+        });
     };
 
     const handleSetSideQueueLayout = (sideQueueLayout: 'horizontal' | 'vertical') => {
@@ -196,15 +185,11 @@ export const AppMenu = () => {
             type: 'divider',
         },
         {
-            condition: !isServerLock(),
-            id: 'manage-servers',
-            item: {
-                label: t('page.appMenu.manageServers', { postProcess: 'sentenceCase' }),
-                leftSection: <Icon icon="edit" />,
-                onClick: handleManageServersModal,
-                type: 'item',
-            },
-            type: 'conditional-item',
+            icon: 'signOut',
+            id: 'log-off',
+            label: t('page.appMenu.logOff', { postProcess: 'sentenceCase' }),
+            onClick: handleLogOff,
+            type: 'item',
         },
         {
             id: 'divider-3',
@@ -218,47 +203,15 @@ export const AppMenu = () => {
             type: 'item',
         },
         {
-            condition: privateMode,
-            id: 'private-mode-off',
-            item: {
-                icon: 'lock',
-                iconColor: 'error',
-                label: t('page.appMenu.privateModeOff', { postProcess: 'sentenceCase' }),
-                onClick: handlePrivateModeOff,
-                type: 'item',
-            },
-            type: 'conditional-item',
-        },
-        {
-            condition: !privateMode,
-            id: 'private-mode-on',
-            item: {
-                icon: 'lockOpen',
-                label: t('page.appMenu.privateModeOn', { postProcess: 'sentenceCase' }),
-                onClick: handlePrivateModeOn,
-                type: 'item',
-            },
-            type: 'conditional-item',
+            icon: 'info',
+            id: 'help',
+            label: t('page.appMenu.help', { postProcess: 'sentenceCase' }),
+            onClick: handleHelpModal,
+            type: 'item',
         },
         {
             id: 'divider-4',
             type: 'divider',
-        },
-        {
-            icon: 'brandGitHub',
-            id: 'version',
-            label: t('page.appMenu.version', {
-                postProcess: 'sentenceCase',
-                version: packageJson.version,
-            }),
-            onClick: () =>
-                openReleaseNotesModal(
-                    t('common.newVersion', {
-                        postProcess: 'sentenceCase',
-                        version: packageJson.version,
-                    }) as string,
-                ),
-            type: 'item',
         },
         {
             condition: isElectron(),

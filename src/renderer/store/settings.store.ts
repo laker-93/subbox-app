@@ -162,7 +162,7 @@ const BindingActionsSchema = z.enum([
     'listNavigateToPage',
 ]);
 
-const DiscordDisplayTypeSchema = z.enum(['artist', 'feishin', 'song']);
+const DiscordDisplayTypeSchema = z.enum(['artist', 'subbox', 'song']);
 
 const DiscordLinkTypeSchema = z.enum(['last_fm', 'musicbrainz', 'musicbrainz_last_fm', 'none']);
 
@@ -780,8 +780,8 @@ export enum BindingActions {
 
 export enum DiscordDisplayType {
     ARTIST_NAME = 'artist',
-    FEISHIN = 'feishin',
     SONG_NAME = 'song',
+    SUBBOX = 'subbox',
 }
 
 export enum DiscordLinkType {
@@ -1025,12 +1025,6 @@ export const sidebarItems: SidebarItemType[] = [
         route: '',
     },
     {
-        disabled: false,
-        id: 'Radio',
-        label: i18n.t('page.sidebar.radio'),
-        route: AppRoute.RADIO,
-    },
-    {
         disabled: true,
         id: 'Settings',
         label: i18n.t('page.sidebar.settings'),
@@ -1084,7 +1078,7 @@ const initialState: SettingsState = {
     },
     discord: {
         clientId: '1165957668758900787',
-        displayType: DiscordDisplayType.FEISHIN,
+        displayType: DiscordDisplayType.SUBBOX,
         enabled: false,
         linkType: DiscordLinkType.NONE,
         showAsListening: false,
@@ -1831,7 +1825,7 @@ const initialState: SettingsState = {
         enabled: false,
         password: randomString(8),
         port: 4333,
-        username: 'feishin',
+        username: 'subbox',
     },
     tab: 'general',
     visualizer: {

@@ -9,6 +9,8 @@ import { createWithEqualityFn } from 'zustand/traditional';
 import { AlbumListSort, SongListSort, SortOrder } from '/@/shared/types/domain-types';
 import { Platform } from '/@/shared/types/types';
 
+export type AppMode = 'library' | 'sync';
+
 export interface AppSlice extends AppState {
     actions: {
         setAlbumArtistDetailFavoriteSongsSort: (sortBy: SongListSort, sortOrder: SortOrder) => void;
@@ -16,6 +18,7 @@ export interface AppSlice extends AppState {
         setAlbumArtistDetailSort: (sortBy: AlbumListSort, sortOrder: SortOrder) => void;
         setAlbumArtistIdsMode: (mode: 'and' | 'or') => void;
         setAlbumArtistSelectMode: (mode: 'multi' | 'single') => void;
+        setAppMode: (mode: AppMode) => void;
         setAppStore: (data: Partial<AppSlice>) => void;
         setArtistIdsMode: (mode: 'and' | 'or') => void;
         setArtistSelectMode: (mode: 'multi' | 'single') => void;
@@ -43,6 +46,7 @@ export interface AppState {
     };
     albumArtistIdsMode: 'and' | 'or';
     albumArtistSelectMode: 'multi' | 'single';
+    appMode: AppMode;
     artistIdsMode: 'and' | 'or';
     artistSelectMode: 'multi' | 'single';
     commandPalette: CommandPaletteProps;
@@ -123,6 +127,11 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                             state.albumArtistSelectMode = mode;
                         });
                     },
+                    setAppMode: (mode) => {
+                        set((state) => {
+                            state.appMode = mode;
+                        });
+                    },
                     setAppStore: (data) => {
                         set({ ...get(), ...data });
                     },
@@ -193,6 +202,7 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                 },
                 albumArtistIdsMode: 'and',
                 albumArtistSelectMode: 'multi',
+                appMode: 'library' as AppMode,
                 artistIdsMode: 'and',
                 artistSelectMode: 'multi',
                 commandPalette: {
@@ -277,6 +287,10 @@ export const useSidebarRightExpanded = () => useAppStore((state) => state.sideba
 export const useSetTitlebar = () => useAppStore((state) => state.actions.setTitleBar);
 
 export const useTitlebarStore = () => useAppStore((state) => state.titlebar);
+
+export const useAppMode = () => useAppStore((state) => state.appMode);
+
+export const useSetAppMode = () => useAppStore((state) => state.actions.setAppMode);
 
 export const useCommandPalette = () => useAppStore((state) => state.commandPalette);
 
