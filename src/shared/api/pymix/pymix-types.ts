@@ -215,6 +215,7 @@ const syncPlanPlaylist = z.object({
 const syncPlanLocalTrack = z.object({
     album: z.string().optional(),
     artist: z.string(),
+    fromTag: z.boolean(),
     title: z.string(),
 });
 
