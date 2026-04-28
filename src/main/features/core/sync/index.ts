@@ -162,6 +162,7 @@ ipcMain.handle(
         const clientTracks = allTracks.map((t) => ({
             album: t.album,
             artist: t.artist,
+            fromTag: true,
             fileExtension: t.fileExtension,
             title: t.cleanName,
         }));
