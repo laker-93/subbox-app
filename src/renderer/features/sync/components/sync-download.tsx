@@ -599,7 +599,11 @@ export const SyncDownload = () => {
             )}
 
             <Button
-                disabled={summary.tracksMissing === 0 && metadata.updates.length === 0}
+                disabled={
+                    summary.tracksMissing === 0 &&
+                    metadata.updates.length === 0 &&
+                    !includeRekordboxXml
+                }
                 fullWidth
                 onClick={handleDownload}
                 size="md"

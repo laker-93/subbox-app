@@ -582,7 +582,9 @@ ipcMain.handle(
 
 ipcMain.handle(
     'sync:get-local-tracks',
-    async (): Promise<Array<{ album?: string; artist: string; fromTag: boolean; title: string }>> => {
+    async (): Promise<
+        Array<{ album?: string; artist: string; fromTag: boolean; title: string }>
+    > => {
         return scanLocalTracks();
     },
 );
