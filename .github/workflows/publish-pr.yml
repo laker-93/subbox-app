@@ -28,7 +28,7 @@ jobs:
     publish:
         needs: wait-for-lint
         if: always() && (needs.wait-for-lint.result == 'success' || needs.wait-for-lint.result == 'skipped')
-      runs-on: macos-latest
+        runs-on: macos-latest
 
         steps:
             - name: Checkout git repo
