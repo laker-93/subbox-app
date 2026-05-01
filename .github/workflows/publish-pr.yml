@@ -28,7 +28,12 @@ jobs:
     publish:
         needs: wait-for-lint
         if: always() && (needs.wait-for-lint.result == 'success' || needs.wait-for-lint.result == 'skipped')
-        runs-on: macos-latest
+        runs-on: ${{ matrix.os }}
+
+        strategy:
+            matrix:
+                os: [macos-latest, windows-latest]
+                # os: [macos-latest, ubuntu-latest, windows-latest]
 
         steps:
             - name: Checkout git repo
@@ -42,17 +47,69 @@ jobs:
             - name: Install dependencies
               run: pnpm install
 
-            - name: Build MacOS DMGs
+            - name: Build for Windows
+              if: ${{ matrix.os == 'windows-latest' }}
               uses: nick-invision/retry@v3.0.2
               with:
                   timeout_minutes: 30
                   max_attempts: 3
                   retry_on: error
                   command: |
-                      pnpm run build && pnpm exec electron-builder --mac dmg --publish never
+                      pnpm run package:win:pr
 
-            - name: Upload MacOS DMGs
+#            - name: Build for Linux
+#              if: ${{ matrix.os == 'ubuntu-latest' }}
+#              uses: nick-invision/retry@v3.0.2
+#              with:
+#                  timeout_minutes: 30
+#                  max_attempts: 3
+#                  retry_on: error
+#                  command: |
+#                      pnpm run package:linux:pr
+
+            - name: Build for MacOS
+              if: ${{ matrix.os == 'macos-latest' }}
+              uses: nick-invision/retry@v3.0.2
+              with:
+                  timeout_minutes: 30
+                  max_attempts: 3
+                  retry_on: error
+                  command: |
+                      pnpm run package:mac:pr
+
+            - name: Zip Windows Binaries
+              if: ${{ matrix.os == 'windows-latest' }}
+              shell: pwsh
+              run: |
+                  Compress-Archive -Path "dist/*.exe" -DestinationPath "dist/windows-binaries.zip" -Force
+
+#            - name: Zip Linux Binaries
+#              if: ${{ matrix.os == 'ubuntu-latest' }}
+#              run: |
+#                  zip -r dist/linux-binaries.zip dist/*.{AppImage,deb,rpm}
+
+            - name: Zip MacOS Binaries
+              if: ${{ matrix.os == 'macos-latest' }}
+              run: |
+                  zip -r dist/macos-binaries.zip dist/*.dmg
+
+            - name: Upload Windows Binaries
+              if: ${{ matrix.os == 'windows-latest' }}
               uses: actions/upload-artifact@v7
               with:
-                  name: macos-dmgs
-                  path: dist/*.dmg
+                  name: windows-binaries
+                  path: dist/windows-binaries.zip
+
+#            - name: Upload Linux Binaries
+#              if: ${{ matrix.os == 'ubuntu-latest' }}
+#              uses: actions/upload-artifact@v7
+#              with:
+#                  name: linux-binaries
+#                  path: dist/linux-binaries.zip
+
+            - name: Upload MacOS Binaries
+              if: ${{ matrix.os == 'macos-latest' }}
+              uses: actions/upload-artifact@v7
+              with:
+                  name: macos-binaries
+                  path: dist/macos-binaries.zip
