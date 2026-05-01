@@ -39,7 +39,7 @@ const formatDuration = (seconds: number): string => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
-type LocalTrack = { album?: string; artist: string; title: string };
+type LocalTrack = { album?: string; artist: string; fromTag: boolean; title: string };
 
 export const SyncDownload = () => {
     const serverId = useCurrentServerId();
@@ -599,7 +599,11 @@ export const SyncDownload = () => {
             )}
 
             <Button
-                disabled={summary.tracksMissing === 0 && metadata.updates.length === 0}
+                disabled={
+                    summary.tracksMissing === 0 &&
+                    metadata.updates.length === 0 &&
+                    !includeRekordboxXml
+                }
                 fullWidth
                 onClick={handleDownload}
                 size="md"
