@@ -2,6 +2,7 @@ import axios from 'axios';
 import { app, ipcMain, session } from 'electron';
 import * as fs from 'fs';
 import * as https from 'https';
+import { parseFile } from 'music-metadata';
 import * as path from 'path';
 import * as unzipper from 'unzipper';
 
@@ -162,6 +163,7 @@ ipcMain.handle(
             album: t.album,
             artist: t.artist,
             fileExtension: t.fileExtension,
+            fromTag: true,
             title: t.cleanName,
         }));
 
@@ -359,18 +361,20 @@ function getAppPath(): string {
 }
 
 function getMusicPath(): string {
-    return path.join(getAppPath());
+    return path.join(getAppPath(), 'music');
 }
 
 /**
  * Scan the local music directory and return track metadata parsed from the
  * directory structure: music/<artist>/<album>/<title>.<ext>
  */
-function scanLocalTracks(): Array<{ album?: string; artist: string; title: string }> {
+async function scanLocalTracks(): Promise<
+    Array<{ album?: string; artist: string; fromTag: boolean; title: string }>
+> {
     const musicDir = getMusicPath();
     if (!fs.existsSync(musicDir)) return [];
 
-    const tracks: Array<{ album?: string; artist: string; title: string }> = [];
+    const tracks: Array<{ album?: string; artist: string; fromTag: boolean; title: string }> = [];
 
     let artistDirs: string[];
     try {
@@ -381,7 +385,11 @@ function scanLocalTracks(): Array<{ album?: string; artist: string; title: strin
 
     for (const artistName of artistDirs) {
         const artistPath = path.join(musicDir, artistName);
-        if (!fs.statSync(artistPath).isDirectory()) continue;
+        try {
+            if (!fs.statSync(artistPath).isDirectory()) continue;
+        } catch {
+            continue;
+        }
 
         let albumDirs: string[];
         try {
@@ -392,7 +400,11 @@ function scanLocalTracks(): Array<{ album?: string; artist: string; title: strin
 
         for (const albumName of albumDirs) {
             const albumPath = path.join(artistPath, albumName);
-            if (!fs.statSync(albumPath).isDirectory()) continue;
+            try {
+                if (!fs.statSync(albumPath).isDirectory()) continue;
+            } catch {
+                continue;
+            }
 
             let files: string[];
             try {
@@ -403,7 +415,11 @@ function scanLocalTracks(): Array<{ album?: string; artist: string; title: strin
 
             for (const fileName of files) {
                 const filePath = path.join(albumPath, fileName);
-                if (fs.statSync(filePath).isDirectory()) continue;
+                try {
+                    if (fs.statSync(filePath).isDirectory()) continue;
+                } catch {
+                    continue;
+                }
 
                 const ext = path.extname(fileName);
                 if (
@@ -413,11 +429,25 @@ function scanLocalTracks(): Array<{ album?: string; artist: string; title: strin
                 )
                     continue;
 
-                const title = path.basename(fileName, ext);
+                // Attempt to read tags from the file
+                let tagArtist: string | undefined;
+                let tagAlbum: string | undefined;
+                let tagTitle: string | undefined;
+                try {
+                    const meta = await parseFile(filePath, { duration: false });
+                    tagArtist = meta.common.artist;
+                    tagAlbum = meta.common.album;
+                    tagTitle = meta.common.title;
+                } catch {
+                    // tag read failed — fall back to path-derived values
+                }
+
+                const fromTag = !!(tagArtist && tagTitle);
                 tracks.push({
-                    album: albumName,
-                    artist: artistName,
-                    title,
+                    album: (fromTag ? tagAlbum : albumName) ?? albumName,
+                    artist: fromTag ? tagArtist! : artistName,
+                    fromTag,
+                    title: fromTag ? tagTitle! : path.basename(fileName, ext),
                 });
             }
         }
@@ -478,7 +508,7 @@ ipcMain.handle(
         const pymixCookies = await getCookiesForUrl(pymixUrl);
 
         // Scan local music directory for existing tracks
-        const localTracks = scanLocalTracks();
+        const localTracks = await scanLocalTracks();
 
         // Step 1: Call syncPlaylists to prepare the zip on the server
         const syncResponse = await axios.post(
@@ -553,7 +583,9 @@ ipcMain.handle(
 
 ipcMain.handle(
     'sync:get-local-tracks',
-    async (): Promise<Array<{ album?: string; artist: string; title: string }>> => {
+    async (): Promise<
+        Array<{ album?: string; artist: string; fromTag: boolean; title: string }>
+    > => {
         return scanLocalTracks();
     },
 );
