@@ -847,3 +847,74 @@ ipcMain.handle('sync:stop-watch', async (): Promise<void> => {
         watchInterval = null;
     }
 });
+
+// ── External drive comparison ───────────────────────────────────────────────
+
+/**
+ * Recursively scan any directory for audio tracks, reading ID3/metadata tags
+ * first and falling back to path-derived values when tags are unavailable.
+ */
+async function scanDirectoryTracks(rootDir: string): Promise<
+    Array<{ album?: string; artist: string; fromTag: boolean; title: string }>
+> {
+    const audioFiles = getAudioFiles(rootDir);
+    const tracks: Array<{ album?: string; artist: string; fromTag: boolean; title: string }> = [];
+
+    for (const filePath of audioFiles) {
+        let tagArtist: string | undefined;
+        let tagAlbum: string | undefined;
+        let tagTitle: string | undefined;
+        try {
+            const meta = await parseFile(filePath, { duration: false });
+            tagArtist = meta.common.artist;
+            tagAlbum = meta.common.album;
+            tagTitle = meta.common.title;
+        } catch {
+            // tag read failed — fall back to path-derived values
+        }
+
+        const fromTag = !!(tagArtist && tagTitle);
+        const fileName = path.basename(filePath, path.extname(filePath));
+
+        // Derive artist/album from the path relative to the root
+        const rel = path.relative(rootDir, filePath);
+        const parts = rel.split(path.sep);
+        let pathArtist = '';
+        let pathAlbum: string | undefined;
+        if (parts.length >= 3) {
+            pathArtist = parts[0];
+            pathAlbum = parts[1];
+        } else if (parts.length === 2) {
+            pathArtist = parts[0];
+        }
+
+        tracks.push({
+            album: fromTag ? tagAlbum : pathAlbum,
+            artist: fromTag ? tagArtist! : pathArtist || 'Unknown',
+            fromTag,
+            title: fromTag ? tagTitle! : fileName,
+        });
+    }
+
+    return tracks;
+}
+
+ipcMain.handle('sync:select-external-drive', async (): Promise<null | string> => {
+    const { dialog: electronDialog } = await import('electron');
+    const result = await electronDialog.showOpenDialog({
+        buttonLabel: 'Select Folder',
+        properties: ['openDirectory'],
+        title: 'Select External Drive or Folder',
+    });
+    return result.filePaths[0] || null;
+});
+
+ipcMain.handle(
+    'sync:scan-external-drive',
+    async (
+        _event,
+        dirPath: string,
+    ): Promise<Array<{ album?: string; artist: string; fromTag: boolean; title: string }>> => {
+        return scanDirectoryTracks(dirPath);
+    },
+);
