@@ -914,7 +914,61 @@ ipcMain.handle(
     async (
         _event,
         dirPath: string,
-    ): Promise<Array<{ album?: string; artist: string; fromTag: boolean; title: string }>> => {
+    ): Promise<Array<{ album?: string; artist: string; fileExtension?: string; fromTag: boolean; title: string }>> => {
         return scanDirectoryTracks(dirPath);
+    },
+);
+
+ipcMain.handle(
+    'sync:download-missing-tracks',
+    async (
+        _event,
+        args: {
+            filebrowserToken: string;
+            filebrowserUrl: string;
+            pymixUrl: string;
+            tracksToDownload: Array<{ album?: string; artist: string; fileExtension?: string; fromTag: boolean; title: string }>;
+        },
+    ): Promise<{ tracksExported: number }> => {
+        const { filebrowserToken, filebrowserUrl, pymixUrl, tracksToDownload } = args;        const pymixCookies = await getCookiesForUrl(pymixUrl);
+
+        // Step 1: Call sync/tracks to prepare the zip on the server
+        const syncResponse = await axios.post(
+            `${pymixUrl}/sync/tracks`,
+            { tracksToDownload },
+            { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
+        );
+
+        if (!syncResponse.data.success) {
+            throw new Error(`Sync failed: ${syncResponse.data.reason}`);
+        }
+
+        const { nTracksExported, zipPath } = syncResponse.data;
+        const zipFileName = `${path.basename(zipPath)}.zip`;
+
+        // Step 2: Download the zip from filebrowser
+        const appPath = getAppPath();
+        if (!fs.existsSync(appPath)) {
+            fs.mkdirSync(appPath, { recursive: true });
+        }
+        const localZipPath = path.join(appPath, zipFileName);
+        await downloadFileFromFilebrowser(
+            filebrowserUrl,
+            filebrowserToken,
+            zipFileName,
+            localZipPath,
+        );
+
+        // Step 3: Unzip and merge into app directory
+        await unzipAndMerge(localZipPath, appPath);
+
+        // Clean up the zip
+        try {
+            fs.unlinkSync(localZipPath);
+        } catch {
+            // ignore cleanup errors
+        }
+
+        return { tracksExported: nTracksExported };
     },
 );

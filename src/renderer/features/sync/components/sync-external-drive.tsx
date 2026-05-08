@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
-import { useCurrentServerId } from '/@/renderer/store';
+import { useCurrentServerId, useCurrentServerWithCredential } from '/@/renderer/store';
 import { pymixType } from '/@/shared/api/pymix/pymix-types';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
@@ -17,9 +17,10 @@ import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
+import { toast } from '/@/shared/components/toast/toast';
 import { Playlist, PlaylistListSort, SortOrder } from '/@/shared/types/domain-types';
 
-type Step = 'planning' | 'preview' | 'scanning' | 'select';
+type Step = 'downloading' | 'done' | 'planning' | 'preview' | 'scanning' | 'select';
 
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
 
@@ -39,13 +40,16 @@ const formatDuration = (seconds: number): string => {
 
 export const SyncExternalDrive = () => {
     const serverId = useCurrentServerId();
+    const server = useCurrentServerWithCredential();
 
     const [step, setStep] = useState<Step>('select');
     const [drivePath, setDrivePath] = useState<null | string>(null);
     const [selectedPlaylists, setSelectedPlaylists] = useState<Set<string>>(new Set());
+    const [allTracks, setAllTracks] = useState(false);
     const [plan, setPlan] = useState<null | SyncPlanResponse>(null);
     const [error, setError] = useState<null | string>(null);
     const [activeTab, setActiveTab] = useState<'conflicts' | 'existing' | 'missing'>('missing');
+    const [downloadResult, setDownloadResult] = useState<null | { tracksExported: number }>(null);
 
     const playlistQuery = useSuspenseQuery(
         playlistsQueries.list({
@@ -87,15 +91,22 @@ export const SyncExternalDrive = () => {
     }, []);
 
     const handleSelectAll = useCallback(() => {
+        setAllTracks(false);
         setSelectedPlaylists(new Set(playlists.map((p) => p.id)));
     }, [playlists]);
 
     const handleSelectNone = useCallback(() => {
+        setAllTracks(false);
+        setSelectedPlaylists(new Set());
+    }, []);
+
+    const handleSelectAllTracks = useCallback(() => {
+        setAllTracks(true);
         setSelectedPlaylists(new Set());
     }, []);
 
     const handleCompare = useCallback(async () => {
-        if (!drivePath || selectedPlaylists.size === 0) return;
+        if (!drivePath || (!allTracks && selectedPlaylists.size === 0)) return;
 
         setStep('scanning');
         setError(null);
@@ -104,7 +115,7 @@ export const SyncExternalDrive = () => {
             const driveTracks = (await window.api.ipc.invoke(
                 'sync:scan-external-drive',
                 drivePath,
-            )) as Array<{ album?: string; artist: string; fromTag: boolean; title: string }>;
+            )) as Array<{ album?: string; artist: string; fileExtension?: string; fromTag: boolean; title: string }>;
 
             setStep('planning');
 
@@ -117,10 +128,12 @@ export const SyncExternalDrive = () => {
                         fuzzyMatch: true,
                         includeMetadata: false,
                     },
-                    playlists: Array.from(selectedPlaylists).map((id) => ({
-                        id,
-                        source: 'subbox',
-                    })),
+                    playlists: allTracks
+                        ? null
+                        : Array.from(selectedPlaylists).map((id) => ({
+                              id,
+                              source: 'subbox',
+                          })),
                 },
             });
 
@@ -130,19 +143,49 @@ export const SyncExternalDrive = () => {
             setError(err?.message || 'Comparison failed');
             setStep('select');
         }
-    }, [drivePath, selectedPlaylists]);
+    }, [drivePath, selectedPlaylists, allTracks]);
 
     const handleBack = useCallback(() => {
         setStep('select');
         setPlan(null);
         setError(null);
+        setDownloadResult(null);
     }, []);
+
+    const handleDownload = useCallback(async () => {
+        if (!plan) return;
+        setStep('downloading');
+        setError(null);
+
+        try {
+            const result = await window.api.ipc.invoke('sync:download-missing-tracks', {
+                filebrowserToken: server.fbToken ?? '',
+                filebrowserUrl: urlConfig.filebrowser,
+                pymixUrl: urlConfig.pymix,
+                tracksToDownload: plan.tracks.missing.map((t) => ({
+                    album: t.album,
+                    artist: t.artist,
+                    fromTag: true,
+                    title: t.title,
+                })),
+            });
+
+            setDownloadResult(result as { tracksExported: number });
+            setStep('done');
+        } catch (err: any) {
+            toast.error({ message: err?.message || 'Download failed' });
+            setError(err?.message || 'Download failed');
+            setStep('preview');
+        }
+    }, [plan, server.fbToken]);
 
     // ── Select drive + playlists ──────────────────────────────────────────
     if (step === 'select') {
-        const totalSelectedTracks = playlists
-            .filter((p) => selectedPlaylists.has(p.id))
-            .reduce((sum, p) => sum + (p.songCount ?? 0), 0);
+        const totalSelectedTracks = allTracks
+            ? playlists.reduce((sum, p) => sum + (p.songCount ?? 0), 0)
+            : playlists
+                  .filter((p) => selectedPlaylists.has(p.id))
+                  .reduce((sum, p) => sum + (p.songCount ?? 0), 0);
 
         return (
             <Stack gap="md" p="xl" style={{ height: '100%', overflow: 'auto' }}>
@@ -187,7 +230,18 @@ export const SyncExternalDrive = () => {
                     </Group>
 
                     <Group gap="xs">
-                        <Button onClick={handleSelectAll} size="xs" variant="subtle">
+                        <Button
+                            onClick={handleSelectAllTracks}
+                            size="xs"
+                            variant={allTracks ? 'filled' : 'subtle'}
+                        >
+                            All server tracks
+                        </Button>
+                        <Button
+                            onClick={handleSelectAll}
+                            size="xs"
+                            variant={!allTracks && selectedPlaylists.size === playlists.length && playlists.length > 0 ? 'filled' : 'subtle'}
+                        >
                             Select all
                         </Button>
                         <Button onClick={handleSelectNone} size="xs" variant="subtle">
@@ -202,15 +256,16 @@ export const SyncExternalDrive = () => {
                             <Group
                                 gap="md"
                                 key={pl.id}
-                                onClick={() => handleTogglePlaylist(pl.id)}
+                                onClick={() => !allTracks && handleTogglePlaylist(pl.id)}
                                 style={{
                                     borderRadius: 'var(--theme-radius-sm)',
-                                    cursor: 'pointer',
+                                    cursor: allTracks ? 'default' : 'pointer',
+                                    opacity: allTracks ? 0.4 : 1,
                                     padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
                                 }}
                             >
                                 <Checkbox
-                                    checked={selectedPlaylists.has(pl.id)}
+                                    checked={allTracks || selectedPlaylists.has(pl.id)}
                                     readOnly
                                     size="sm"
                                 />
@@ -233,7 +288,7 @@ export const SyncExternalDrive = () => {
                 )}
 
                 <Button
-                    disabled={!drivePath || selectedPlaylists.size === 0}
+                    disabled={!drivePath || (!allTracks && selectedPlaylists.size === 0)}
                     fullWidth
                     onClick={handleCompare}
                     size="md"
@@ -256,6 +311,41 @@ export const SyncExternalDrive = () => {
                             ? 'Scanning drive for audio tracks...'
                             : 'Comparing with server playlists...'}
                     </Text>
+                </Stack>
+            </Center>
+        );
+    }
+
+    // ── Downloading ────────────────────────────────────────────────────────
+    if (step === 'downloading') {
+        return (
+            <Center style={{ height: '100%' }}>
+                <Stack align="center" gap="md">
+                    <Spinner />
+                    <Text c="dimmed" size="sm">
+                        Downloading and extracting missing tracks...
+                    </Text>
+                </Stack>
+            </Center>
+        );
+    }
+
+    // ── Done ───────────────────────────────────────────────────────────────
+    if (step === 'done') {
+        return (
+            <Center style={{ height: '100%' }}>
+                <Stack align="center" gap="md">
+                    <TextTitle order={3}>Download Complete</TextTitle>
+                    <Text c="dimmed" size="sm">
+                        {downloadResult
+                            ? `${downloadResult.tracksExported} track${
+                                  downloadResult.tracksExported === 1 ? '' : 's'
+                              } downloaded.`
+                            : 'Download finished.'}
+                    </Text>
+                    <Button onClick={handleBack} size="md" variant="filled">
+                        Start Over
+                    </Button>
                 </Stack>
             </Center>
         );
@@ -440,6 +530,22 @@ export const SyncExternalDrive = () => {
                     </Stack>
                 )}
             </ScrollArea>
+
+            {error && (
+                <Text c="red" size="sm">
+                    {error}
+                </Text>
+            )}
+
+            <Button
+                disabled={plan.tracks.missing.length === 0}
+                fullWidth
+                onClick={handleDownload}
+                size="md"
+                variant="filled"
+            >
+                Download Missing Tracks
+            </Button>
         </Stack>
     );
 };
