@@ -165,7 +165,10 @@ const rbExportParameters = z.object({
 });
 
 const track = z.object({
+    album: z.string().optional(),
     artist: z.string(),
+    fileExtension: z.string().optional(),
+    fromTag: z.boolean().default(true),
     title: z.string(),
 });
 
@@ -212,12 +215,7 @@ const syncPlanPlaylist = z.object({
     source: z.string(),
 });
 
-const syncPlanLocalTrack = z.object({
-    album: z.string().optional(),
-    artist: z.string(),
-    fromTag: z.boolean(),
-    title: z.string(),
-});
+const syncPlanLocalTrack = track;
 
 const syncPlanParameters = z.object({
     direction: z.enum(['download', 'upload']),
@@ -228,10 +226,14 @@ const syncPlanParameters = z.object({
             includeMetadata: z.boolean().optional(),
         })
         .optional(),
-    playlists: z.array(syncPlanPlaylist),
+    playlists: z.array(syncPlanPlaylist).nullable(),
 });
 
 const syncPlaylistsParameters = syncPlanParameters;
+
+const syncTracksParameters = z.object({
+    tracksToDownload: z.array(track),
+});
 
 export const pymixType = {
     _parameters: {
@@ -249,6 +251,7 @@ export const pymixType = {
         sync: syncParameters,
         syncPlan: syncPlanParameters,
         syncPlaylists: syncPlaylistsParameters,
+        syncTracks: syncTracksParameters,
     },
     _response: {
         beetsImportProgress,
@@ -268,5 +271,6 @@ export const pymixType = {
         sync,
         syncPlan,
         syncPlaylists,
+        syncTracks: syncPlaylists,
     },
 };
