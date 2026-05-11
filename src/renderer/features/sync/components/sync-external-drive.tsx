@@ -22,6 +22,8 @@ import { Playlist, PlaylistListSort, SortOrder } from '/@/shared/types/domain-ty
 
 type Step = 'downloading' | 'done' | 'planning' | 'preview' | 'scanning' | 'select';
 
+const NOPLAYLIST_ID = 'NOPLAYLIST';
+
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
 
 const formatBytes = (bytes: number): string => {
@@ -92,7 +94,7 @@ export const SyncExternalDrive = () => {
 
     const handleSelectAll = useCallback(() => {
         setAllTracks(false);
-        setSelectedPlaylists(new Set(playlists.map((p) => p.id)));
+        setSelectedPlaylists(new Set([NOPLAYLIST_ID, ...playlists.map((p) => p.id)]));
     }, [playlists]);
 
     const handleSelectNone = useCallback(() => {
@@ -181,11 +183,16 @@ export const SyncExternalDrive = () => {
 
     // ── Select drive + playlists ──────────────────────────────────────────
     if (step === 'select') {
-        const totalSelectedTracks = allTracks
-            ? playlists.reduce((sum, p) => sum + (p.songCount ?? 0), 0)
-            : playlists
-                  .filter((p) => selectedPlaylists.has(p.id))
-                  .reduce((sum, p) => sum + (p.songCount ?? 0), 0);
+        const noPlaylistSelected = selectedPlaylists.has(NOPLAYLIST_ID);
+
+        const countedPlaylists = allTracks
+            ? playlists
+            : playlists.filter((p) => selectedPlaylists.has(p.id));
+
+        const totalSelectedTracks = countedPlaylists.reduce((sum, p) => sum + (p.songCount ?? 0), 0);
+        const tracksLabel = noPlaylistSelected && !allTracks
+            ? `${totalSelectedTracks}+ tracks`
+            : `${totalSelectedTracks} tracks`;
 
         return (
             <Stack gap="md" p="xl" style={{ height: '100%', overflow: 'auto' }}>
@@ -225,7 +232,7 @@ export const SyncExternalDrive = () => {
                             {selectedPlaylists.size} selected
                         </Badge>
                         <Badge size="lg" variant="light">
-                            {totalSelectedTracks} tracks
+                            {tracksLabel}
                         </Badge>
                     </Group>
 
@@ -240,7 +247,7 @@ export const SyncExternalDrive = () => {
                         <Button
                             onClick={handleSelectAll}
                             size="xs"
-                            variant={!allTracks && selectedPlaylists.size === playlists.length && playlists.length > 0 ? 'filled' : 'subtle'}
+                            variant={!allTracks && selectedPlaylists.has(NOPLAYLIST_ID) && selectedPlaylists.size === playlists.length + 1 ? 'filled' : 'subtle'}
                         >
                             Select all
                         </Button>
@@ -252,6 +259,30 @@ export const SyncExternalDrive = () => {
 
                 <ScrollArea style={{ flex: 1 }}>
                     <Stack gap="xs">
+                        {/* NOPLAYLIST virtual entry */}
+                        <Group
+                            gap="md"
+                            onClick={() => !allTracks && handleTogglePlaylist(NOPLAYLIST_ID)}
+                            style={{
+                                borderRadius: 'var(--theme-radius-sm)',
+                                cursor: allTracks ? 'default' : 'pointer',
+                                opacity: allTracks ? 0.4 : 1,
+                                padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
+                            }}
+                        >
+                            <Checkbox
+                                checked={allTracks || selectedPlaylists.has(NOPLAYLIST_ID)}
+                                readOnly
+                                size="sm"
+                            />
+                            <Text fw={500} size="sm" style={{ flex: 1 }}>
+                                NOPLAYLIST
+                            </Text>
+                            <Text c="dimmed" size="xs">
+                                tracks not in any playlist
+                            </Text>
+                        </Group>
+
                         {playlists.map((pl) => (
                             <Group
                                 gap="md"
