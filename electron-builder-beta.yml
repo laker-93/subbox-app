@@ -65,7 +65,7 @@ toolsets:
 npmRebuild: false
 publish:
     provider: github
-    owner: jeffvli
-    repo: subbox
+    owner: laker-93
+    repo: subbox-app
     channel: beta
     releaseType: draft
