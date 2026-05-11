@@ -1,5 +1,6 @@
 name: Publish Windows (Manual)
 
+# Trigger workflow indexing
 on: workflow_dispatch
 
 jobs:
