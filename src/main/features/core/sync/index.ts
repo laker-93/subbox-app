@@ -4,10 +4,8 @@ import * as tus from 'tus-js-client';
 import * as fs from 'fs';
 import * as https from 'https';
 import { parseFile } from 'music-metadata';
-import * as os from 'os';
 import * as path from 'path';
 import * as unzipper from 'unzipper';
-import { ZipArchive } from "archiver";
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 /** Lightweight playlist info sent to renderer for preview (no file paths). */
@@ -24,6 +22,7 @@ import {
 } from '/@/main/features/core/sync/rekordbox-xml';
 
 export interface UploadProgress {
+    activeTracks?: string[];
     currentTrack: string;
     phase: 'done' | 'error' | 'mapping-metadata' | 'matching' | 'uploading';
     total: number;
@@ -262,8 +261,9 @@ ipcMain.handle(
         }
 
         // Step 3: Zip and upload missing tracks
+        // Step 3: Upload missing tracks via concurrent TUS uploads
         sendProgress({
-            currentTrack: 'Building zip...',
+            currentTrack: 'Checking existing uploads...',
             phase: 'uploading',
             total: 0,
             uploaded: 0,
@@ -312,65 +312,91 @@ ipcMain.handle(
         }
 
         if (uploadableTracks.length > 0) {
-            const zipFileName = `subbox-upload-${Date.now()}.zip`;
-            const zipFilePath = path.join(os.tmpdir(), zipFileName);
-
-            await new Promise<void>((resolve, reject) => {
-                const output = fs.createWriteStream(zipFilePath);
-                const myArchive = new ZipArchive({ zlib: { level: 0 } });
-
-                output.on('close', resolve);
-                myArchive.on('error', reject);
-                myArchive.pipe(output);
-
-                for (const { stagingPath, track } of uploadableTracks) {
-                    myArchive.file(track.location, { name: stagingPath });
-                    uploadedCount++;
-                }
-
-                myArchive.finalize();
-            });
-
-            const zipResourcePath = `${filebrowserUrl}/api/tus/uploads/${zipFileName}?override=true`;
-            const zipFileSize = fs.statSync(zipFilePath).size;
-
-            // Create the TUS upload slot
-            const createResp = await axios.post(zipResourcePath, null, {
-                headers: {
-                    'X-Auth': filebrowserToken,
-                    'upload-length': zipFileSize,
-                },
-                httpsAgent,
-            });
-            if (createResp.status !== 201) {
-                throw new Error(`Failed to create TUS upload: ${createResp.status}`);
+            // Fetch already-uploaded files from filebrowser and skip them
+            let existingPaths = new Set<string>();
+            try {
+                const listRes = await axios.get(`${filebrowserUrl}/api/resources/uploads`, {
+                    headers: { 'X-Auth': filebrowserToken },
+                    httpsAgent,
+                });
+                const items: Array<{ path: string }> = listRes.data?.items ?? [];
+                existingPaths = new Set(items.map((i) => i.path.replace(/^\//, '')));
+            } catch (err) {
+                console.warn('Failed to list existing uploads, proceeding without dedup:', err);
             }
 
-            try {
+            const tracksToUpload = uploadableTracks.filter(
+                ({ stagingPath }) => !existingPaths.has(stagingPath),
+            );
+            skippedCount += uploadableTracks.length - tracksToUpload.length;
+
+            sendProgress({
+                currentTrack: '',
+                phase: 'uploading',
+                total: tracksToUpload.length,
+                uploaded: 0,
+            });
+
+            // Upload concurrently, capped at 3 simultaneous uploads
+            const CONCURRENCY = 3;
+            let completedCount = 0;
+            const activeUploads = new Map<string, string>();
+
+            const emitUploadingProgress = (currentTrack = '') => {
+                sendProgress({
+                    activeTracks: Array.from(activeUploads.values()),
+                    currentTrack,
+                    phase: 'uploading',
+                    total: tracksToUpload.length,
+                    uploaded: completedCount,
+                });
+            };
+
+            const uploadTrack = async ({ stagingPath, track, trackName }: typeof tracksToUpload[number]) => {
+                const fileSize = fs.statSync(track.location).size;
+                const resourcePath = `${filebrowserUrl}/api/tus/uploads/${encodeURIComponent(stagingPath)}?override=true`;
+
+                const createResp = await axios.post(resourcePath, null, {
+                    headers: { 'X-Auth': filebrowserToken, 'upload-length': fileSize },
+                    httpsAgent,
+                });
+                if (createResp.status !== 201) {
+                    throw new Error(`Failed to create TUS upload for "${trackName}": ${createResp.status}`);
+                }
+
                 await new Promise<void>((resolve, reject) => {
-                    const zipStream = fs.createReadStream(zipFilePath);
-                    const uploader = new tus.Upload(zipStream as unknown as Buffer, {
+                    const fileStream = fs.createReadStream(track.location);
+                    const uploader = new tus.Upload(fileStream as unknown as Buffer, {
                         chunkSize: 20 * 1024 * 1024,
                         headers: { 'X-Auth': filebrowserToken },
                         onError: reject,
                         onProgress: (bytesUploaded, bytesTotal) => {
                             const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
-                            sendProgress({
-                                currentTrack: `${zipFileName} (${pct}%)`,
-                                phase: 'uploading',
-                                total: uploadableTracks.length,
-                                uploaded: uploadedCount,
-                            });
+                            activeUploads.set(trackName, `${trackName} (${pct}%)`);
+                            emitUploadingProgress();
                         },
                         onSuccess: () => resolve(),
-                        uploadSize: zipFileSize,
-                        uploadUrl: zipResourcePath,
+                        uploadSize: fileSize,
+                        uploadUrl: resourcePath,
                     });
                     uploader.start();
                 });
-            } finally {
-                try { fs.unlinkSync(zipFilePath); } catch { /* ignore */ }
-            }
+
+                activeUploads.delete(trackName);
+                completedCount++;
+                uploadedCount++;
+                emitUploadingProgress(trackName);
+            };
+
+            // Run with bounded concurrency
+            const queue = [...tracksToUpload];
+            const workers = Array.from({ length: CONCURRENCY }, async () => {
+                while (queue.length > 0) {
+                    const item = queue.shift()!;
+                    await uploadTrack(item);
+                }
+            });
+            await Promise.all(workers);
         }
 
         // Step 4: Map metadata

@@ -44,6 +44,7 @@ type SyncStep =
     | 'uploading';
 
 interface UploadProgress {
+    activeTracks?: string[];
     currentTrack: string;
     phase: 'done' | 'error' | 'mapping-metadata' | 'matching' | 'uploading';
     total: number;
@@ -422,6 +423,7 @@ export const SyncRekordbox = () => {
 
     // ── Uploading ──────────────────────────────────────────────────────────
     if (step === 'uploading') {
+        const activeTracks = progress?.activeTracks ?? [];
         const phaseLabel = progress
             ? {
                   done: 'Complete!',
@@ -429,7 +431,7 @@ export const SyncRekordbox = () => {
                   importing: 'Starting import...',
                   'mapping-metadata': 'Mapping metadata...',
                   matching: 'Matching tracks with cloud library...',
-                  uploading: 'Uploading tracks...',
+                  uploading: `Uploading tracks (${Math.floor(progress.uploaded)}/${progress.total})...`,
               }[progress.phase]
             : 'Starting...';
 
@@ -438,7 +440,13 @@ export const SyncRekordbox = () => {
                 <Stack align="center" gap="md" maw={400}>
                     <Spinner />
                     <TextTitle order={4}>{phaseLabel}</TextTitle>
-                    {progress?.currentTrack && (
+                    {activeTracks.length > 0 &&
+                        activeTracks.map((track, idx) => (
+                            <Text c="dimmed" key={`${idx}-${track}`} size="sm" ta="center">
+                                {track}
+                            </Text>
+                        ))}
+                    {activeTracks.length === 0 && progress?.currentTrack && (
                         <Text c="dimmed" size="sm" ta="center">
                             {progress.currentTrack}
                         </Text>
