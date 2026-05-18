@@ -204,8 +204,10 @@ export const SyncRekordbox = () => {
             }
         } catch (err: any) {
             const msg = err?.message || 'Upload failed';
-            if (msg.startsWith('STORAGE_LIMIT_EXCEEDED:')) {
-                setError(msg.slice('STORAGE_LIMIT_EXCEEDED:'.length));
+            const storagePrefix = 'STORAGE_LIMIT_EXCEEDED:';
+            const storagePrefixIdx = msg.indexOf(storagePrefix);
+            if (storagePrefixIdx !== -1) {
+                setError(msg.slice(storagePrefixIdx + storagePrefix.length));
                 setStep('storage-exceeded');
             } else {
                 setError(msg);
@@ -489,8 +491,21 @@ export const SyncRekordbox = () => {
                         {error ||
                             t('page.sync.rekordbox.storageLimitDescription', {
                                 defaultValue:
-                                    'Your upload would exceed your storage limit. To continue uploading, request more storage from the Subbox team.',
+                                    'Your upload would exceed your storage limit.',
                             })}
+                    </Text>
+                    <Text c="dimmed" size="sm" ta="center">
+                        To get more storage, join our{' '}
+                        <Text
+                            c="blue"
+                            component="a"
+                            href={urlConfig.discord}
+                            rel="noopener noreferrer"
+                            target="_blank"
+                        >
+                            Discord community
+                        </Text>
+                        {' '}and request an upgrade from the Subbox team.
                     </Text>
                     {currentMB !== null && maxMB !== null && (
                         <Text size="sm" ta="center">

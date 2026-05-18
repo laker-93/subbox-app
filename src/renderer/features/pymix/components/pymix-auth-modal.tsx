@@ -139,10 +139,23 @@ function CreateAccountView({
             );
 
             // 2. Authenticate with navidrome + filebrowser and set up server
-            const serverItem = await authenticateServices({
-                password: values.password,
-                username: values.username,
-            });
+            // Retry up to 5 times with a 2s pause — the server may need a moment after account creation
+            const MAX_LOGIN_ATTEMPTS = 5;
+            let serverItem;
+            for (let attempt = 1; attempt <= MAX_LOGIN_ATTEMPTS; attempt++) {
+                try {
+                    serverItem = await authenticateServices({
+                        password: values.password,
+                        username: values.username,
+                    });
+                    break;
+                } catch (loginErr) {
+                    if (attempt === MAX_LOGIN_ATTEMPTS) {
+                        throw loginErr;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 2000));
+                }
+            }
 
             addServer(serverItem);
             setCurrentServer(serverItem);

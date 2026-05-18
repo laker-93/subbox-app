@@ -69,11 +69,44 @@ ipcMain.handle(
             collectFromFolder(folder, []);
         }
 
+        // Add a synthetic entry for tracks not in any playlist
+        const orphanTracks = collectTracksNotInAnyPlaylist(result);
+        if (orphanTracks.length > 0) {
+            previews.push({ name: NOPLAYLIST_NAME, path: [], trackCount: orphanTracks.length });
+        }
+
         return previews;
     },
 );
 
 // ── Upload selected playlists ──────────────────────────────────────────────
+
+const NOPLAYLIST_NAME = 'NOPLAYLIST';
+
+/**
+ * Returns all tracks from the parsed XML that are not referenced by any playlist.
+ */
+function collectTracksNotInAnyPlaylist(
+    result: ReturnType<typeof extractPlaylists>,
+): ParsedTrack[] {
+    const inPlaylist = new Set<string>();
+
+    function markPlaylist(pl: ParsedPlaylist) {
+        for (const t of pl.tracks) inPlaylist.add(t.location);
+    }
+
+    for (const pl of result.playlists) markPlaylist(pl);
+
+    function walkFolders(folders: any[]) {
+        for (const folder of folders) {
+            for (const pl of folder.playlists) markPlaylist(pl);
+            walkFolders(folder.subfolders);
+        }
+    }
+    walkFolders(result.folders);
+
+    return result.tracks.filter((t) => !inPlaylist.has(t.location));
+}
 
 function collectPlaylistsByName(
     result: ReturnType<typeof extractPlaylists>,
@@ -95,6 +128,14 @@ function collectPlaylistsByName(
     }
 
     walkFolders(result.folders);
+
+    if (selectedNames.has(NOPLAYLIST_NAME)) {
+        const orphanTracks = collectTracksNotInAnyPlaylist(result);
+        if (orphanTracks.length > 0) {
+            matched.push({ name: NOPLAYLIST_NAME, trackCount: orphanTracks.length, tracks: orphanTracks });
+        }
+    }
+
     return matched;
 }
 
@@ -205,15 +246,15 @@ ipcMain.handle(
             });
 
             if (storageRes.data?.allowed === false) {
+                console.log(storageRes.data)
                 const maxBytes = storageRes.data?.maxStorageBytes ?? 0;
                 const currentBytes = storageRes.data?.currentUsageBytes ?? 0;
                 const maxMB = Math.round(maxBytes / (1024 * 1024));
                 const currentMB = Math.round(currentBytes / (1024 * 1024));
                 const uploadMB = Math.round(totalUploadBytes / (1024 * 1024));
                 throw new Error(
-                    `STORAGE_LIMIT_EXCEEDED:Upload of ${uploadMB} MB would exceed your storage limit. ` +
-                        `Current usage: ${currentMB} MB / ${maxMB} MB. ` +
-                        `Request more storage via the Subbox Discord community.`,
+                    `STORAGE_LIMIT_EXCEEDED:Your upload of ${uploadMB} MB would exceed your storage limit. ` +
+                        `You are currently using ${currentMB} MB of your ${maxMB} MB allowance.`,
                 );
             }
         }
