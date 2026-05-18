@@ -263,9 +263,9 @@ ipcMain.handle(
 
         // Step 3: Zip and upload missing tracks
         sendProgress({
-            currentTrack: '',
+            currentTrack: 'Building zip...',
             phase: 'uploading',
-            total: missingTracks.length,
+            total: 0,
             uploaded: 0,
         });
 
@@ -317,31 +317,18 @@ ipcMain.handle(
 
             await new Promise<void>((resolve, reject) => {
                 const output = fs.createWriteStream(zipFilePath);
-                const myArchive = new ZipArchive({ zlib: { level: 1 } });
+                const myArchive = new ZipArchive({ zlib: { level: 0 } });
 
                 output.on('close', resolve);
                 myArchive.on('error', reject);
                 myArchive.pipe(output);
 
-                for (const { stagingPath, track, trackName } of uploadableTracks) {
-                    sendProgress({
-                        currentTrack: trackName,
-                        phase: 'uploading',
-                        total: uploadableTracks.length,
-                        uploaded: uploadedCount,
-                    });
+                for (const { stagingPath, track } of uploadableTracks) {
                     myArchive.file(track.location, { name: stagingPath });
                     uploadedCount++;
                 }
 
                 myArchive.finalize();
-            });
-
-            sendProgress({
-                currentTrack: zipFileName,
-                phase: 'uploading',
-                total: uploadableTracks.length,
-                uploaded: uploadedCount,
             });
 
             const zipResourcePath = `${filebrowserUrl}/api/tus/uploads/${zipFileName}?override=true`;

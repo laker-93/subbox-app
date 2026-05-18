@@ -429,7 +429,7 @@ export const SyncRekordbox = () => {
                   importing: 'Starting import...',
                   'mapping-metadata': 'Mapping metadata...',
                   matching: 'Matching tracks with cloud library...',
-                  uploading: `Uploading tracks (${progress.uploaded}/${progress.total})...`,
+                  uploading: 'Uploading tracks...',
               }[progress.phase]
             : 'Starting...';
 
