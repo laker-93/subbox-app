@@ -1,11 +1,13 @@
 import axios from 'axios';
 import { app, ipcMain, session } from 'electron';
+import * as tus from 'tus-js-client';
 import * as fs from 'fs';
 import * as https from 'https';
 import { parseFile } from 'music-metadata';
+import * as os from 'os';
 import * as path from 'path';
 import * as unzipper from 'unzipper';
-
+import { ZipArchive } from "archiver";
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 /** Lightweight playlist info sent to renderer for preview (no file paths). */
@@ -259,7 +261,7 @@ ipcMain.handle(
             }
         }
 
-        // Step 3: Upload missing tracks
+        // Step 3: Zip and upload missing tracks
         sendProgress({
             currentTrack: '',
             phase: 'uploading',
@@ -277,6 +279,8 @@ ipcMain.handle(
             userLocation: string;
         }> = [];
 
+        // Build list of tracks that can actually be uploaded
+        const uploadableTracks: Array<{ stagingPath: string; track: ParsedTrack; trackName: string }> = [];
         for (const missingTrack of missingTracks) {
             const trackName = `${missingTrack.artist} - ${missingTrack.title}`;
             const track = trackKeyToTrack[trackName];
@@ -296,47 +300,7 @@ ipcMain.handle(
             }
 
             const stagingPath = `${track.artist}/${track.album}/${track.cleanName}${track.fileExtension}`;
-            const resourcePath = `${filebrowserUrl}/api/resources/uploads/${stagingPath}?override=false`;
-            const fileContents = fs.readFileSync(track.location);
-
-            sendProgress({
-                currentTrack: trackName,
-                phase: 'uploading',
-                total: missingTracks.length,
-                uploaded: uploadedCount,
-            });
-
-            let fileAlreadyExists = false;
-            try {
-                const resp = await axios.post(resourcePath, fileContents, {
-                    headers: {
-                        'Content-Type': 'audio/mpeg',
-                        'X-Auth': filebrowserToken,
-                    },
-                    httpsAgent,
-                });
-
-                if (resp.status !== 200) {
-                    throw new Error(`Failed to upload track: ${resp.status} ${resp.statusText}`);
-                }
-
-                uploadedCount++;
-            } catch (err) {
-                if (axios.isAxiosError(err) && err.response?.status === 409) {
-                    fileAlreadyExists = true;
-                } else {
-                    throw err;
-                }
-            }
-
-            if (!fileAlreadyExists) {
-                sendProgress({
-                    currentTrack: trackName,
-                    phase: 'uploading',
-                    total: missingTracks.length,
-                    uploaded: uploadedCount,
-                });
-            }
+            uploadableTracks.push({ stagingPath, track, trackName });
 
             originalTrackMetaData.push({
                 originalAlbum: track.album,
@@ -345,6 +309,81 @@ ipcMain.handle(
                 stagingLocation: stagingPath,
                 userLocation: track.location,
             });
+        }
+
+        if (uploadableTracks.length > 0) {
+            const zipFileName = `subbox-upload-${Date.now()}.zip`;
+            const zipFilePath = path.join(os.tmpdir(), zipFileName);
+
+            await new Promise<void>((resolve, reject) => {
+                const output = fs.createWriteStream(zipFilePath);
+                const myArchive = new ZipArchive({ zlib: { level: 1 } });
+
+                output.on('close', resolve);
+                myArchive.on('error', reject);
+                myArchive.pipe(output);
+
+                for (const { stagingPath, track, trackName } of uploadableTracks) {
+                    sendProgress({
+                        currentTrack: trackName,
+                        phase: 'uploading',
+                        total: uploadableTracks.length,
+                        uploaded: uploadedCount,
+                    });
+                    myArchive.file(track.location, { name: stagingPath });
+                    uploadedCount++;
+                }
+
+                myArchive.finalize();
+            });
+
+            sendProgress({
+                currentTrack: zipFileName,
+                phase: 'uploading',
+                total: uploadableTracks.length,
+                uploaded: uploadedCount,
+            });
+
+            const zipResourcePath = `${filebrowserUrl}/api/tus/uploads/${zipFileName}?override=true`;
+            const zipFileSize = fs.statSync(zipFilePath).size;
+
+            // Create the TUS upload slot
+            const createResp = await axios.post(zipResourcePath, null, {
+                headers: {
+                    'X-Auth': filebrowserToken,
+                    'upload-length': zipFileSize,
+                },
+                httpsAgent,
+            });
+            if (createResp.status !== 201) {
+                throw new Error(`Failed to create TUS upload: ${createResp.status}`);
+            }
+
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    const zipStream = fs.createReadStream(zipFilePath);
+                    const uploader = new tus.Upload(zipStream as unknown as Buffer, {
+                        chunkSize: 20 * 1024 * 1024,
+                        headers: { 'X-Auth': filebrowserToken },
+                        onError: reject,
+                        onProgress: (bytesUploaded, bytesTotal) => {
+                            const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
+                            sendProgress({
+                                currentTrack: `${zipFileName} (${pct}%)`,
+                                phase: 'uploading',
+                                total: uploadableTracks.length,
+                                uploaded: uploadedCount,
+                            });
+                        },
+                        onSuccess: () => resolve(),
+                        uploadSize: zipFileSize,
+                        uploadUrl: zipResourcePath,
+                    });
+                    uploader.start();
+                });
+            } finally {
+                try { fs.unlinkSync(zipFilePath); } catch { /* ignore */ }
+            }
         }
 
         // Step 4: Map metadata
