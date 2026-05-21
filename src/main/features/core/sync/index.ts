@@ -21,6 +21,8 @@ import {
     ParsedTrack,
 } from '/@/main/features/core/sync/rekordbox-xml';
 
+type LocalTrack = { album?: string; artist: string; fileExtension?: string; fromTag: boolean; title: string };
+
 export interface UploadProgress {
     activeTracks?: string[];
     currentTrack: string;
@@ -461,13 +463,11 @@ function getMusicPath(): string {
  * Scan the local music directory and return track metadata parsed from the
  * directory structure: music/<artist>/<album>/<title>.<ext>
  */
-async function scanLocalTracks(): Promise<
-    Array<{ album?: string; artist: string; fromTag: boolean; title: string }>
-> {
+async function scanLocalTracks(): Promise<LocalTrack[]> {
     const musicDir = getMusicPath();
     if (!fs.existsSync(musicDir)) return [];
 
-    const tracks: Array<{ album?: string; artist: string; fromTag: boolean; title: string }> = [];
+    const tracks: LocalTrack[] = [];
 
     let artistDirs: string[];
     try {
@@ -676,9 +676,7 @@ ipcMain.handle(
 
 ipcMain.handle(
     'sync:get-local-tracks',
-    async (): Promise<
-        Array<{ album?: string; artist: string; fromTag: boolean; title: string }>
-    > => {
+    async (): Promise<LocalTrack[]> => {
         return scanLocalTracks();
     },
 );
