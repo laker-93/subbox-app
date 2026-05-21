@@ -1,10 +1,10 @@
 import axios from 'axios';
 import { app, ipcMain, session } from 'electron';
-import * as tus from 'tus-js-client';
 import * as fs from 'fs';
 import * as https from 'https';
 import { parseFile } from 'music-metadata';
 import * as path from 'path';
+import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
@@ -21,8 +21,6 @@ import {
     ParsedTrack,
 } from '/@/main/features/core/sync/rekordbox-xml';
 
-type LocalTrack = { album?: string; artist: string; fileExtension?: string; fromTag: boolean; title: string };
-
 export interface UploadProgress {
     activeTracks?: string[];
     currentTrack: string;
@@ -35,6 +33,14 @@ export interface UploadResult {
     skipped: number;
     uploaded: number;
 }
+
+type LocalTrack = {
+    album?: string;
+    artist: string;
+    fileExtension?: string;
+    fromTag: boolean;
+    title: string;
+};
 
 async function getCookiesForUrl(url: string): Promise<string> {
     const cookies = await session.defaultSession.cookies.get({ url });
@@ -86,31 +92,6 @@ ipcMain.handle(
 
 const NOPLAYLIST_NAME = 'NOPLAYLIST';
 
-/**
- * Returns all tracks from the parsed XML that are not referenced by any playlist.
- */
-function collectTracksNotInAnyPlaylist(
-    result: ReturnType<typeof extractPlaylists>,
-): ParsedTrack[] {
-    const inPlaylist = new Set<string>();
-
-    function markPlaylist(pl: ParsedPlaylist) {
-        for (const t of pl.tracks) inPlaylist.add(t.location);
-    }
-
-    for (const pl of result.playlists) markPlaylist(pl);
-
-    function walkFolders(folders: any[]) {
-        for (const folder of folders) {
-            for (const pl of folder.playlists) markPlaylist(pl);
-            walkFolders(folder.subfolders);
-        }
-    }
-    walkFolders(result.folders);
-
-    return result.tracks.filter((t) => !inPlaylist.has(t.location));
-}
-
 function collectPlaylistsByName(
     result: ReturnType<typeof extractPlaylists>,
     selectedNames: Set<string>,
@@ -135,11 +116,38 @@ function collectPlaylistsByName(
     if (selectedNames.has(NOPLAYLIST_NAME)) {
         const orphanTracks = collectTracksNotInAnyPlaylist(result);
         if (orphanTracks.length > 0) {
-            matched.push({ name: NOPLAYLIST_NAME, trackCount: orphanTracks.length, tracks: orphanTracks });
+            matched.push({
+                name: NOPLAYLIST_NAME,
+                trackCount: orphanTracks.length,
+                tracks: orphanTracks,
+            });
         }
     }
 
     return matched;
+}
+
+/**
+ * Returns all tracks from the parsed XML that are not referenced by any playlist.
+ */
+function collectTracksNotInAnyPlaylist(result: ReturnType<typeof extractPlaylists>): ParsedTrack[] {
+    const inPlaylist = new Set<string>();
+
+    function markPlaylist(pl: ParsedPlaylist) {
+        for (const t of pl.tracks) inPlaylist.add(t.location);
+    }
+
+    for (const pl of result.playlists) markPlaylist(pl);
+
+    function walkFolders(folders: any[]) {
+        for (const folder of folders) {
+            for (const pl of folder.playlists) markPlaylist(pl);
+            walkFolders(folder.subfolders);
+        }
+    }
+    walkFolders(result.folders);
+
+    return result.tracks.filter((t) => !inPlaylist.has(t.location));
 }
 
 ipcMain.handle(
@@ -249,7 +257,7 @@ ipcMain.handle(
             });
 
             if (storageRes.data?.allowed === false) {
-                console.log(storageRes.data)
+                console.log(storageRes.data);
                 const maxBytes = storageRes.data?.maxStorageBytes ?? 0;
                 const currentBytes = storageRes.data?.currentUsageBytes ?? 0;
                 const maxMB = Math.round(maxBytes / (1024 * 1024));
@@ -282,7 +290,11 @@ ipcMain.handle(
         }> = [];
 
         // Build list of tracks that can actually be uploaded
-        const uploadableTracks: Array<{ stagingPath: string; track: ParsedTrack; trackName: string }> = [];
+        const uploadableTracks: Array<{
+            stagingPath: string;
+            track: ParsedTrack;
+            trackName: string;
+        }> = [];
         for (const missingTrack of missingTracks) {
             const trackName = `${missingTrack.artist} - ${missingTrack.title}`;
             const track = trackKeyToTrack[trackName];
@@ -354,16 +366,22 @@ ipcMain.handle(
                 });
             };
 
-            const uploadTrack = async ({ stagingPath, track, trackName }: typeof tracksToUpload[number]) => {
+            const uploadTrack = async ({
+                stagingPath,
+                track,
+                trackName,
+            }: (typeof tracksToUpload)[number]) => {
                 const fileSize = fs.statSync(track.location).size;
                 const resourcePath = `${filebrowserUrl}/api/tus/uploads/${encodeURIComponent(stagingPath)}?override=true`;
 
                 const createResp = await axios.post(resourcePath, null, {
-                    headers: { 'X-Auth': filebrowserToken, 'upload-length': fileSize },
+                    headers: { 'upload-length': fileSize, 'X-Auth': filebrowserToken },
                     httpsAgent,
                 });
                 if (createResp.status !== 201) {
-                    throw new Error(`Failed to create TUS upload for "${trackName}": ${createResp.status}`);
+                    throw new Error(
+                        `Failed to create TUS upload for "${trackName}": ${createResp.status}`,
+                    );
                 }
 
                 await new Promise<void>((resolve, reject) => {
@@ -674,12 +692,9 @@ ipcMain.handle(
     },
 );
 
-ipcMain.handle(
-    'sync:get-local-tracks',
-    async (): Promise<LocalTrack[]> => {
-        return scanLocalTracks();
-    },
-);
+ipcMain.handle('sync:get-local-tracks', async (): Promise<LocalTrack[]> => {
+    return scanLocalTracks();
+});
 
 // ── Watch directory for auto-upload ────────────────────────────────────────
 

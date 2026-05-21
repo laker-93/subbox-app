@@ -498,8 +498,7 @@ export const SyncRekordbox = () => {
                     <Text c="dimmed" size="sm" ta="center">
                         {error ||
                             t('page.sync.rekordbox.storageLimitDescription', {
-                                defaultValue:
-                                    'Your upload would exceed your storage limit.',
+                                defaultValue: 'Your upload would exceed your storage limit.',
                             })}
                     </Text>
                     <Text c="dimmed" size="sm" ta="center">
@@ -512,8 +511,8 @@ export const SyncRekordbox = () => {
                             target="_blank"
                         >
                             Discord community
-                        </Text>
-                        {' '}and request an upgrade from the Subbox team.
+                        </Text>{' '}
+                        and request an upgrade from the Subbox team.
                     </Text>
                     {currentMB !== null && maxMB !== null && (
                         <Text size="sm" ta="center">
