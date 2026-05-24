@@ -1,3 +1,4 @@
+import * as tus from 'tus-js-client';
 import { z } from 'zod';
 
 import { fbApiClient } from '/@/renderer/api/filebrowser/filebrowser-api';
@@ -16,6 +17,11 @@ type FBClientArgs = {
     baseUrl: string;
     signal?: AbortSignal;
     token?: string;
+};
+
+type TusUploadArgs = {
+    file: File;
+    onProgress?: (progress: number) => void;
 };
 
 type UploadArgs = {
@@ -57,6 +63,37 @@ export const FilebrowserController = {
         }
 
         return res.body.data;
+    },
+
+    tusUpload: async (args: FBClientArgs & TusUploadArgs): Promise<void> => {
+        const { baseUrl, file, onProgress = () => {}, token } = args;
+        const resourcePath = `${baseUrl}/api/tus/uploads/${file.name}?override=true`;
+
+        const resp = await fetch(resourcePath, {
+            headers: {
+                'upload-length': `${file.size}`,
+                'X-Auth': token ?? '',
+            },
+            method: 'POST',
+        });
+
+        if (resp.status !== 201) {
+            throw new Error(`Failed to create TUS upload: ${resp.status} ${resp.statusText}`);
+        }
+
+        return new Promise<void>((resolve, reject) => {
+            const uploader = new tus.Upload(file, {
+                chunkSize: 20 * 1024 * 1024,
+                headers: { 'X-Auth': token ?? '' },
+                onError: reject,
+                onProgress: (bytesUploaded, bytesTotal) => {
+                    onProgress(parseFloat(((bytesUploaded / bytesTotal) * 100).toFixed(2)));
+                },
+                onSuccess: () => resolve(),
+                uploadUrl: resourcePath,
+            });
+            uploader.start();
+        });
     },
 
     upload: async (args: FBClientArgs & UploadArgs) => {
