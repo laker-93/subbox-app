@@ -4,8 +4,8 @@ import * as fs from 'fs';
 import * as https from 'https';
 import { parseFile } from 'music-metadata';
 import * as path from 'path';
+import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
-
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 /** Lightweight playlist info sent to renderer for preview (no file paths). */
@@ -22,6 +22,7 @@ import {
 } from '/@/main/features/core/sync/rekordbox-xml';
 
 export interface UploadProgress {
+    activeTracks?: string[];
     currentTrack: string;
     phase: 'done' | 'error' | 'mapping-metadata' | 'matching' | 'uploading';
     total: number;
@@ -32,6 +33,14 @@ export interface UploadResult {
     skipped: number;
     uploaded: number;
 }
+
+type LocalTrack = {
+    album?: string;
+    artist: string;
+    fileExtension?: string;
+    fromTag: boolean;
+    title: string;
+};
 
 async function getCookiesForUrl(url: string): Promise<string> {
     const cookies = await session.defaultSession.cookies.get({ url });
@@ -69,11 +78,19 @@ ipcMain.handle(
             collectFromFolder(folder, []);
         }
 
+        // Add a synthetic entry for tracks not in any playlist
+        const orphanTracks = collectTracksNotInAnyPlaylist(result);
+        if (orphanTracks.length > 0) {
+            previews.push({ name: NOPLAYLIST_NAME, path: [], trackCount: orphanTracks.length });
+        }
+
         return previews;
     },
 );
 
 // ── Upload selected playlists ──────────────────────────────────────────────
+
+const NOPLAYLIST_NAME = 'NOPLAYLIST';
 
 function collectPlaylistsByName(
     result: ReturnType<typeof extractPlaylists>,
@@ -95,7 +112,42 @@ function collectPlaylistsByName(
     }
 
     walkFolders(result.folders);
+
+    if (selectedNames.has(NOPLAYLIST_NAME)) {
+        const orphanTracks = collectTracksNotInAnyPlaylist(result);
+        if (orphanTracks.length > 0) {
+            matched.push({
+                name: NOPLAYLIST_NAME,
+                trackCount: orphanTracks.length,
+                tracks: orphanTracks,
+            });
+        }
+    }
+
     return matched;
+}
+
+/**
+ * Returns all tracks from the parsed XML that are not referenced by any playlist.
+ */
+function collectTracksNotInAnyPlaylist(result: ReturnType<typeof extractPlaylists>): ParsedTrack[] {
+    const inPlaylist = new Set<string>();
+
+    function markPlaylist(pl: ParsedPlaylist) {
+        for (const t of pl.tracks) inPlaylist.add(t.location);
+    }
+
+    for (const pl of result.playlists) markPlaylist(pl);
+
+    function walkFolders(folders: any[]) {
+        for (const folder of folders) {
+            for (const pl of folder.playlists) markPlaylist(pl);
+            walkFolders(folder.subfolders);
+        }
+    }
+    walkFolders(result.folders);
+
+    return result.tracks.filter((t) => !inPlaylist.has(t.location));
 }
 
 ipcMain.handle(
@@ -205,24 +257,25 @@ ipcMain.handle(
             });
 
             if (storageRes.data?.allowed === false) {
+                console.log(storageRes.data);
                 const maxBytes = storageRes.data?.maxStorageBytes ?? 0;
                 const currentBytes = storageRes.data?.currentUsageBytes ?? 0;
                 const maxMB = Math.round(maxBytes / (1024 * 1024));
                 const currentMB = Math.round(currentBytes / (1024 * 1024));
                 const uploadMB = Math.round(totalUploadBytes / (1024 * 1024));
                 throw new Error(
-                    `STORAGE_LIMIT_EXCEEDED:Upload of ${uploadMB} MB would exceed your storage limit. ` +
-                        `Current usage: ${currentMB} MB / ${maxMB} MB. ` +
-                        `Request more storage via the Subbox Discord community.`,
+                    `STORAGE_LIMIT_EXCEEDED:Your upload of ${uploadMB} MB would exceed your storage limit. ` +
+                        `You are currently using ${currentMB} MB of your ${maxMB} MB allowance.`,
                 );
             }
         }
 
-        // Step 3: Upload missing tracks
+        // Step 3: Zip and upload missing tracks
+        // Step 3: Upload missing tracks via concurrent TUS uploads
         sendProgress({
-            currentTrack: '',
+            currentTrack: 'Checking existing uploads...',
             phase: 'uploading',
-            total: missingTracks.length,
+            total: 0,
             uploaded: 0,
         });
 
@@ -236,6 +289,12 @@ ipcMain.handle(
             userLocation: string;
         }> = [];
 
+        // Build list of tracks that can actually be uploaded
+        const uploadableTracks: Array<{
+            stagingPath: string;
+            track: ParsedTrack;
+            trackName: string;
+        }> = [];
         for (const missingTrack of missingTracks) {
             const trackName = `${missingTrack.artist} - ${missingTrack.title}`;
             const track = trackKeyToTrack[trackName];
@@ -255,47 +314,7 @@ ipcMain.handle(
             }
 
             const stagingPath = `${track.artist}/${track.album}/${track.cleanName}${track.fileExtension}`;
-            const resourcePath = `${filebrowserUrl}/api/resources/uploads/${stagingPath}?override=false`;
-            const fileContents = fs.readFileSync(track.location);
-
-            sendProgress({
-                currentTrack: trackName,
-                phase: 'uploading',
-                total: missingTracks.length,
-                uploaded: uploadedCount,
-            });
-
-            let fileAlreadyExists = false;
-            try {
-                const resp = await axios.post(resourcePath, fileContents, {
-                    headers: {
-                        'Content-Type': 'audio/mpeg',
-                        'X-Auth': filebrowserToken,
-                    },
-                    httpsAgent,
-                });
-
-                if (resp.status !== 200) {
-                    throw new Error(`Failed to upload track: ${resp.status} ${resp.statusText}`);
-                }
-
-                uploadedCount++;
-            } catch (err) {
-                if (axios.isAxiosError(err) && err.response?.status === 409) {
-                    fileAlreadyExists = true;
-                } else {
-                    throw err;
-                }
-            }
-
-            if (!fileAlreadyExists) {
-                sendProgress({
-                    currentTrack: trackName,
-                    phase: 'uploading',
-                    total: missingTracks.length,
-                    uploaded: uploadedCount,
-                });
-            }
+            uploadableTracks.push({ stagingPath, track, trackName });
 
             originalTrackMetaData.push({
                 originalAlbum: track.album,
@@ -304,6 +323,100 @@ ipcMain.handle(
                 stagingLocation: stagingPath,
                 userLocation: track.location,
             });
+        }
+
+        if (uploadableTracks.length > 0) {
+            // Fetch already-uploaded files from filebrowser and skip them
+            let existingPaths = new Set<string>();
+            try {
+                const listRes = await axios.get(`${filebrowserUrl}/api/resources/uploads`, {
+                    headers: { 'X-Auth': filebrowserToken },
+                    httpsAgent,
+                });
+                const items: Array<{ path: string }> = listRes.data?.items ?? [];
+                existingPaths = new Set(items.map((i) => i.path.replace(/^\//, '')));
+            } catch (err) {
+                console.warn('Failed to list existing uploads, proceeding without dedup:', err);
+            }
+
+            const tracksToUpload = uploadableTracks.filter(
+                ({ stagingPath }) => !existingPaths.has(stagingPath),
+            );
+            skippedCount += uploadableTracks.length - tracksToUpload.length;
+
+            sendProgress({
+                currentTrack: '',
+                phase: 'uploading',
+                total: tracksToUpload.length,
+                uploaded: 0,
+            });
+
+            // Upload concurrently, capped at 3 simultaneous uploads
+            const CONCURRENCY = 3;
+            let completedCount = 0;
+            const activeUploads = new Map<string, string>();
+
+            const emitUploadingProgress = (currentTrack = '') => {
+                sendProgress({
+                    activeTracks: Array.from(activeUploads.values()),
+                    currentTrack,
+                    phase: 'uploading',
+                    total: tracksToUpload.length,
+                    uploaded: completedCount,
+                });
+            };
+
+            const uploadTrack = async ({
+                stagingPath,
+                track,
+                trackName,
+            }: (typeof tracksToUpload)[number]) => {
+                const fileSize = fs.statSync(track.location).size;
+                const resourcePath = `${filebrowserUrl}/api/tus/uploads/${encodeURIComponent(stagingPath)}?override=true`;
+
+                const createResp = await axios.post(resourcePath, null, {
+                    headers: { 'upload-length': fileSize, 'X-Auth': filebrowserToken },
+                    httpsAgent,
+                });
+                if (createResp.status !== 201) {
+                    throw new Error(
+                        `Failed to create TUS upload for "${trackName}": ${createResp.status}`,
+                    );
+                }
+
+                await new Promise<void>((resolve, reject) => {
+                    const fileStream = fs.createReadStream(track.location);
+                    const uploader = new tus.Upload(fileStream as unknown as Buffer, {
+                        chunkSize: 20 * 1024 * 1024,
+                        headers: { 'X-Auth': filebrowserToken },
+                        onError: reject,
+                        onProgress: (bytesUploaded, bytesTotal) => {
+                            const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
+                            activeUploads.set(trackName, `${trackName} (${pct}%)`);
+                            emitUploadingProgress();
+                        },
+                        onSuccess: () => resolve(),
+                        uploadSize: fileSize,
+                        uploadUrl: resourcePath,
+                    });
+                    uploader.start();
+                });
+
+                activeUploads.delete(trackName);
+                completedCount++;
+                uploadedCount++;
+                emitUploadingProgress(trackName);
+            };
+
+            // Run with bounded concurrency
+            const queue = [...tracksToUpload];
+            const workers = Array.from({ length: CONCURRENCY }, async () => {
+                while (queue.length > 0) {
+                    const item = queue.shift()!;
+                    await uploadTrack(item);
+                }
+            });
+            await Promise.all(workers);
         }
 
         // Step 4: Map metadata
@@ -368,13 +481,11 @@ function getMusicPath(): string {
  * Scan the local music directory and return track metadata parsed from the
  * directory structure: music/<artist>/<album>/<title>.<ext>
  */
-async function scanLocalTracks(): Promise<
-    Array<{ album?: string; artist: string; fromTag: boolean; title: string }>
-> {
+async function scanLocalTracks(): Promise<LocalTrack[]> {
     const musicDir = getMusicPath();
     if (!fs.existsSync(musicDir)) return [];
 
-    const tracks: Array<{ album?: string; artist: string; fromTag: boolean; title: string }> = [];
+    const tracks: LocalTrack[] = [];
 
     let artistDirs: string[];
     try {
@@ -581,14 +692,9 @@ ipcMain.handle(
     },
 );
 
-ipcMain.handle(
-    'sync:get-local-tracks',
-    async (): Promise<
-        Array<{ album?: string; artist: string; fromTag: boolean; title: string }>
-    > => {
-        return scanLocalTracks();
-    },
-);
+ipcMain.handle('sync:get-local-tracks', async (): Promise<LocalTrack[]> => {
+    return scanLocalTracks();
+});
 
 // ── Watch directory for auto-upload ────────────────────────────────────────
 

@@ -165,16 +165,15 @@ const rbExportParameters = z.object({
 });
 
 const track = z.object({
+    album: z.string().optional(),
     artist: z.string(),
+    fileExtension: z.string().optional(),
+    fromTag: z.boolean().default(true),
     title: z.string(),
 });
 
 const syncParameters = z.object({
     tracks: z.array(track),
-});
-
-const importParameters = z.object({
-    public: z.boolean(),
 });
 
 const matchTracksParameters = z.object({
@@ -212,12 +211,11 @@ const syncPlanPlaylist = z.object({
     source: z.string(),
 });
 
-const syncPlanLocalTrack = z.object({
-    album: z.string().optional(),
-    artist: z.string(),
-    fromTag: z.boolean(),
-    title: z.string(),
+const importParameters = z.object({
+    public: z.boolean(),
 });
+
+const syncPlanLocalTrack = track;
 
 const syncPlanParameters = z.object({
     direction: z.enum(['download', 'upload']),

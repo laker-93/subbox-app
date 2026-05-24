@@ -44,6 +44,7 @@ type SyncStep =
     | 'uploading';
 
 interface UploadProgress {
+    activeTracks?: string[];
     currentTrack: string;
     phase: 'done' | 'error' | 'mapping-metadata' | 'matching' | 'uploading';
     total: number;
@@ -204,8 +205,10 @@ export const SyncRekordbox = () => {
             }
         } catch (err: any) {
             const msg = err?.message || 'Upload failed';
-            if (msg.startsWith('STORAGE_LIMIT_EXCEEDED:')) {
-                setError(msg.slice('STORAGE_LIMIT_EXCEEDED:'.length));
+            const storagePrefix = 'STORAGE_LIMIT_EXCEEDED:';
+            const storagePrefixIdx = msg.indexOf(storagePrefix);
+            if (storagePrefixIdx !== -1) {
+                setError(msg.slice(storagePrefixIdx + storagePrefix.length));
                 setStep('storage-exceeded');
             } else {
                 setError(msg);
@@ -420,6 +423,7 @@ export const SyncRekordbox = () => {
 
     // ── Uploading ──────────────────────────────────────────────────────────
     if (step === 'uploading') {
+        const activeTracks = progress?.activeTracks ?? [];
         const phaseLabel = progress
             ? {
                   done: 'Complete!',
@@ -427,7 +431,7 @@ export const SyncRekordbox = () => {
                   importing: 'Starting import...',
                   'mapping-metadata': 'Mapping metadata...',
                   matching: 'Matching tracks with cloud library...',
-                  uploading: `Uploading tracks (${progress.uploaded}/${progress.total})...`,
+                  uploading: `Uploading tracks (${Math.floor(progress.uploaded)}/${progress.total})...`,
               }[progress.phase]
             : 'Starting...';
 
@@ -436,7 +440,13 @@ export const SyncRekordbox = () => {
                 <Stack align="center" gap="md" maw={400}>
                     <Spinner />
                     <TextTitle order={4}>{phaseLabel}</TextTitle>
-                    {progress?.currentTrack && (
+                    {activeTracks.length > 0 &&
+                        activeTracks.map((track, idx) => (
+                            <Text c="dimmed" key={`${idx}-${track}`} size="sm" ta="center">
+                                {track}
+                            </Text>
+                        ))}
+                    {activeTracks.length === 0 && progress?.currentTrack && (
                         <Text c="dimmed" size="sm" ta="center">
                             {progress.currentTrack}
                         </Text>
@@ -488,9 +498,21 @@ export const SyncRekordbox = () => {
                     <Text c="dimmed" size="sm" ta="center">
                         {error ||
                             t('page.sync.rekordbox.storageLimitDescription', {
-                                defaultValue:
-                                    'Your upload would exceed your storage limit. To continue uploading, request more storage from the Subbox team.',
+                                defaultValue: 'Your upload would exceed your storage limit.',
                             })}
+                    </Text>
+                    <Text c="dimmed" size="sm" ta="center">
+                        To get more storage, join our{' '}
+                        <Text
+                            c="blue"
+                            component="a"
+                            href={urlConfig.discord}
+                            rel="noopener noreferrer"
+                            target="_blank"
+                        >
+                            Discord community
+                        </Text>{' '}
+                        and request an upgrade from the Subbox team.
                     </Text>
                     {currentMB !== null && maxMB !== null && (
                         <Text size="sm" ta="center">
