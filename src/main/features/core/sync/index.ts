@@ -545,7 +545,11 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
                 let tagAlbum: string | undefined;
                 let tagTitle: string | undefined;
                 try {
-                    const meta = await parseFile(filePath, { duration: false });
+                    const meta = await parseFile(filePath, {
+                        duration: false,
+                        skipCovers: true,
+                        skipPostHeaders: true,
+                    });
                     tagArtist = meta.common.artist;
                     tagAlbum = meta.common.album;
                     tagTitle = meta.common.title;
@@ -858,14 +862,17 @@ async function scanDirectoryTracks(rootDir: string): Promise<
     Array<{ album?: string; artist: string; fromTag: boolean; title: string }>
 > {
     const audioFiles = getAudioFiles(rootDir);
-    const tracks: Array<{ album?: string; artist: string; fromTag: boolean; title: string }> = [];
 
-    for (const filePath of audioFiles) {
+    const readTrack = async (filePath: string): Promise<{ album?: string; artist: string; fromTag: boolean; title: string }> => {
         let tagArtist: string | undefined;
         let tagAlbum: string | undefined;
         let tagTitle: string | undefined;
         try {
-            const meta = await parseFile(filePath, { duration: false });
+            const meta = await parseFile(filePath, {
+                duration: false,
+                skipCovers: true,
+                skipPostHeaders: true,
+            });
             tagArtist = meta.common.artist;
             tagAlbum = meta.common.album;
             tagTitle = meta.common.title;
@@ -888,15 +895,29 @@ async function scanDirectoryTracks(rootDir: string): Promise<
             pathArtist = parts[0];
         }
 
-        tracks.push({
+        return {
             album: fromTag ? tagAlbum : pathAlbum,
             artist: fromTag ? tagArtist! : pathArtist || 'Unknown',
             fromTag,
             title: fromTag ? tagTitle! : fileName,
-        });
-    }
+        };
+    };
 
-    return tracks;
+    // Process files concurrently, capped to avoid overwhelming the filesystem
+    const CONCURRENCY = 20;
+    const results: Array<{ album?: string; artist: string; fromTag: boolean; title: string }> = new Array(audioFiles.length);
+    const queue = audioFiles.map((f, i) => ({ filePath: f, index: i }));
+
+    await Promise.all(
+        Array.from({ length: CONCURRENCY }, async () => {
+            while (queue.length > 0) {
+                const item = queue.shift()!;
+                results[item.index] = await readTrack(item.filePath);
+            }
+        }),
+    );
+
+    return results;
 }
 
 ipcMain.handle('sync:select-external-drive', async (): Promise<null | string> => {
