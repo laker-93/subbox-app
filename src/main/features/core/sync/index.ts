@@ -270,7 +270,6 @@ ipcMain.handle(
             }
         }
 
-        // Step 3: Zip and upload missing tracks
         // Step 3: Upload missing tracks via concurrent TUS uploads
         sendProgress({
             currentTrack: 'Checking existing uploads...',
@@ -478,6 +477,28 @@ function getMusicPath(): string {
 }
 
 /**
+ * Try to extract artist and title from a filename following the convention:
+ *   [tracknum -] artist - title
+ * e.g. "06 - Binary Digit - Overdoze in Ibiza" → { artist: 'Binary Digit', title: 'Overdoze in Ibiza' }
+ * Returns null if the filename doesn't match.
+ */
+function parseFilename(nameWithoutExt: string): { artist: string; title: string } | null {
+    const parts = nameWithoutExt.split(' - ');
+    if (parts.length < 2) return null;
+
+    // If first segment is purely numeric treat it as a track number and skip it
+    const firstIsTrackNum = /^\d+$/.test(parts[0].trim());
+    if (firstIsTrackNum && parts.length < 3) return null;
+
+    const artistIndex = firstIsTrackNum ? 1 : 0;
+    return {
+        artist: parts[artistIndex].trim(),
+        // Rejoin the rest so titles that contain ' - ' are preserved
+        title: parts.slice(artistIndex + 1).join(' - ').trim(),
+    };
+}
+
+/**
  * Scan the local music directory and return track metadata parsed from the
  * directory structure: music/<artist>/<album>/<title>.<ext>
  */
@@ -540,7 +561,20 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
                 )
                     continue;
 
-                // Attempt to read tags from the file
+                // Fast path: parse artist/title directly from the filename
+                const nameWithoutExt = path.basename(fileName, ext);
+                const fromFilename = parseFilename(nameWithoutExt);
+                if (fromFilename) {
+                    tracks.push({
+                        album: albumName,
+                        artist: fromFilename.artist,
+                        fromTag: false,
+                        title: fromFilename.title,
+                    });
+                    continue;
+                }
+
+                // Slow path: open file and read tags
                 let tagArtist: string | undefined;
                 let tagAlbum: string | undefined;
                 let tagTitle: string | undefined;
@@ -562,7 +596,7 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
                     album: (fromTag ? tagAlbum : albumName) ?? albumName,
                     artist: fromTag ? tagArtist! : artistName,
                     fromTag,
-                    title: fromTag ? tagTitle! : path.basename(fileName, ext),
+                    title: fromTag ? tagTitle! : nameWithoutExt,
                 });
             }
         }
@@ -864,6 +898,32 @@ async function scanDirectoryTracks(rootDir: string): Promise<
     const audioFiles = getAudioFiles(rootDir);
 
     const readTrack = async (filePath: string): Promise<{ album?: string; artist: string; fromTag: boolean; title: string }> => {
+        const nameWithoutExt = path.basename(filePath, path.extname(filePath));
+
+        // Derive path-based values (always needed as fallback)
+        const rel = path.relative(rootDir, filePath);
+        const parts = rel.split(path.sep);
+        let pathArtist = '';
+        let pathAlbum: string | undefined;
+        if (parts.length >= 3) {
+            pathArtist = parts[0];
+            pathAlbum = parts[1];
+        } else if (parts.length === 2) {
+            pathArtist = parts[0];
+        }
+
+        // Fast path: parse artist/title directly from the filename
+        const fromFilename = parseFilename(nameWithoutExt);
+        if (fromFilename) {
+            return {
+                album: pathAlbum,
+                artist: fromFilename.artist,
+                fromTag: false,
+                title: fromFilename.title,
+            };
+        }
+
+        // Slow path: open file and read tags
         let tagArtist: string | undefined;
         let tagAlbum: string | undefined;
         let tagTitle: string | undefined;
@@ -881,25 +941,11 @@ async function scanDirectoryTracks(rootDir: string): Promise<
         }
 
         const fromTag = !!(tagArtist && tagTitle);
-        const fileName = path.basename(filePath, path.extname(filePath));
-
-        // Derive artist/album from the path relative to the root
-        const rel = path.relative(rootDir, filePath);
-        const parts = rel.split(path.sep);
-        let pathArtist = '';
-        let pathAlbum: string | undefined;
-        if (parts.length >= 3) {
-            pathArtist = parts[0];
-            pathAlbum = parts[1];
-        } else if (parts.length === 2) {
-            pathArtist = parts[0];
-        }
-
         return {
             album: fromTag ? tagAlbum : pathAlbum,
             artist: fromTag ? tagArtist! : pathArtist || 'Unknown',
             fromTag,
-            title: fromTag ? tagTitle! : fileName,
+            title: fromTag ? tagTitle! : nameWithoutExt,
         };
     };
 
