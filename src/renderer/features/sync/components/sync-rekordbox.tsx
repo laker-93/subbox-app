@@ -196,6 +196,12 @@ export const SyncRekordbox = () => {
                     throw new Error(`Import failed: ${reason}`);
                 }
 
+                // If there's nothing to import, skip straight to done
+                if ((importResult.n_tracks_for_import ?? 0) === 0) {
+                    setStep('done');
+                    return;
+                }
+
                 setJobId(jobId);
                 setStep('importing');
                 setImportProgress(null);
@@ -553,16 +559,25 @@ export const SyncRekordbox = () => {
                 </TextTitle>
                 {uploadResult && (
                     <Stack align="center" gap="xs">
-                        <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
-                        {uploadResult.skipped > 0 && (
+                        {uploadResult.uploaded === 0 && !importProgress ? (
                             <Text c="dimmed" size="sm">
-                                {uploadResult.skipped} tracks skipped (files not found)
+                                Everything is already up to date.
                             </Text>
-                        )}
-                        {importProgress && (
-                            <Text size="sm">
-                                {importProgress.n_tracks_processed} tracks imported into library
-                            </Text>
+                        ) : (
+                            <>
+                                <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
+                                {uploadResult.skipped > 0 && (
+                                    <Text c="dimmed" size="sm">
+                                        {uploadResult.skipped} tracks skipped (files not found)
+                                    </Text>
+                                )}
+                                {importProgress && (
+                                    <Text size="sm">
+                                        {importProgress.n_tracks_processed} tracks imported into
+                                        library
+                                    </Text>
+                                )}
+                            </>
                         )}
                     </Stack>
                 )}
