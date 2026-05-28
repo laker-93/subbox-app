@@ -388,6 +388,8 @@ ipcMain.handle(
                     const uploader = new tus.Upload(fileStream as unknown as Buffer, {
                         chunkSize: 20 * 1024 * 1024,
                         headers: { 'X-Auth': filebrowserToken },
+                        // Pass a custom HTTP stack so TUS respects self-signed certs in dev
+                        httpStack: new tus.DefaultHttpStack({ rejectUnauthorized: false }),
                         onError: reject,
                         onProgress: (bytesUploaded, bytesTotal) => {
                             const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
@@ -440,6 +442,33 @@ ipcMain.handle(
         });
 
         return { skipped: skippedCount, uploaded: uploadedCount };
+    },
+);
+
+// ── Upload XML only (metadata, no tracks) ─────────────────────────────────
+
+ipcMain.handle(
+    'sync:upload-xml',
+    async (
+        _event,
+        args: {
+            filebrowserToken: string;
+            filebrowserUrl: string;
+            xmlPath: string;
+        },
+    ): Promise<void> => {
+        const { filebrowserToken, filebrowserUrl, xmlPath } = args;
+        const xmlFileName = path.basename(xmlPath);
+        const xmlResourcePath = `${filebrowserUrl}/api/resources/uploads/${xmlFileName}?override=true`;
+        const xmlContents = fs.readFileSync(xmlPath);
+
+        await axios.post(xmlResourcePath, xmlContents, {
+            headers: {
+                'Content-Type': 'application/xml',
+                'X-Auth': filebrowserToken,
+            },
+            httpsAgent,
+        });
     },
 );
 

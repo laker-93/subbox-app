@@ -181,7 +181,7 @@ const matchTracksParameters = z.object({
 });
 
 const rbImportParameters = z.object({
-    playlistNames: z.array(z.array(z.string())),
+    playlistNames: z.array(z.array(z.string())).nullable(),
 });
 
 const importProgressParameters = z.object({

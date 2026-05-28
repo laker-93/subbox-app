@@ -63,6 +63,7 @@ export const SyncRekordbox = () => {
     const [xmlPath, setXmlPath] = useState<null | string>(null);
     const [playlists, setPlaylists] = useState<PlaylistPreview[]>([]);
     const [selectedPlaylists, setSelectedPlaylists] = useState<Set<string>>(new Set());
+    const [metadataOnly, setMetadataOnly] = useState(false);
     const [progress, setProgress] = useState<null | UploadProgress>(null);
     const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
     const [jobId, setJobId] = useState<null | string>(null);
@@ -138,48 +139,62 @@ export const SyncRekordbox = () => {
     const handleUpload = useCallback(async () => {
         if (!ipc || !xmlPath || !currentServer) return;
 
-        // Pre-flight storage check (renderer-side, works for both Electron and web)
-        try {
-            const storage = await PymixController.checkStorage({
-                baseUrl: urlConfig.pymix,
-                query: { uploadSizeBytes: 0 },
-            });
-
-            if (!storage.allowed) {
-                setStorageInfo({
-                    currentUsageBytes: storage.currentUsageBytes,
-                    maxStorageBytes: storage.maxStorageBytes,
-                    remainingBytes: storage.remainingBytes,
-                });
-                setStep('storage-exceeded');
-                return;
-            }
-        } catch {
-            // If the check fails, proceed anyway — the main process will do a precise check
-        }
+        // In metadata-only mode with nothing selected, null tells the backend to process all tracks
+        const selectedPlaylistPaths =
+            metadataOnly && selectedPlaylists.size === 0
+                ? null
+                : playlists
+                      .filter((p) => selectedPlaylists.has(playlistKey(p)))
+                      .map((p) => [...p.path, p.name]);
 
         setStep('uploading');
         setError(null);
         setUploadResult(null);
 
         try {
-            const selectedPlaylistPaths = playlists
-                .filter((p) => selectedPlaylists.has(playlistKey(p)))
-                .map((p) => [...p.path, p.name]);
+            if (metadataOnly) {
+                // XML-only path: upload XML file then trigger import without processing tracks
+                await ipc.invoke('sync:upload-xml', {
+                    filebrowserToken: currentServer.fbToken,
+                    filebrowserUrl: urlConfig.filebrowser,
+                    xmlPath,
+                });
 
-            const result = await ipc.invoke('sync:upload-from-xml', {
-                filebrowserToken: currentServer.fbToken,
-                filebrowserUrl: urlConfig.filebrowser,
-                playlistNames: playlists
-                    .filter((p) => selectedPlaylists.has(playlistKey(p)))
-                    .map((p) => p.name),
-                pymixUrl: urlConfig.pymix,
-                username: currentServer.username,
-                xmlPath,
-            });
-            console.log('Upload result:', result);
+                setUploadResult({ skipped: 0, uploaded: 0 });
+            } else {
+                // Pre-flight storage check (renderer-side, works for both Electron and web)
+                try {
+                    const storage = await PymixController.checkStorage({
+                        baseUrl: urlConfig.pymix,
+                        query: { uploadSizeBytes: 0 },
+                    });
 
-            setUploadResult(result);
+                    if (!storage.allowed) {
+                        setStorageInfo({
+                            currentUsageBytes: storage.currentUsageBytes,
+                            maxStorageBytes: storage.maxStorageBytes,
+                            remainingBytes: storage.remainingBytes,
+                        });
+                        setStep('storage-exceeded');
+                        return;
+                    }
+                } catch {
+                    // If the check fails, proceed anyway — the main process will do a precise check
+                }
+
+                const result = await ipc.invoke('sync:upload-from-xml', {
+                    filebrowserToken: currentServer.fbToken,
+                    filebrowserUrl: urlConfig.filebrowser,
+                    playlistNames: playlists
+                        .filter((p) => selectedPlaylists.has(playlistKey(p)))
+                        .map((p) => p.name),
+                    pymixUrl: urlConfig.pymix,
+                    username: currentServer.username,
+                    xmlPath,
+                });
+                console.log('Upload result:', result);
+                setUploadResult(result);
+            }
 
             // Trigger rekordbox import via pymix API
             try {
@@ -221,7 +236,7 @@ export const SyncRekordbox = () => {
                 setStep('preview');
             }
         }
-    }, [currentServer, playlists, selectedPlaylists, xmlPath]);
+    }, [currentServer, metadataOnly, playlists, selectedPlaylists, xmlPath]);
 
     // Poll import progress when in importing step
     useEffect(() => {
@@ -275,6 +290,7 @@ export const SyncRekordbox = () => {
         setUploadResult(null);
         setError(null);
         setStorageInfo(null);
+        setMetadataOnly(false);
     }, []);
 
     const totalSelectedTracks = playlists
@@ -378,6 +394,12 @@ export const SyncRekordbox = () => {
                     </Button>
                 </Group>
 
+                <Checkbox
+                    checked={metadataOnly}
+                    label="Import metadata only (no track uploads)"
+                    onChange={(e) => setMetadataOnly(e.currentTarget.checked)}
+                />
+
                 <Stack gap="xs">
                     {playlists.map((pl) => {
                         const key = playlistKey(pl);
@@ -412,16 +434,21 @@ export const SyncRekordbox = () => {
                 </Stack>
 
                 <Button
-                    disabled={selectedPlaylists.size === 0}
+                    disabled={!metadataOnly && selectedPlaylists.size === 0}
                     fullWidth
                     onClick={handleUpload}
                     size="md"
                     variant="filled"
                 >
-                    {t('page.sync.rekordbox.uploadSelected', {
-                        defaultValue: 'Upload Selected Playlists',
-                        postProcess: 'titleCase',
-                    })}
+                    {metadataOnly
+                        ? t('page.sync.rekordbox.importMetadata', {
+                              defaultValue: 'Import Metadata Only',
+                              postProcess: 'titleCase',
+                          })
+                        : t('page.sync.rekordbox.uploadSelected', {
+                              defaultValue: 'Upload Selected Playlists',
+                              postProcess: 'titleCase',
+                          })}
                 </Button>
             </Stack>
         );
