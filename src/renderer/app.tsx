@@ -15,7 +15,7 @@ import { WebAudioContext } from '/@/renderer/features/player/context/webaudio-co
 import { useCheckForUpdates } from '/@/renderer/hooks/use-check-for-updates';
 import { useSyncSettingsToMain } from '/@/renderer/hooks/use-sync-settings-to-main';
 import { AppRouter } from '/@/renderer/router/app-router';
-import { useCssSettings, useHotkeySettings, useLanguage, useAuthStore } from '/@/renderer/store';
+import { useAuthStore, useCssSettings, useHotkeySettings, useLanguage } from '/@/renderer/store';
 import { useAppTheme } from '/@/renderer/themes/use-app-theme';
 import { sanitizeCss } from '/@/renderer/utils/sanitize';
 import { urlConfig } from '/@/renderer/config/url-config';
@@ -47,21 +47,19 @@ export const App = () => {
     useEffect(() => {
         if (!isElectron() || !ipc) return;
         const localSettings = window.api.localSettings;
-        Promise.all([
-            localSettings.get('watch_directory'),
-            localSettings.get('watch_active'),
-        ]).then(([watchDir, watchActive]) => {
-            if (!watchDir || !watchActive) return;
-            const currentServer = useAuthStore.getState().currentServer;
-            if (!currentServer?.fbToken) return;
-            ipc.invoke('sync:start-watch', {
-                filebrowserToken: currentServer.fbToken,
-                filebrowserUrl: urlConfig.filebrowser,
-                pymixUrl: urlConfig.pymix,
-                watchDir,
-            }).catch(console.error);
-        });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        Promise.all([localSettings.get('watch_directory'), localSettings.get('watch_active')]).then(
+            ([watchDir, watchActive]) => {
+                if (!watchDir || !watchActive) return;
+                const currentServer = useAuthStore.getState().currentServer;
+                if (!currentServer?.fbToken) return;
+                ipc.invoke('sync:start-watch', {
+                    filebrowserToken: currentServer.fbToken,
+                    filebrowserUrl: urlConfig.filebrowser,
+                    pymixUrl: urlConfig.pymix,
+                    watchDir,
+                }).catch(console.error);
+            },
+        );
     }, []);
 
     const [webAudio, setWebAudio] = useState<WebAudio>();
