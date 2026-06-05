@@ -67,7 +67,7 @@ export const SyncRekordbox = () => {
     const [progress, setProgress] = useState<null | UploadProgress>(null);
     const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
     const [jobId, setJobId] = useState<null | string>(null);
-    const [uploadResult, setUploadResult] = useState<null | { skipped: number; uploaded: number }>(
+    const [uploadResult, setUploadResult] = useState<null | { skipped: number; totalTracksInXml?: number; uploaded: number }>(
         null,
     );
     const [error, setError] = useState<null | string>(null);
@@ -169,7 +169,16 @@ export const SyncRekordbox = () => {
                         query: { uploadSizeBytes: 0 },
                     });
 
+                    console.log('[storage-check] pre-flight response:', storage);
+
                     if (!storage.allowed) {
+                        console.warn('[storage-check] pre-flight blocked:', {
+                            allowed: storage.allowed,
+                            currentUsageBytes: storage.currentUsageBytes,
+                            maxStorageBytes: storage.maxStorageBytes,
+                            reason: storage.reason,
+                            remainingBytes: storage.remainingBytes,
+                        });
                         setStorageInfo({
                             currentUsageBytes: storage.currentUsageBytes,
                             maxStorageBytes: storage.maxStorageBytes,
@@ -178,7 +187,8 @@ export const SyncRekordbox = () => {
                         setStep('storage-exceeded');
                         return;
                     }
-                } catch {
+                } catch (storageErr) {
+                    console.warn('[storage-check] pre-flight threw — proceeding anyway:', storageErr);
                     // If the check fails, proceed anyway — the main process will do a precise check
                 }
 
@@ -586,6 +596,11 @@ export const SyncRekordbox = () => {
                 </TextTitle>
                 {uploadResult && (
                     <Stack align="center" gap="xs">
+                        {uploadResult.totalTracksInXml !== undefined && (
+                            <Text c="dimmed" size="sm">
+                                {uploadResult.totalTracksInXml} tracks found in XML
+                            </Text>
+                        )}
                         {uploadResult.uploaded === 0 && !importProgress ? (
                             <Text c="dimmed" size="sm">
                                 Everything is already up to date.

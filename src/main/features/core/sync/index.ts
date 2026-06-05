@@ -31,6 +31,7 @@ export interface UploadProgress {
 
 export interface UploadResult {
     skipped: number;
+    totalTracksInXml: number;
     uploaded: number;
 }
 
@@ -190,6 +191,7 @@ ipcMain.handle(
 
         const allTracks = Array.from(trackMap.values());
         const totalTracks = allTracks.length;
+        console.log(`[sync] XML parsed: ${totalTracks} unique tracks across ${selectedPlaylists.length} selected playlist(s)`);
 
         const sendProgress = (progress: UploadProgress) => {
             event.sender.send('sync:upload-progress', progress);
@@ -250,11 +252,14 @@ ipcMain.handle(
         }
 
         if (totalUploadBytes > 0) {
+            console.log(`[storage-check] calculated upload size: ${totalUploadBytes} bytes (${Math.round(totalUploadBytes / (1024 * 1024))} MB) for ${missingTracks.length} missing track(s)`);
             const storageRes = await axios.get(`${pymixUrl}/user/storage_check`, {
                 headers: { Cookie: pymixCookies },
                 httpsAgent,
                 params: { uploadSizeBytes: totalUploadBytes },
             });
+
+            console.log('[storage-check] server response:', storageRes.data);
 
             if (storageRes.data?.allowed === false) {
                 console.log(storageRes.data);
@@ -268,6 +273,8 @@ ipcMain.handle(
                         `You are currently using ${currentMB} MB of your ${maxMB} MB allowance.`,
                 );
             }
+        } else {
+            console.log(`[storage-check] skipping server check — all ${missingTracks.length} missing track(s) have no local files`);
         }
 
         // Step 3: Upload missing tracks via concurrent TUS uploads
@@ -441,7 +448,7 @@ ipcMain.handle(
             uploaded: uploadedCount,
         });
 
-        return { skipped: skippedCount, uploaded: uploadedCount };
+        return { skipped: skippedCount, totalTracksInXml: totalTracks, uploaded: uploadedCount };
     },
 );
 

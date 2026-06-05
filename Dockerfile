@@ -5,7 +5,7 @@ WORKDIR /app
 # Copy package.json first to cache node_modules
 COPY package.json pnpm-lock.yaml .
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10.32.1
 
 RUN pnpm install
 
