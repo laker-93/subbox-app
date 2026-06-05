@@ -1,8 +1,10 @@
 import axios from 'axios';
+import { randomUUID } from 'crypto';
 import { app, ipcMain, session } from 'electron';
 import * as fs from 'fs';
 import * as https from 'https';
 import { parseFile } from 'music-metadata';
+import * as TagLib from 'node-taglib-sharp';
 import * as path from 'path';
 import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
@@ -791,7 +793,132 @@ export interface WatchProgress {
 }
 
 let watchInterval: null | ReturnType<typeof setInterval> = null;
-const uploadedFiles = new Set<string>();
+/** SUBBOX_IDs confirmed present on the server — avoids redundant presence checks. */
+const knownPresentIds = new Set<string>();
+
+// ── SUBBOX_ID tag helpers ──────────────────────────────────────────────────
+
+const SUBBOX_ID_FIELD = 'SUBBOX_ID';
+
+/**
+ * Read the SUBBOX_ID custom tag from any audio file via node-taglib-sharp.
+ * Tries each tag type present on the file in priority order:
+ *   Xiph (FLAC/OGG/OPUS) → ID3v2 (MP3/WAV) → APE → ASF (WMA)
+ * Returns null if the tag is absent or the file cannot be opened.
+ */
+function readSubboxId(filePath: string): string | null {
+    let file: TagLib.File | null = null;
+    try {
+        file = TagLib.File.createFromPath(filePath);
+        const types = file.tagTypes;
+
+        if (types & TagLib.TagTypes.Xiph) {
+            const xiph = file.getTag(TagLib.TagTypes.Xiph, false) as TagLib.XiphComment | null;
+            const val = xiph?.getFieldFirstValue(SUBBOX_ID_FIELD);
+            if (val) return val;
+        }
+
+        if (types & TagLib.TagTypes.Id3v2) {
+            const id3 = file.getTag(TagLib.TagTypes.Id3v2, false) as TagLib.Id3v2Tag | null;
+            if (id3) {
+                const frames = id3.getFramesByClassType<TagLib.Id3v2UserTextInformationFrame>(
+                    TagLib.Id3v2FrameClassType.UserTextInformationFrame,
+                );
+                const frame = TagLib.Id3v2UserTextInformationFrame.findUserTextInformationFrame(
+                    frames,
+                    SUBBOX_ID_FIELD,
+                );
+                if (frame?.text[0]) return frame.text[0];
+            }
+        }
+
+        if (types & TagLib.TagTypes.Ape) {
+            const ape = file.getTag(TagLib.TagTypes.Ape, false) as TagLib.ApeTag | null;
+            const val = ape?.getItem(SUBBOX_ID_FIELD)?.text[0];
+            if (val) return val;
+        }
+
+        if (types & TagLib.TagTypes.Asf) {
+            const asf = file.getTag(TagLib.TagTypes.Asf, false) as TagLib.AsfTag | null;
+            const val = asf?.getDescriptorStrings(SUBBOX_ID_FIELD)[0];
+            if (val) return val;
+        }
+
+        return null;
+    } catch {
+        return null;
+    } finally {
+        file?.dispose();
+    }
+}
+
+/**
+ * Write a SUBBOX_ID custom tag to any audio file via node-taglib-sharp.
+ * Uses the tag type already present on the file (Xiph > ID3v2 > APE > ASF).
+ * Throws if the file cannot be opened or saved — callers decide how to handle.
+ */
+function writeSubboxId(filePath: string, id: string): void {
+    let file: TagLib.File | null = null;
+    try {
+        file = TagLib.File.createFromPath(filePath);
+        const types = file.tagTypes;
+
+        if (types & TagLib.TagTypes.Xiph) {
+            const xiph = file.getTag(TagLib.TagTypes.Xiph, true) as TagLib.XiphComment;
+            xiph.setFieldAsStrings(SUBBOX_ID_FIELD, id);
+        } else if (types & TagLib.TagTypes.Id3v2) {
+            const id3 = file.getTag(TagLib.TagTypes.Id3v2, true) as TagLib.Id3v2Tag;
+            const frames = id3.getFramesByClassType<TagLib.Id3v2UserTextInformationFrame>(
+                TagLib.Id3v2FrameClassType.UserTextInformationFrame,
+            );
+            const existing = TagLib.Id3v2UserTextInformationFrame.findUserTextInformationFrame(
+                frames,
+                SUBBOX_ID_FIELD,
+            );
+            if (existing) {
+                existing.text = [id];
+            } else {
+                const frame = TagLib.Id3v2UserTextInformationFrame.fromDescription(SUBBOX_ID_FIELD);
+                frame.text = [id];
+                id3.addFrame(frame);
+            }
+        } else if (types & TagLib.TagTypes.Ape) {
+            const ape = file.getTag(TagLib.TagTypes.Ape, true) as TagLib.ApeTag;
+            ape.setItem(TagLib.ApeTagItem.fromTextValues(SUBBOX_ID_FIELD, id));
+        } else if (types & TagLib.TagTypes.Asf) {
+            const asf = file.getTag(TagLib.TagTypes.Asf, true) as TagLib.AsfTag;
+            asf.setDescriptorStrings([id], SUBBOX_ID_FIELD);
+        } else {
+            // No recognised tag type — create an ID3v2 tag as the most portable option
+            const id3 = file.getTag(TagLib.TagTypes.Id3v2, true) as TagLib.Id3v2Tag;
+            const frame = TagLib.Id3v2UserTextInformationFrame.fromDescription(SUBBOX_ID_FIELD);
+            frame.text = [id];
+            id3.addFrame(frame);
+        }
+
+        file.save();
+    } finally {
+        file?.dispose();
+    }
+}
+
+/**
+ * Return the existing SUBBOX_ID for a file, or generate a fresh UUID.
+ * If writing the tag fails the UUID is still returned so the file can be
+ * uploaded — the server will assign a permanent ID on its side.
+ */
+function getOrCreateSubboxId(filePath: string): string {
+    const existing = readSubboxId(filePath);
+    if (existing) return existing;
+
+    const newId = randomUUID();
+    try {
+        writeSubboxId(filePath, newId);
+    } catch {
+        console.warn(`[subbox-id] Could not write tag to ${filePath}, uploading without persisted ID`);
+    }
+    return newId;
+}
 
 function getAudioFiles(dirPath: string): string[] {
     if (!fs.existsSync(dirPath)) return [];
@@ -831,16 +958,20 @@ ipcMain.handle(
             filebrowserToken: string;
             filebrowserUrl: string;
             pollIntervalMs?: number;
+            pymixUrl: string;
             watchDir: string;
         },
     ): Promise<void> => {
-        const { filebrowserToken, filebrowserUrl, pollIntervalMs = 10000, watchDir } = args;
+        const { filebrowserToken, filebrowserUrl, pollIntervalMs = 10000, pymixUrl, watchDir } =
+            args;
 
         // Stop any existing watcher
         if (watchInterval) {
             clearInterval(watchInterval);
             watchInterval = null;
         }
+        // Clear cached presence so a fresh startup check runs immediately
+        knownPresentIds.clear();
 
         const sendProgress = (progress: WatchProgress) => {
             event.sender.send('sync:watch-progress', progress);
@@ -851,15 +982,44 @@ ipcMain.handle(
                 sendProgress({ currentFile: '', phase: 'scanning', total: 0, uploaded: 0 });
 
                 const audioFiles = getAudioFiles(watchDir);
-                const newFiles = audioFiles.filter((f) => !uploadedFiles.has(f));
-
-                if (newFiles.length === 0) {
+                if (audioFiles.length === 0) {
                     sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
                     return;
                 }
 
+                // Step 1: Ensure every file has a SUBBOX_ID tag
+                const fileIdMap = new Map<string, string>(); // filePath → subboxId
+                for (const filePath of audioFiles) {
+                    fileIdMap.set(filePath, getOrCreateSubboxId(filePath));
+                }
+
+                // Step 2: Only check presence for IDs not already confirmed on the server
+                const uncheckedFiles = audioFiles.filter((f) => !knownPresentIds.has(fileIdMap.get(f)!));
+
+                if (uncheckedFiles.length > 0) {
+                    const pymixCookies = await getCookiesForUrl(pymixUrl);
+                    const presenceRes = await axios.post(
+                        `${pymixUrl}/tracks/presence`,
+                        { subbox_ids: uncheckedFiles.map((f) => fileIdMap.get(f)!) },
+                        { headers: { Cookie: pymixCookies }, httpsAgent },
+                    );
+                    const presence: Record<string, boolean> = presenceRes.data.presence;
+
+                    // Cache IDs confirmed present so we skip them on future polls
+                    for (const [id, isPresent] of Object.entries(presence)) {
+                        if (isPresent) knownPresentIds.add(id);
+                    }
+                }
+
+                const missingFiles = audioFiles.filter((f) => !knownPresentIds.has(fileIdMap.get(f)!));
+                if (missingFiles.length === 0) {
+                    sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
+                    return;
+                }
+
+                // Step 3: Upload missing files
                 let uploaded = 0;
-                for (const filePath of newFiles) {
+                for (const filePath of missingFiles) {
                     const fileName = path.basename(filePath);
                     const resourcePath = `${filebrowserUrl}/api/resources/watch/${encodeURIComponent(fileName)}?override=false`;
                     const fileContents = fs.readFileSync(filePath);
@@ -867,7 +1027,7 @@ ipcMain.handle(
                     sendProgress({
                         currentFile: fileName,
                         phase: 'uploading',
-                        total: newFiles.length,
+                        total: missingFiles.length,
                         uploaded,
                     });
 
@@ -881,24 +1041,24 @@ ipcMain.handle(
                         });
                     } catch (err) {
                         if (axios.isAxiosError(err) && err.response?.status === 409) {
-                            // File already exists on server, mark as uploaded
+                            // Already on server — count as uploaded
                         } else {
                             console.error(`Failed to upload ${fileName}:`, err);
                             sendProgress({
                                 currentFile: fileName,
                                 phase: 'error',
-                                total: newFiles.length,
+                                total: missingFiles.length,
                                 uploaded,
                             });
                             continue;
                         }
                     }
 
-                    uploadedFiles.add(filePath);
+                    knownPresentIds.add(fileIdMap.get(filePath)!);
                     uploaded++;
                 }
 
-                sendProgress({ currentFile: '', phase: 'idle', total: newFiles.length, uploaded });
+                sendProgress({ currentFile: '', phase: 'idle', total: missingFiles.length, uploaded });
             } catch (err) {
                 console.error('Watch poll error:', err);
                 sendProgress({ currentFile: '', phase: 'error', total: 0, uploaded: 0 });
@@ -920,6 +1080,7 @@ ipcMain.handle('sync:stop-watch', async (): Promise<void> => {
         clearInterval(watchInterval);
         watchInterval = null;
     }
+    knownPresentIds.clear();
 });
 
 // ── External drive comparison ───────────────────────────────────────────────
