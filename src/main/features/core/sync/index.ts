@@ -1,8 +1,10 @@
 import axios from 'axios';
+import { randomUUID } from 'crypto';
 import { app, ipcMain, session } from 'electron';
 import * as fs from 'fs';
 import * as https from 'https';
 import { parseFile } from 'music-metadata';
+import * as TagLib from 'node-taglib-sharp';
 import * as path from 'path';
 import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
@@ -31,6 +33,7 @@ export interface UploadProgress {
 
 export interface UploadResult {
     skipped: number;
+    totalTracksInXml: number;
     uploaded: number;
 }
 
@@ -190,6 +193,7 @@ ipcMain.handle(
 
         const allTracks = Array.from(trackMap.values());
         const totalTracks = allTracks.length;
+        console.log(`[sync] XML parsed: ${totalTracks} unique tracks across ${selectedPlaylists.length} selected playlist(s)`);
 
         const sendProgress = (progress: UploadProgress) => {
             event.sender.send('sync:upload-progress', progress);
@@ -250,11 +254,14 @@ ipcMain.handle(
         }
 
         if (totalUploadBytes > 0) {
+            console.log(`[storage-check] calculated upload size: ${totalUploadBytes} bytes (${Math.round(totalUploadBytes / (1024 * 1024))} MB) for ${missingTracks.length} missing track(s)`);
             const storageRes = await axios.get(`${pymixUrl}/user/storage_check`, {
                 headers: { Cookie: pymixCookies },
                 httpsAgent,
                 params: { uploadSizeBytes: totalUploadBytes },
             });
+
+            console.log('[storage-check] server response:', storageRes.data);
 
             if (storageRes.data?.allowed === false) {
                 console.log(storageRes.data);
@@ -268,9 +275,10 @@ ipcMain.handle(
                         `You are currently using ${currentMB} MB of your ${maxMB} MB allowance.`,
                 );
             }
+        } else {
+            console.log(`[storage-check] skipping server check — all ${missingTracks.length} missing track(s) have no local files`);
         }
 
-        // Step 3: Zip and upload missing tracks
         // Step 3: Upload missing tracks via concurrent TUS uploads
         sendProgress({
             currentTrack: 'Checking existing uploads...',
@@ -389,6 +397,8 @@ ipcMain.handle(
                     const uploader = new tus.Upload(fileStream as unknown as Buffer, {
                         chunkSize: 20 * 1024 * 1024,
                         headers: { 'X-Auth': filebrowserToken },
+                        // Pass a custom HTTP stack so TUS respects self-signed certs in dev
+                        httpStack: new tus.DefaultHttpStack({ rejectUnauthorized: false }),
                         onError: reject,
                         onProgress: (bytesUploaded, bytesTotal) => {
                             const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
@@ -440,7 +450,34 @@ ipcMain.handle(
             uploaded: uploadedCount,
         });
 
-        return { skipped: skippedCount, uploaded: uploadedCount };
+        return { skipped: skippedCount, totalTracksInXml: totalTracks, uploaded: uploadedCount };
+    },
+);
+
+// ── Upload XML only (metadata, no tracks) ─────────────────────────────────
+
+ipcMain.handle(
+    'sync:upload-xml',
+    async (
+        _event,
+        args: {
+            filebrowserToken: string;
+            filebrowserUrl: string;
+            xmlPath: string;
+        },
+    ): Promise<void> => {
+        const { filebrowserToken, filebrowserUrl, xmlPath } = args;
+        const xmlFileName = path.basename(xmlPath);
+        const xmlResourcePath = `${filebrowserUrl}/api/resources/uploads/${xmlFileName}?override=true`;
+        const xmlContents = fs.readFileSync(xmlPath);
+
+        await axios.post(xmlResourcePath, xmlContents, {
+            headers: {
+                'Content-Type': 'application/xml',
+                'X-Auth': filebrowserToken,
+            },
+            httpsAgent,
+        });
     },
 );
 
@@ -475,6 +512,28 @@ function getAppPath(): string {
 
 function getMusicPath(): string {
     return path.join(getAppPath(), 'music');
+}
+
+/**
+ * Try to extract artist and title from a filename following the convention:
+ *   [tracknum -] artist - title
+ * e.g. "06 - Binary Digit - Overdoze in Ibiza" → { artist: 'Binary Digit', title: 'Overdoze in Ibiza' }
+ * Returns null if the filename doesn't match.
+ */
+function parseFilename(nameWithoutExt: string): { artist: string; title: string } | null {
+    const parts = nameWithoutExt.split(' - ');
+    if (parts.length < 2) return null;
+
+    // If first segment is purely numeric treat it as a track number and skip it
+    const firstIsTrackNum = /^\d+$/.test(parts[0].trim());
+    if (firstIsTrackNum && parts.length < 3) return null;
+
+    const artistIndex = firstIsTrackNum ? 1 : 0;
+    return {
+        artist: parts[artistIndex].trim(),
+        // Rejoin the rest so titles that contain ' - ' are preserved
+        title: parts.slice(artistIndex + 1).join(' - ').trim(),
+    };
 }
 
 /**
@@ -540,12 +599,29 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
                 )
                     continue;
 
-                // Attempt to read tags from the file
+                // Fast path: parse artist/title directly from the filename
+                const nameWithoutExt = path.basename(fileName, ext);
+                const fromFilename = parseFilename(nameWithoutExt);
+                if (fromFilename) {
+                    tracks.push({
+                        album: albumName,
+                        artist: fromFilename.artist,
+                        fromTag: false,
+                        title: fromFilename.title,
+                    });
+                    continue;
+                }
+
+                // Slow path: open file and read tags
                 let tagArtist: string | undefined;
                 let tagAlbum: string | undefined;
                 let tagTitle: string | undefined;
                 try {
-                    const meta = await parseFile(filePath, { duration: false });
+                    const meta = await parseFile(filePath, {
+                        duration: false,
+                        skipCovers: true,
+                        skipPostHeaders: true,
+                    });
                     tagArtist = meta.common.artist;
                     tagAlbum = meta.common.album;
                     tagTitle = meta.common.title;
@@ -558,7 +634,7 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
                     album: (fromTag ? tagAlbum : albumName) ?? albumName,
                     artist: fromTag ? tagArtist! : artistName,
                     fromTag,
-                    title: fromTag ? tagTitle! : path.basename(fileName, ext),
+                    title: fromTag ? tagTitle! : nameWithoutExt,
                 });
             }
         }
@@ -717,7 +793,146 @@ export interface WatchProgress {
 }
 
 let watchInterval: null | ReturnType<typeof setInterval> = null;
-const uploadedFiles = new Set<string>();
+/** SUBBOX_IDs confirmed present on the server — avoids redundant presence checks. */
+const knownPresentIds = new Set<string>();
+
+// ── SUBBOX_ID tag helpers ──────────────────────────────────────────────────
+
+const SUBBOX_ID_FIELD = 'SUBBOX_ID';
+
+/**
+ * Read the SUBBOX_ID custom tag from any audio file via node-taglib-sharp.
+ * Tries each tag type present on the file in priority order:
+ *   Xiph (FLAC/OGG/OPUS) → ID3v2 (MP3/WAV) → APE → ASF (WMA)
+ * Returns null if the tag is absent or the file cannot be opened.
+ */
+function readSubboxId(filePath: string): string | null {
+    let file: TagLib.File | null = null;
+    try {
+        file = TagLib.File.createFromPath(filePath);
+        const types = file.tagTypes;
+
+        if (types & TagLib.TagTypes.Xiph) {
+            const xiph = file.getTag(TagLib.TagTypes.Xiph, false) as TagLib.XiphComment | null;
+            const val = xiph?.getFieldFirstValue(SUBBOX_ID_FIELD);
+            if (val) return val;
+        }
+
+        if (types & TagLib.TagTypes.Id3v2) {
+            const id3 = file.getTag(TagLib.TagTypes.Id3v2, false) as TagLib.Id3v2Tag | null;
+            if (id3) {
+                const frames = id3.getFramesByClassType<TagLib.Id3v2UserTextInformationFrame>(
+                    TagLib.Id3v2FrameClassType.UserTextInformationFrame,
+                );
+                const frame = TagLib.Id3v2UserTextInformationFrame.findUserTextInformationFrame(
+                    frames,
+                    SUBBOX_ID_FIELD,
+                );
+                if (frame?.text[0]) return frame.text[0];
+            }
+        }
+
+        if (types & TagLib.TagTypes.Ape) {
+            const ape = file.getTag(TagLib.TagTypes.Ape, false) as TagLib.ApeTag | null;
+            const val = ape?.getItem(SUBBOX_ID_FIELD)?.text[0];
+            if (val) return val;
+        }
+
+        if (types & TagLib.TagTypes.Asf) {
+            const asf = file.getTag(TagLib.TagTypes.Asf, false) as TagLib.AsfTag | null;
+            const val = asf?.getDescriptorStrings(SUBBOX_ID_FIELD)[0];
+            if (val) return val;
+        }
+
+        return null;
+    } catch {
+        return null;
+    } finally {
+        file?.dispose();
+    }
+}
+
+/**
+ * Write a SUBBOX_ID custom tag to any audio file via node-taglib-sharp.
+ * Uses the tag type already present on the file (Xiph > ID3v2 > APE > ASF).
+ * Throws if the file cannot be opened or saved — callers decide how to handle.
+ */
+function writeSubboxId(filePath: string, id: string): void {
+    let file: TagLib.File | null = null;
+    try {
+        file = TagLib.File.createFromPath(filePath);
+        const types = file.tagTypes;
+
+        if (types & TagLib.TagTypes.Xiph) {
+            const xiph = file.getTag(TagLib.TagTypes.Xiph, true) as TagLib.XiphComment;
+            xiph.setFieldAsStrings(SUBBOX_ID_FIELD, id);
+        } else if (types & TagLib.TagTypes.Id3v2) {
+            const id3 = file.getTag(TagLib.TagTypes.Id3v2, true) as TagLib.Id3v2Tag;
+            const frames = id3.getFramesByClassType<TagLib.Id3v2UserTextInformationFrame>(
+                TagLib.Id3v2FrameClassType.UserTextInformationFrame,
+            );
+            const existing = TagLib.Id3v2UserTextInformationFrame.findUserTextInformationFrame(
+                frames,
+                SUBBOX_ID_FIELD,
+            );
+            if (existing) {
+                existing.text = [id];
+            } else {
+                const frame = TagLib.Id3v2UserTextInformationFrame.fromDescription(SUBBOX_ID_FIELD);
+                frame.text = [id];
+                id3.addFrame(frame);
+            }
+        } else if (types & TagLib.TagTypes.Ape) {
+            const ape = file.getTag(TagLib.TagTypes.Ape, true) as TagLib.ApeTag;
+            ape.setItem(TagLib.ApeTagItem.fromTextValues(SUBBOX_ID_FIELD, id));
+        } else if (types & TagLib.TagTypes.Asf) {
+            const asf = file.getTag(TagLib.TagTypes.Asf, true) as TagLib.AsfTag;
+            asf.setDescriptorStrings([id], SUBBOX_ID_FIELD);
+        } else {
+            // No recognised tag type — create an ID3v2 tag as the most portable option
+            const id3 = file.getTag(TagLib.TagTypes.Id3v2, true) as TagLib.Id3v2Tag;
+            const frame = TagLib.Id3v2UserTextInformationFrame.fromDescription(SUBBOX_ID_FIELD);
+            frame.text = [id];
+            id3.addFrame(frame);
+        }
+
+        file.save();
+    } finally {
+        file?.dispose();
+    }
+}
+
+/**
+ * Return the existing SUBBOX_ID for a file, or generate a fresh UUID.
+ * Returns null if the file cannot be opened by TagLib — this indicates a partial
+ * or corrupt file (e.g. a download still in progress) and it should be skipped.
+ * If the file is valid but writing the tag fails, the UUID is still returned so
+ * the upload can proceed.
+ */
+function getOrCreateSubboxId(filePath: string): string | null {
+    // Validate the file is a complete, parseable audio file before proceeding.
+    // TagLib throws on truncated or corrupt files, making this a reliable
+    // completeness check that avoids uploading partial downloads.
+    let probe: TagLib.File | null = null;
+    try {
+        probe = TagLib.File.createFromPath(filePath);
+    } catch {
+        return null;
+    } finally {
+        probe?.dispose();
+    }
+
+    const existing = readSubboxId(filePath);
+    if (existing) return existing;
+
+    const newId = randomUUID();
+    try {
+        writeSubboxId(filePath, newId);
+    } catch (err) {
+        console.error(`[subbox-id] Failed to write SUBBOX_ID tag to ${filePath}:`, err);
+    }
+    return newId;
+}
 
 function getAudioFiles(dirPath: string): string[] {
     if (!fs.existsSync(dirPath)) return [];
@@ -757,16 +972,20 @@ ipcMain.handle(
             filebrowserToken: string;
             filebrowserUrl: string;
             pollIntervalMs?: number;
+            pymixUrl: string;
             watchDir: string;
         },
     ): Promise<void> => {
-        const { filebrowserToken, filebrowserUrl, pollIntervalMs = 10000, watchDir } = args;
+        const { filebrowserToken, filebrowserUrl, pollIntervalMs = 10000, pymixUrl, watchDir } =
+            args;
 
         // Stop any existing watcher
         if (watchInterval) {
             clearInterval(watchInterval);
             watchInterval = null;
         }
+        // Clear cached presence so a fresh startup check runs immediately
+        knownPresentIds.clear();
 
         const sendProgress = (progress: WatchProgress) => {
             event.sender.send('sync:watch-progress', progress);
@@ -777,15 +996,53 @@ ipcMain.handle(
                 sendProgress({ currentFile: '', phase: 'scanning', total: 0, uploaded: 0 });
 
                 const audioFiles = getAudioFiles(watchDir);
-                const newFiles = audioFiles.filter((f) => !uploadedFiles.has(f));
-
-                if (newFiles.length === 0) {
+                if (audioFiles.length === 0) {
                     sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
                     return;
                 }
 
+                // Step 1: Tag each file to get its SUBBOX_ID.
+                // getOrCreateSubboxId returns null if TagLib cannot open the file,
+                // which reliably identifies partial/corrupt files (e.g. still downloading).
+                const fileIdMap = new Map<string, string>(); // filePath → subboxId
+                for (const filePath of audioFiles) {
+                    const id = getOrCreateSubboxId(filePath);
+                    if (id !== null) fileIdMap.set(filePath, id);
+                }
+
+                const validFiles = Array.from(fileIdMap.keys());
+                if (validFiles.length === 0) {
+                    sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
+                    return;
+                }
+
+                // Step 2: Only check presence for IDs not already confirmed on the server
+                const uncheckedFiles = validFiles.filter((f) => !knownPresentIds.has(fileIdMap.get(f)!));
+
+                if (uncheckedFiles.length > 0) {
+                    const pymixCookies = await getCookiesForUrl(pymixUrl);
+                    const presenceRes = await axios.post(
+                        `${pymixUrl}/tracks/presence`,
+                        { subbox_ids: uncheckedFiles.map((f) => fileIdMap.get(f)!) },
+                        { headers: { Cookie: pymixCookies }, httpsAgent },
+                    );
+                    const presence: Record<string, boolean> = presenceRes.data.presence;
+
+                    // Cache IDs confirmed present so we skip them on future polls
+                    for (const [id, isPresent] of Object.entries(presence)) {
+                        if (isPresent) knownPresentIds.add(id);
+                    }
+                }
+
+                const missingFiles = validFiles.filter((f) => !knownPresentIds.has(fileIdMap.get(f)!));
+                if (missingFiles.length === 0) {
+                    sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
+                    return;
+                }
+
+                // Step 3: Upload missing files
                 let uploaded = 0;
-                for (const filePath of newFiles) {
+                for (const filePath of missingFiles) {
                     const fileName = path.basename(filePath);
                     const resourcePath = `${filebrowserUrl}/api/resources/watch/${encodeURIComponent(fileName)}?override=false`;
                     const fileContents = fs.readFileSync(filePath);
@@ -793,7 +1050,7 @@ ipcMain.handle(
                     sendProgress({
                         currentFile: fileName,
                         phase: 'uploading',
-                        total: newFiles.length,
+                        total: missingFiles.length,
                         uploaded,
                     });
 
@@ -807,24 +1064,24 @@ ipcMain.handle(
                         });
                     } catch (err) {
                         if (axios.isAxiosError(err) && err.response?.status === 409) {
-                            // File already exists on server, mark as uploaded
+                            // Already on server — count as uploaded
                         } else {
                             console.error(`Failed to upload ${fileName}:`, err);
                             sendProgress({
                                 currentFile: fileName,
                                 phase: 'error',
-                                total: newFiles.length,
+                                total: missingFiles.length,
                                 uploaded,
                             });
                             continue;
                         }
                     }
 
-                    uploadedFiles.add(filePath);
+                    knownPresentIds.add(fileIdMap.get(filePath)!);
                     uploaded++;
                 }
 
-                sendProgress({ currentFile: '', phase: 'idle', total: newFiles.length, uploaded });
+                sendProgress({ currentFile: '', phase: 'idle', total: missingFiles.length, uploaded });
             } catch (err) {
                 console.error('Watch poll error:', err);
                 sendProgress({ currentFile: '', phase: 'error', total: 0, uploaded: 0 });
@@ -846,4 +1103,159 @@ ipcMain.handle('sync:stop-watch', async (): Promise<void> => {
         clearInterval(watchInterval);
         watchInterval = null;
     }
+    knownPresentIds.clear();
 });
+
+// ── External drive comparison ───────────────────────────────────────────────
+
+/**
+ * Recursively scan any directory for audio tracks, reading ID3/metadata tags
+ * first and falling back to path-derived values when tags are unavailable.
+ */
+async function scanDirectoryTracks(rootDir: string): Promise<
+    Array<{ album?: string; artist: string; fromTag: boolean; title: string }>
+> {
+    const audioFiles = getAudioFiles(rootDir);
+
+    const readTrack = async (filePath: string): Promise<{ album?: string; artist: string; fromTag: boolean; title: string }> => {
+        const nameWithoutExt = path.basename(filePath, path.extname(filePath));
+
+        // Derive path-based values (always needed as fallback)
+        const rel = path.relative(rootDir, filePath);
+        const parts = rel.split(path.sep);
+        let pathArtist = '';
+        let pathAlbum: string | undefined;
+        if (parts.length >= 3) {
+            pathArtist = parts[0];
+            pathAlbum = parts[1];
+        } else if (parts.length === 2) {
+            pathArtist = parts[0];
+        }
+
+        // Fast path: parse artist/title directly from the filename
+        const fromFilename = parseFilename(nameWithoutExt);
+        if (fromFilename) {
+            return {
+                album: pathAlbum,
+                artist: fromFilename.artist,
+                fromTag: false,
+                title: fromFilename.title,
+            };
+        }
+
+        // Slow path: open file and read tags
+        let tagArtist: string | undefined;
+        let tagAlbum: string | undefined;
+        let tagTitle: string | undefined;
+        try {
+            const meta = await parseFile(filePath, {
+                duration: false,
+                skipCovers: true,
+                skipPostHeaders: true,
+            });
+            tagArtist = meta.common.artist;
+            tagAlbum = meta.common.album;
+            tagTitle = meta.common.title;
+        } catch {
+            // tag read failed — fall back to path-derived values
+        }
+
+        const fromTag = !!(tagArtist && tagTitle);
+        return {
+            album: fromTag ? tagAlbum : pathAlbum,
+            artist: fromTag ? tagArtist! : pathArtist || 'Unknown',
+            fromTag,
+            title: fromTag ? tagTitle! : nameWithoutExt,
+        };
+    };
+
+    // Process files concurrently, capped to avoid overwhelming the filesystem
+    const CONCURRENCY = 20;
+    const results: Array<{ album?: string; artist: string; fromTag: boolean; title: string }> = new Array(audioFiles.length);
+    const queue = audioFiles.map((f, i) => ({ filePath: f, index: i }));
+
+    await Promise.all(
+        Array.from({ length: CONCURRENCY }, async () => {
+            while (queue.length > 0) {
+                const item = queue.shift()!;
+                results[item.index] = await readTrack(item.filePath);
+            }
+        }),
+    );
+
+    return results;
+}
+
+ipcMain.handle('sync:select-external-drive', async (): Promise<null | string> => {
+    const { dialog: electronDialog } = await import('electron');
+    const result = await electronDialog.showOpenDialog({
+        buttonLabel: 'Select Folder',
+        properties: ['openDirectory'],
+        title: 'Select External Drive or Folder',
+    });
+    return result.filePaths[0] || null;
+});
+
+ipcMain.handle(
+    'sync:scan-external-drive',
+    async (
+        _event,
+        dirPath: string,
+    ): Promise<Array<{ album?: string; artist: string; fileExtension?: string; fromTag: boolean; title: string }>> => {
+        return scanDirectoryTracks(dirPath);
+    },
+);
+
+ipcMain.handle(
+    'sync:download-missing-tracks',
+    async (
+        _event,
+        args: {
+            filebrowserToken: string;
+            filebrowserUrl: string;
+            pymixUrl: string;
+            tracksToDownload: Array<{ album?: string; artist: string; fileExtension?: string; fromTag: boolean; title: string }>;
+        },
+    ): Promise<{ tracksExported: number }> => {
+        const { filebrowserToken, filebrowserUrl, pymixUrl, tracksToDownload } = args;        const pymixCookies = await getCookiesForUrl(pymixUrl);
+
+        // Step 1: Call sync/tracks to prepare the zip on the server
+        const syncResponse = await axios.post(
+            `${pymixUrl}/sync/tracks`,
+            { tracksToDownload },
+            { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
+        );
+
+        if (!syncResponse.data.success) {
+            throw new Error(`Sync failed: ${syncResponse.data.reason}`);
+        }
+
+        const { nTracksExported, zipPath } = syncResponse.data;
+        const zipFileName = `${path.basename(zipPath)}.zip`;
+
+        // Step 2: Download the zip from filebrowser
+        const appPath = getAppPath();
+        if (!fs.existsSync(appPath)) {
+            fs.mkdirSync(appPath, { recursive: true });
+        }
+        const localZipPath = path.join(appPath, zipFileName);
+        await downloadFileFromFilebrowser(
+            filebrowserUrl,
+            filebrowserToken,
+            zipFileName,
+            localZipPath,
+        );
+
+        // Step 3: Unzip and merge into app directory
+        await unzipAndMerge(localZipPath, appPath);
+
+        // Clean up the zip
+        try {
+            fs.unlinkSync(localZipPath);
+        } catch {
+            // ignore cleanup errors
+        }
+
+        return { tracksExported: nTracksExported };
+    },
+);
