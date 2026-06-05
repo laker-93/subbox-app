@@ -7,7 +7,7 @@ COPY package.json pnpm-lock.yaml .
 
 RUN npm install -g pnpm@10.32.1
 
-RUN pnpm install
+RUN pnpm install --ignore-scripts
 
 # Copy code and build with cached modules
 COPY . .
