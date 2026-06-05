@@ -69,4 +69,4 @@ publish:
     owner: laker-93
     repo: subbox-app
     channel: latest
-    releaseType: draft
+    releaseType: release
