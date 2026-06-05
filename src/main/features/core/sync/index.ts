@@ -795,8 +795,6 @@ export interface WatchProgress {
 let watchInterval: null | ReturnType<typeof setInterval> = null;
 /** SUBBOX_IDs confirmed present on the server — avoids redundant presence checks. */
 const knownPresentIds = new Set<string>();
-/** File sizes recorded on the previous poll — used to detect in-progress downloads. */
-const lastSeenSizes = new Map<string, number>();
 
 // ── SUBBOX_ID tag helpers ──────────────────────────────────────────────────
 
@@ -906,18 +904,32 @@ function writeSubboxId(filePath: string, id: string): void {
 
 /**
  * Return the existing SUBBOX_ID for a file, or generate a fresh UUID.
- * If writing the tag fails the UUID is still returned so the file can be
- * uploaded — the server will assign a permanent ID on its side.
+ * Returns null if the file cannot be opened by TagLib — this indicates a partial
+ * or corrupt file (e.g. a download still in progress) and it should be skipped.
+ * If the file is valid but writing the tag fails, the UUID is still returned so
+ * the upload can proceed.
  */
-function getOrCreateSubboxId(filePath: string): string {
+function getOrCreateSubboxId(filePath: string): string | null {
+    // Validate the file is a complete, parseable audio file before proceeding.
+    // TagLib throws on truncated or corrupt files, making this a reliable
+    // completeness check that avoids uploading partial downloads.
+    let probe: TagLib.File | null = null;
+    try {
+        probe = TagLib.File.createFromPath(filePath);
+    } catch {
+        return null;
+    } finally {
+        probe?.dispose();
+    }
+
     const existing = readSubboxId(filePath);
     if (existing) return existing;
 
     const newId = randomUUID();
     try {
         writeSubboxId(filePath, newId);
-    } catch {
-        console.warn(`[subbox-id] Could not write tag to ${filePath}, uploading without persisted ID`);
+    } catch (err) {
+        console.error(`[subbox-id] Failed to write SUBBOX_ID tag to ${filePath}:`, err);
     }
     return newId;
 }
@@ -974,7 +986,6 @@ ipcMain.handle(
         }
         // Clear cached presence so a fresh startup check runs immediately
         knownPresentIds.clear();
-        lastSeenSizes.clear();
 
         const sendProgress = (progress: WatchProgress) => {
             event.sender.send('sync:watch-progress', progress);
@@ -990,32 +1001,23 @@ ipcMain.handle(
                     return;
                 }
 
-                // Step 1: Filter to files with a stable size (complete downloads).
-                // A file is stable when its size matches what we recorded on the previous poll.
-                // New or still-growing files are recorded this poll and skipped until next time.
-                const stableFiles: string[] = [];
+                // Step 1: Tag each file to get its SUBBOX_ID.
+                // getOrCreateSubboxId returns null if TagLib cannot open the file,
+                // which reliably identifies partial/corrupt files (e.g. still downloading).
+                const fileIdMap = new Map<string, string>(); // filePath → subboxId
                 for (const filePath of audioFiles) {
-                    const currentSize = fs.statSync(filePath).size;
-                    if (lastSeenSizes.get(filePath) === currentSize) {
-                        stableFiles.push(filePath);
-                    } else {
-                        lastSeenSizes.set(filePath, currentSize);
-                    }
+                    const id = getOrCreateSubboxId(filePath);
+                    if (id !== null) fileIdMap.set(filePath, id);
                 }
 
-                if (stableFiles.length === 0) {
+                const validFiles = Array.from(fileIdMap.keys());
+                if (validFiles.length === 0) {
                     sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
                     return;
                 }
 
-                // Step 2: Ensure every stable file has a SUBBOX_ID tag
-                const fileIdMap = new Map<string, string>(); // filePath → subboxId
-                for (const filePath of stableFiles) {
-                    fileIdMap.set(filePath, getOrCreateSubboxId(filePath));
-                }
-
-                // Step 3: Only check presence for IDs not already confirmed on the server
-                const uncheckedFiles = stableFiles.filter((f) => !knownPresentIds.has(fileIdMap.get(f)!));
+                // Step 2: Only check presence for IDs not already confirmed on the server
+                const uncheckedFiles = validFiles.filter((f) => !knownPresentIds.has(fileIdMap.get(f)!));
 
                 if (uncheckedFiles.length > 0) {
                     const pymixCookies = await getCookiesForUrl(pymixUrl);
@@ -1032,7 +1034,7 @@ ipcMain.handle(
                     }
                 }
 
-                const missingFiles = stableFiles.filter((f) => !knownPresentIds.has(fileIdMap.get(f)!));
+                const missingFiles = validFiles.filter((f) => !knownPresentIds.has(fileIdMap.get(f)!));
                 if (missingFiles.length === 0) {
                     sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
                     return;
@@ -1102,7 +1104,6 @@ ipcMain.handle('sync:stop-watch', async (): Promise<void> => {
         watchInterval = null;
     }
     knownPresentIds.clear();
-    lastSeenSizes.clear();
 });
 
 // ── External drive comparison ───────────────────────────────────────────────
