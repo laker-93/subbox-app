@@ -67,9 +67,11 @@ export const SyncRekordbox = () => {
     const [progress, setProgress] = useState<null | UploadProgress>(null);
     const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
     const [jobId, setJobId] = useState<null | string>(null);
-    const [uploadResult, setUploadResult] = useState<null | { skipped: number; totalTracksInXml?: number; uploaded: number }>(
-        null,
-    );
+    const [uploadResult, setUploadResult] = useState<null | {
+        skipped: number;
+        totalTracksInXml?: number;
+        uploaded: number;
+    }>(null);
     const [error, setError] = useState<null | string>(null);
     const [storageInfo, setStorageInfo] = useState<null | {
         currentUsageBytes: number;
@@ -188,7 +190,10 @@ export const SyncRekordbox = () => {
                         return;
                     }
                 } catch (storageErr) {
-                    console.warn('[storage-check] pre-flight threw — proceeding anyway:', storageErr);
+                    console.warn(
+                        '[storage-check] pre-flight threw — proceeding anyway:',
+                        storageErr,
+                    );
                     // If the check fails, proceed anyway — the main process will do a precise check
                 }
 

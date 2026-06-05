@@ -28,13 +28,12 @@ export const SyncWatch = () => {
     // Load persisted watch directory and active state on mount
     useEffect(() => {
         if (!localSettings) return;
-        Promise.all([
-            localSettings.get('watch_directory'),
-            localSettings.get('watch_active'),
-        ]).then(([dir, active]) => {
-            if (typeof dir === 'string' && dir.length > 0) setWatchDir(dir);
-            if (active === true) setWatching(true);
-        });
+        Promise.all([localSettings.get('watch_directory'), localSettings.get('watch_active')]).then(
+            ([dir, active]) => {
+                if (typeof dir === 'string' && dir.length > 0) setWatchDir(dir);
+                if (active === true) setWatching(true);
+            },
+        );
     }, []);
 
     // Listen for progress events
@@ -72,14 +71,14 @@ export const SyncWatch = () => {
         });
         setWatching(true);
         localSettings.set('watch_active', true);
-    }, [currentServer.fbToken, localSettings, watchDir]);
+    }, [currentServer.fbToken, watchDir]);
 
     const handleStopWatch = useCallback(async () => {
         if (!ipc || !localSettings) return;
         await ipc.invoke('sync:stop-watch');
         setWatching(false);
         localSettings.set('watch_active', false);
-    }, [localSettings]);
+    }, []);
 
     return (
         <Stack gap="md" p="md">

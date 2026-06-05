@@ -20,7 +20,7 @@ import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
 import { Playlist, PlaylistListSort, SortOrder } from '/@/shared/types/domain-types';
 
-type Step = 'downloading' | 'done' | 'planning' | 'preview' | 'scanning' | 'select';
+type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'scanning' | 'select';
 
 const NOPLAYLIST_ID = 'NOPLAYLIST';
 
@@ -71,9 +71,9 @@ export const SyncExternalDrive = () => {
 
     const handleSelectDrive = useCallback(async () => {
         try {
-            const selected = (await window.api.ipc.invoke(
-                'sync:select-external-drive',
-            )) as null | string;
+            const selected = (await window.api.ipc.invoke('sync:select-external-drive')) as
+                | null
+                | string;
             if (selected) setDrivePath(selected);
         } catch {
             // user cancelled or dialog failed — no-op
@@ -117,7 +117,13 @@ export const SyncExternalDrive = () => {
             const driveTracks = (await window.api.ipc.invoke(
                 'sync:scan-external-drive',
                 drivePath,
-            )) as Array<{ album?: string; artist: string; fileExtension?: string; fromTag: boolean; title: string }>;
+            )) as Array<{
+                album?: string;
+                artist: string;
+                fileExtension?: string;
+                fromTag: boolean;
+                title: string;
+            }>;
 
             setStep('planning');
 
@@ -189,10 +195,14 @@ export const SyncExternalDrive = () => {
             ? playlists
             : playlists.filter((p) => selectedPlaylists.has(p.id));
 
-        const totalSelectedTracks = countedPlaylists.reduce((sum, p) => sum + (p.songCount ?? 0), 0);
-        const tracksLabel = noPlaylistSelected && !allTracks
-            ? `${totalSelectedTracks}+ tracks`
-            : `${totalSelectedTracks} tracks`;
+        const totalSelectedTracks = countedPlaylists.reduce(
+            (sum, p) => sum + (p.songCount ?? 0),
+            0,
+        );
+        const tracksLabel =
+            noPlaylistSelected && !allTracks
+                ? `${totalSelectedTracks}+ tracks`
+                : `${totalSelectedTracks} tracks`;
 
         return (
             <Stack gap="md" p="xl" style={{ height: '100%', overflow: 'auto' }}>
@@ -247,7 +257,13 @@ export const SyncExternalDrive = () => {
                         <Button
                             onClick={handleSelectAll}
                             size="xs"
-                            variant={!allTracks && selectedPlaylists.has(NOPLAYLIST_ID) && selectedPlaylists.size === playlists.length + 1 ? 'filled' : 'subtle'}
+                            variant={
+                                !allTracks &&
+                                selectedPlaylists.has(NOPLAYLIST_ID) &&
+                                selectedPlaylists.size === playlists.length + 1
+                                    ? 'filled'
+                                    : 'subtle'
+                            }
                         >
                             Select all
                         </Button>
