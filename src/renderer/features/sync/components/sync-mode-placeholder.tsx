@@ -2,6 +2,7 @@ import isElectron from 'is-electron';
 import { Suspense, useState } from 'react';
 
 import { SyncDownload } from '/@/renderer/features/sync/components/sync-download';
+// import { SyncExternalDrive } from '/@/renderer/features/sync/components/sync-external-drive'; // not yet released
 import { SyncRekordbox } from '/@/renderer/features/sync/components/sync-rekordbox';
 import { SyncWatch } from '/@/renderer/features/sync/components/sync-watch';
 import { Button } from '/@/shared/components/button/button';
@@ -10,7 +11,7 @@ import { Group } from '/@/shared/components/group/group';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 
-type SyncTab = 'download' | 'upload' | 'watch';
+type SyncTab = 'download' | 'external-drive' | 'upload' | 'watch';
 
 export const SyncModePlaceholder = () => {
     const electron = isElectron();
@@ -40,6 +41,17 @@ export const SyncModePlaceholder = () => {
                 >
                     Watch
                 </Button>
+                {/* External Drive tab — not yet released
+                {electron && (
+                    <Button
+                        onClick={() => setTab('external-drive')}
+                        size="sm"
+                        variant={tab === 'external-drive' ? 'filled' : 'subtle'}
+                    >
+                        External Drive
+                    </Button>
+                )}
+                */}
             </Group>
             <div style={{ flex: 1, overflow: 'hidden' }}>
                 {tab === 'upload' &&
@@ -73,6 +85,19 @@ export const SyncModePlaceholder = () => {
                             </Text>
                         </Center>
                     ))}
+                {/* External Drive tab content — not yet released
+                {tab === 'external-drive' && (
+                    <Suspense
+                        fallback={
+                            <Center style={{ height: '100%' }}>
+                                <Spinner />
+                            </Center>
+                        }
+                    >
+                        <SyncExternalDrive />
+                    </Suspense>
+                )}
+                */}
             </div>
         </div>
     );

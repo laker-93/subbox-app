@@ -61,6 +61,10 @@ type SyncPlaylistsArgs = {
     body: z.infer<typeof pymixType._parameters.syncPlaylists>;
 };
 
+type SyncTracksArgs = {
+    body: z.infer<typeof pymixType._parameters.syncTracks>;
+};
+
 type ValidateTokenArgs = {
     query: z.infer<typeof pymixType._parameters.isValidToken>;
 };
@@ -237,6 +241,17 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to sync playlists');
+        }
+
+        return res.body.data;
+    },
+
+    syncTracks: async (args: PymixClientArgs & SyncTracksArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).syncTracks({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to sync tracks');
         }
 
         return res.body.data;

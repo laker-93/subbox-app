@@ -25,14 +25,15 @@ export const SyncWatch = () => {
     const [watching, setWatching] = useState(false);
     const [progress, setProgress] = useState<null | WatchProgress>(null);
 
-    // Load persisted watch directory on mount
+    // Load persisted watch directory and active state on mount
     useEffect(() => {
         if (!localSettings) return;
-        localSettings.get('watch_directory').then((val: unknown) => {
-            if (typeof val === 'string' && val.length > 0) {
-                setWatchDir(val);
-            }
-        });
+        Promise.all([localSettings.get('watch_directory'), localSettings.get('watch_active')]).then(
+            ([dir, active]) => {
+                if (typeof dir === 'string' && dir.length > 0) setWatchDir(dir);
+                if (active === true) setWatching(true);
+            },
+        );
     }, []);
 
     // Listen for progress events
@@ -47,14 +48,9 @@ export const SyncWatch = () => {
         };
     }, []);
 
-    // Stop watcher on unmount
-    useEffect(() => {
-        return () => {
-            if (watching && ipc) {
-                ipc.invoke('sync:stop-watch').catch(console.error);
-            }
-        };
-    }, [watching]);
+    // Stop watcher on unmount is intentionally omitted — the watcher runs in the
+    // main process and should persist while the app is open, surviving navigation.
+    // Call sync:stop-watch explicitly via handleStopWatch to end it.
 
     const handleSelectDirectory = useCallback(async () => {
         if (!ipc || !localSettings) return;
@@ -66,20 +62,22 @@ export const SyncWatch = () => {
     }, []);
 
     const handleStartWatch = useCallback(async () => {
-        if (!ipc || !watchDir) return;
+        if (!ipc || !watchDir || !localSettings) return;
         await ipc.invoke('sync:start-watch', {
             filebrowserToken: currentServer.fbToken,
             filebrowserUrl: urlConfig.filebrowser,
+            pymixUrl: urlConfig.pymix,
             watchDir,
         });
         setWatching(true);
+        localSettings.set('watch_active', true);
     }, [currentServer.fbToken, watchDir]);
 
     const handleStopWatch = useCallback(async () => {
-        if (!ipc) return;
+        if (!ipc || !localSettings) return;
         await ipc.invoke('sync:stop-watch');
         setWatching(false);
-        setProgress(null);
+        localSettings.set('watch_active', false);
     }, []);
 
     return (
