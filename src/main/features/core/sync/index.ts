@@ -816,6 +816,10 @@ function getAudioFiles(dirPath: string): string[] {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
     for (const entry of entries) {
+        // Skip hidden directories (e.g. .Spotlight-V100, .fseventsd) — they are
+        // macOS system folders that are not readable without elevated permissions.
+        if (entry.isDirectory() && entry.name.startsWith('.')) continue;
+
         const fullPath = path.join(dirPath, entry.name);
         if (entry.isDirectory()) {
             files.push(...getAudioFiles(fullPath));
