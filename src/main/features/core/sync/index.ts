@@ -10,6 +10,14 @@ import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
+/**
+ * Send a session-expired event to the renderer that triggered the IPC call.
+ * The renderer's global handler will log the user out automatically.
+ */
+function sendSessionExpired(event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): void {
+    event.sender.send('sync:session-expired');
+}
+
 /** Lightweight playlist info sent to renderer for preview (no file paths). */
 export interface PlaylistPreview {
     name: string;
@@ -1111,6 +1119,19 @@ ipcMain.handle(
                 });
             } catch (err) {
                 console.error('Watch poll error:', err);
+
+                // Any HTTP error response from an endpoint means the session is invalid.
+                // Stop polling and signal the renderer to log out.
+                if (axios.isAxiosError(err) && err.response) {
+                    if (watchInterval) {
+                        clearInterval(watchInterval);
+                        watchInterval = null;
+                    }
+                    knownPresentIds.clear();
+                    sendSessionExpired(event);
+                    return;
+                }
+
                 sendProgress({ currentFile: '', phase: 'error', total: 0, uploaded: 0 });
             }
         };
