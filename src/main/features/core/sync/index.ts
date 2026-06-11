@@ -8,6 +8,13 @@ import * as TagLib from 'node-taglib-sharp';
 import * as path from 'path';
 import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
+
+import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
+import {
+    extractPlaylists,
+    ParsedPlaylist,
+    ParsedTrack,
+} from '/@/main/features/core/sync/rekordbox-xml';
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 /** Lightweight playlist info sent to renderer for preview (no file paths). */
@@ -16,12 +23,6 @@ export interface PlaylistPreview {
     path: string[];
     trackCount: number;
 }
-import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
-import {
-    extractPlaylists,
-    ParsedPlaylist,
-    ParsedTrack,
-} from '/@/main/features/core/sync/rekordbox-xml';
 
 export interface UploadProgress {
     activeTracks?: string[];
@@ -48,6 +49,14 @@ type LocalTrack = {
 async function getCookiesForUrl(url: string): Promise<string> {
     const cookies = await session.defaultSession.cookies.get({ url });
     return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+}
+
+/**
+ * Send a session-expired event to the renderer that triggered the IPC call.
+ * The renderer's global handler will log the user out automatically.
+ */
+function sendSessionExpired(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
+    event.sender.send('sync:session-expired');
 }
 
 // ── Parse XML → return playlist previews ───────────────────────────────────
@@ -816,6 +825,10 @@ function getAudioFiles(dirPath: string): string[] {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 
     for (const entry of entries) {
+        // Skip hidden directories (e.g. .Spotlight-V100, .fseventsd) — they are
+        // macOS system folders that are not readable without elevated permissions.
+        if (entry.isDirectory() && entry.name.startsWith('.')) continue;
+
         const fullPath = path.join(dirPath, entry.name);
         if (entry.isDirectory()) {
             files.push(...getAudioFiles(fullPath));
@@ -1107,6 +1120,19 @@ ipcMain.handle(
                 });
             } catch (err) {
                 console.error('Watch poll error:', err);
+
+                // Any HTTP error response from an endpoint means the session is invalid.
+                // Stop polling and signal the renderer to log out.
+                if (axios.isAxiosError(err) && err.response) {
+                    if (watchInterval) {
+                        clearInterval(watchInterval);
+                        watchInterval = null;
+                    }
+                    knownPresentIds.clear();
+                    sendSessionExpired(event);
+                    return;
+                }
+
                 sendProgress({ currentFile: '', phase: 'error', total: 0, uploaded: 0 });
             }
         };
