@@ -43,6 +43,19 @@ export const App = () => {
     useSyncSettingsToMain();
     useCheckForUpdates();
 
+    useEffect(() => {
+        if (!isElectron() || !ipc) return;
+        // Global handler: any main-process endpoint failure sends this event.
+        // Log the user out so they can re-authenticate.
+        const handler = () => {
+            useAuthStore.getState().actions.setCurrentServer(null);
+        };
+        ipc.on('sync:session-expired', handler);
+        return () => {
+            ipc.removeListener('sync:session-expired', handler);
+        };
+    }, []);
+
     // Auto-resume watch directory on app launch if it was active before shutdown
     useEffect(() => {
         if (!isElectron() || !ipc) return;

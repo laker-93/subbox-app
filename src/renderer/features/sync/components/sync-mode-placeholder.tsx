@@ -2,7 +2,7 @@ import isElectron from 'is-electron';
 import { Suspense, useState } from 'react';
 
 import { SyncDownload } from '/@/renderer/features/sync/components/sync-download';
-// import { SyncExternalDrive } from '/@/renderer/features/sync/components/sync-external-drive'; // not yet released
+import { SyncExternalDrive } from '/@/renderer/features/sync/components/sync-external-drive';
 import { SyncRekordbox } from '/@/renderer/features/sync/components/sync-rekordbox';
 import { SyncWatch } from '/@/renderer/features/sync/components/sync-watch';
 import { Button } from '/@/shared/components/button/button';
@@ -41,7 +41,6 @@ export const SyncModePlaceholder = () => {
                 >
                     Watch
                 </Button>
-                {/* External Drive tab — not yet released
                 {electron && (
                     <Button
                         onClick={() => setTab('external-drive')}
@@ -51,7 +50,6 @@ export const SyncModePlaceholder = () => {
                         External Drive
                     </Button>
                 )}
-                */}
             </Group>
             <div style={{ flex: 1, overflow: 'hidden' }}>
                 {tab === 'upload' &&
@@ -85,7 +83,6 @@ export const SyncModePlaceholder = () => {
                             </Text>
                         </Center>
                     ))}
-                {/* External Drive tab content — not yet released
                 {tab === 'external-drive' && (
                     <Suspense
                         fallback={
@@ -97,7 +94,6 @@ export const SyncModePlaceholder = () => {
                         <SyncExternalDrive />
                     </Suspense>
                 )}
-                */}
             </div>
         </div>
     );
