@@ -8,15 +8,14 @@ import * as TagLib from 'node-taglib-sharp';
 import * as path from 'path';
 import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-/**
- * Send a session-expired event to the renderer that triggered the IPC call.
- * The renderer's global handler will log the user out automatically.
- */
-function sendSessionExpired(event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): void {
-    event.sender.send('sync:session-expired');
-}
+import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
+import {
+    extractPlaylists,
+    ParsedPlaylist,
+    ParsedTrack,
+} from '/@/main/features/core/sync/rekordbox-xml';
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 /** Lightweight playlist info sent to renderer for preview (no file paths). */
 export interface PlaylistPreview {
@@ -24,12 +23,6 @@ export interface PlaylistPreview {
     path: string[];
     trackCount: number;
 }
-import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
-import {
-    extractPlaylists,
-    ParsedPlaylist,
-    ParsedTrack,
-} from '/@/main/features/core/sync/rekordbox-xml';
 
 export interface UploadProgress {
     activeTracks?: string[];
@@ -56,6 +49,14 @@ type LocalTrack = {
 async function getCookiesForUrl(url: string): Promise<string> {
     const cookies = await session.defaultSession.cookies.get({ url });
     return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+}
+
+/**
+ * Send a session-expired event to the renderer that triggered the IPC call.
+ * The renderer's global handler will log the user out automatically.
+ */
+function sendSessionExpired(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
+    event.sender.send('sync:session-expired');
 }
 
 // ── Parse XML → return playlist previews ───────────────────────────────────
