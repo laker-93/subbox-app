@@ -235,6 +235,46 @@ const syncTracksParameters = z.object({
     tracksToDownload: z.array(track),
 });
 
+// --- Wishlist types ---
+
+const wishlistItem = z.object({
+    album: z.string().optional(),
+    artist: z.string(),
+    createdAt: z.string(),
+    id: z.string(),
+    linkedTrackId: z.string().optional(),
+    status: z.enum(['wishlist', 'downloaded', 'imported', 'available', 'ignored']),
+    title: z.string(),
+    updatedAt: z.string(),
+    youtubeUrl: z.string().optional(),
+    youtubeVideoId: z.string().optional(),
+});
+
+const wishlistList = z.object({
+    items: z.array(wishlistItem),
+    totalRecordCount: z.number(),
+});
+
+const wishlistCreateUpdateResponse = wishlistItem;
+
+const wishlistDeleteResponse = z.null();
+
+const matchYoutubeResponse = z.object({
+    youtubeUrl: z.string().optional(),
+    youtubeVideoId: z.string().optional(),
+});
+
+const wishlistCreateParameters = z.object({
+    album: z.string().optional(),
+    artist: z.string(),
+    title: z.string(),
+});
+
+const wishlistUpdateParameters = z.object({
+    album: z.string().optional(),
+    status: z.enum(['wishlist', 'downloaded', 'imported', 'available', 'ignored']).optional(),
+});
+
 export const pymixType = {
     _parameters: {
         create: createParameters,
@@ -252,6 +292,8 @@ export const pymixType = {
         syncPlan: syncPlanParameters,
         syncPlaylists: syncPlaylistsParameters,
         syncTracks: syncTracksParameters,
+        wishlistCreate: wishlistCreateParameters,
+        wishlistUpdate: wishlistUpdateParameters,
     },
     _response: {
         beetsImportProgress,
@@ -265,6 +307,7 @@ export const pymixType = {
         librarySize,
         login,
         matchTracks,
+        matchYoutubeResponse,
         rbImport,
         seratoImport,
         storageCheck,
@@ -272,5 +315,9 @@ export const pymixType = {
         syncPlan,
         syncPlaylists,
         syncTracks: syncPlaylists,
+        wishlistCreateUpdateResponse,
+        wishlistDeleteResponse,
+        wishlistItem,
+        wishlistList,
     },
 };

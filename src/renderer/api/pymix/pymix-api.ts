@@ -170,6 +170,48 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    wishlistCreate: {
+        body: pymixType._parameters.wishlistCreate,
+        method: 'POST',
+        path: 'wishlist',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistCreateUpdateResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistDelete: {
+        method: 'DELETE',
+        path: 'wishlist/:id',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistDeleteResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistList: {
+        method: 'GET',
+        path: 'wishlist',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistList),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistMatchYoutube: {
+        method: 'POST',
+        path: 'wishlist/:id/match-youtube',
+        responses: {
+            200: resultWithHeaders(pymixType._response.matchYoutubeResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistUpdate: {
+        body: pymixType._parameters.wishlistUpdate,
+        method: 'PATCH',
+        path: 'wishlist/:id',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistCreateUpdateResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
 });
 
 const axiosClient = axios.create({ withCredentials: true });
