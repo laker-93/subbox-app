@@ -73,16 +73,20 @@ type WishlistCreateArgs = {
     body: z.infer<typeof pymixType._parameters.wishlistCreate>;
 };
 
-type WishlistUpdateArgs = {
-    body: z.infer<typeof pymixType._parameters.wishlistUpdate>;
-};
-
 type WishlistDeleteArgs = {
     params: { id: string };
 };
 
 type WishlistMatchYoutubeArgs = {
     params: { id: string };
+};
+
+type WishlistSetSheetArgs = {
+    body: z.infer<typeof pymixType._parameters.wishlistSetSheet>;
+};
+
+type WishlistUpdateArgs = {
+    body: z.infer<typeof pymixType._parameters.wishlistUpdate>;
 };
 
 export const PymixController = {
@@ -319,7 +323,9 @@ export const PymixController = {
 
     wishlistMatchYoutube: async (args: PymixClientArgs & WishlistMatchYoutubeArgs) => {
         const { baseUrl, params, signal, token } = args;
-        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistMatchYoutube({ params });
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistMatchYoutube({
+            params,
+        });
 
         if (res.status !== 200) {
             throw new Error('Failed to match YouTube video');
@@ -328,9 +334,23 @@ export const PymixController = {
         return res.body.data;
     },
 
-    wishlistUpdate: async (args: PymixClientArgs & WishlistUpdateArgs & WishlistDeleteArgs) => {
+    wishlistSetSheet: async (args: PymixClientArgs & WishlistSetSheetArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistSetSheet({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to set wishlist sheet');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistUpdate: async (args: PymixClientArgs & WishlistDeleteArgs & WishlistUpdateArgs) => {
         const { baseUrl, body, params, signal, token } = args;
-        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistUpdate({ body, params });
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistUpdate({
+            body,
+            params,
+        });
 
         if (res.status !== 200) {
             throw new Error('Failed to update wishlist item');

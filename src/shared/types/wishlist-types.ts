@@ -1,35 +1,32 @@
-export type WishlistStatus = 'wishlist' | 'downloaded' | 'imported' | 'available' | 'ignored';
+import { z } from 'zod';
 
-export type WishlistItem = {
-    id: string;
-    artist: string;
-    title: string;
-    album?: string;
-    status: WishlistStatus;
-    youtubeVideoId?: string;
-    youtubeUrl?: string;
-    linkedTrackId?: string;
-    createdAt: string;
-    updatedAt: string;
-};
+import { pymixType } from '/@/shared/api/pymix/pymix-types';
 
-export type WishlistListResponse = {
-    items: WishlistItem[];
-    totalRecordCount: number;
-};
+export type WishlistItem = z.infer<typeof pymixType._response.wishlistItem>;
 
-export type CreateWishlistItemRequest = {
-    artist: string;
-    title: string;
-    album?: string;
-};
+export type WishlistStatus = WishlistItem['status'];
 
-export type UpdateWishlistItemRequest = {
-    status?: WishlistStatus;
-    album?: string;
-};
+export const WISHLIST_STATUSES: WishlistStatus[] = [
+    'inbox',
+    'wishlist',
+    'downloaded',
+    'imported',
+    'available',
+    'ignored',
+];
 
-export type MatchYoutubeResponse = {
-    youtubeVideoId?: string;
-    youtubeUrl?: string;
-};
+export type CreateWishlistItemRequest = z.infer<typeof pymixType._parameters.wishlistCreate>;
+
+export type MatchYoutubeResponse = z.infer<typeof pymixType._response.matchYoutubeResponse>;
+
+export type UpdateWishlistItemRequest = z.infer<typeof pymixType._parameters.wishlistUpdate>;
+
+export type WishlistItemResponse = z.infer<typeof pymixType._response.wishlistItemResponse>;
+
+export type WishlistListResponse = z.infer<typeof pymixType._response.wishlistList>;
+
+export type WishlistSetSheetRequest = z.infer<typeof pymixType._parameters.wishlistSetSheet>;
+
+export type WishlistSetSheetResponse = z.infer<typeof pymixType._response.wishlistSetSheetResponse>;
+
+export type YoutubeMatch = z.infer<typeof pymixType._response.youtubeMatch>;

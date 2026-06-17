@@ -237,42 +237,78 @@ const syncTracksParameters = z.object({
 
 // --- Wishlist types ---
 
+const wishlistStatus = z.enum([
+    'inbox',
+    'wishlist',
+    'downloaded',
+    'imported',
+    'available',
+    'ignored',
+]);
+
 const wishlistItem = z.object({
-    album: z.string().optional(),
+    album: z.string().nullable().optional(),
     artist: z.string(),
-    createdAt: z.string(),
-    id: z.string(),
-    linkedTrackId: z.string().optional(),
-    status: z.enum(['wishlist', 'downloaded', 'imported', 'available', 'ignored']),
+    created_at: z.number().nullable().optional(),
+    linked_subbox_id: z.string().nullable().optional(),
+    raw_note: z.string().nullable().optional(),
+    status: wishlistStatus,
     title: z.string(),
-    updatedAt: z.string(),
-    youtubeUrl: z.string().optional(),
-    youtubeVideoId: z.string().optional(),
+    updated_at: z.number().nullable().optional(),
+    user_id: z.string(),
+    wishlist_id: z.string(),
+    youtube_url: z.string().nullable().optional(),
+    youtube_video_id: z.string().nullable().optional(),
 });
 
 const wishlistList = z.object({
     items: z.array(wishlistItem),
-    totalRecordCount: z.number(),
 });
 
-const wishlistCreateUpdateResponse = wishlistItem;
+const wishlistItemResponse = z.object({
+    item: wishlistItem,
+});
 
-const wishlistDeleteResponse = z.null();
+const wishlistDeleteResponse = z.object({
+    success: z.boolean(),
+});
+
+const youtubeMatch = z.object({
+    confidence: z.number(),
+    youtube_title: z.string(),
+    youtube_url: z.string(),
+    youtube_video_id: z.string(),
+});
 
 const matchYoutubeResponse = z.object({
-    youtubeUrl: z.string().optional(),
-    youtubeVideoId: z.string().optional(),
+    item: wishlistItem,
+    matches: z.array(youtubeMatch),
 });
 
 const wishlistCreateParameters = z.object({
     album: z.string().optional(),
     artist: z.string(),
     title: z.string(),
+    youtube_url: z.string().optional(),
+    youtube_video_id: z.string().optional(),
+});
+
+const wishlistSetSheetParameters = z.object({
+    sheet_id: z.string(),
+});
+
+const wishlistSetSheetResponse = z.object({
+    success: z.boolean(),
 });
 
 const wishlistUpdateParameters = z.object({
     album: z.string().optional(),
-    status: z.enum(['wishlist', 'downloaded', 'imported', 'available', 'ignored']).optional(),
+    artist: z.string().optional(),
+    linked_subbox_id: z.string().optional(),
+    status: wishlistStatus.optional(),
+    title: z.string().optional(),
+    youtube_url: z.string().nullable().optional(),
+    youtube_video_id: z.string().nullable().optional(),
 });
 
 export const pymixType = {
@@ -293,6 +329,7 @@ export const pymixType = {
         syncPlaylists: syncPlaylistsParameters,
         syncTracks: syncTracksParameters,
         wishlistCreate: wishlistCreateParameters,
+        wishlistSetSheet: wishlistSetSheetParameters,
         wishlistUpdate: wishlistUpdateParameters,
     },
     _response: {
@@ -315,9 +352,11 @@ export const pymixType = {
         syncPlan,
         syncPlaylists,
         syncTracks: syncPlaylists,
-        wishlistCreateUpdateResponse,
         wishlistDeleteResponse,
         wishlistItem,
+        wishlistItemResponse,
         wishlistList,
+        wishlistSetSheetResponse,
+        youtubeMatch,
     },
 };

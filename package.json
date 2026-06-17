@@ -28,6 +28,7 @@
         "build:electron:staging": "electron-vite build --mode staging",
         "build:remote:staging": "vite build --config remote.vite.config.ts --mode staging",
         "build:web": "vite build --config web.vite.config.ts",
+        "build:web:development": "vite build --config web.vite.config.ts --mode development",
         "build:web:staging": "vite build --config web.vite.config.ts --mode staging",
         "dev": "electron-vite dev",
         "prod": "pnpm run build && electron-vite preview",
