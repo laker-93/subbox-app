@@ -51,5 +51,12 @@ export default tseslint.config(
             'single-attribute-per-line': 'off',
         },
     },
+    {
+        files: ['scripts/**/*.mjs'],
+        rules: {
+            // Plain JS tooling scripts — there's no syntax here to express a return type.
+            '@typescript-eslint/explicit-function-return-type': 'off',
+        },
+    },
     eslintConfigPrettier,
 );
