@@ -9,6 +9,7 @@ import { useUpdateWishlistItem } from '/@/renderer/features/wishlist/hooks/use-u
 import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
+import { Icon } from '/@/shared/components/icon/icon';
 import { closeAllModals, ConfirmModal, openModal } from '/@/shared/components/modal/modal';
 import { Paper } from '/@/shared/components/paper/paper';
 import { Stack } from '/@/shared/components/stack/stack';
@@ -26,6 +27,7 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
     const deleteMutation = useDeleteWishlistItem({});
     const matchMutation = useMatchYoutube({});
 
+    const [expanded, setExpanded] = useState(false);
     const [candidates, setCandidates] = useState<null | YoutubeMatch[]>(null);
     const [candidateIndex, setCandidateIndex] = useState(0);
 
@@ -120,22 +122,38 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
     };
 
     const candidate = candidates?.[candidateIndex];
+    const isInbox = item.status === 'inbox';
 
-    if (item.status === 'inbox') {
-        return (
-            <Paper p="md">
-                <Flex align="flex-start" gap="md" justify="space-between">
-                    <Stack gap="xs" style={{ flex: 1 }}>
-                        <Group gap="sm">
-                            <Text fw={500} size="md">
-                                {item.raw_note}
-                            </Text>
-                            <WishlistStatusBadge status={item.status} />
-                        </Group>
-                        <Text isMuted size="sm">
-                            {t('page.wishlist.inboxRawNote', { postProcess: 'sentenceCase' })}
+    return (
+        <Paper p="sm">
+            <Flex
+                align="center"
+                gap="sm"
+                justify="space-between"
+                onClick={() => setExpanded((prev) => !prev)}
+                style={{ cursor: 'pointer' }}
+            >
+                <Group gap="sm" style={{ flex: 1, minWidth: 0 }} wrap="nowrap">
+                    <Text fw={500} size="sm" truncate>
+                        {isInbox ? item.raw_note : item.title}
+                    </Text>
+                    {!isInbox && (
+                        <Text isMuted size="sm" truncate>
+                            {item.artist}
+                            {item.album ? ` — ${item.album}` : ''}
                         </Text>
-                    </Stack>
+                    )}
+                </Group>
+                <Group gap="xs" wrap="nowrap">
+                    <WishlistStatusBadge status={item.status} />
+                    <Icon color="muted" icon={expanded ? 'arrowUpS' : 'arrowDownS'} size="sm" />
+                </Group>
+            </Flex>
+            {expanded && isInbox && (
+                <Stack gap="xs" mt="sm">
+                    <Text isMuted size="sm">
+                        {t('page.wishlist.inboxRawNote', { postProcess: 'sentenceCase' })}
+                    </Text>
                     <Group gap="xs" wrap="wrap">
                         <Button onClick={handleEditEntry} size="sm" variant="default">
                             {t('action.editWishlistItem', { postProcess: 'sentenceCase' })}
@@ -144,25 +162,10 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
                             {t('common.delete', { postProcess: 'sentenceCase' })}
                         </Button>
                     </Group>
-                </Flex>
-            </Paper>
-        );
-    }
-
-    return (
-        <Paper p="md">
-            <Flex align="flex-start" gap="md" justify="space-between">
-                <Stack gap="xs" style={{ flex: 1 }}>
-                    <Group gap="sm">
-                        <Text fw={500} size="md">
-                            {item.title}
-                        </Text>
-                        <WishlistStatusBadge status={item.status} />
-                    </Group>
-                    <Text isMuted size="sm">
-                        {item.artist}
-                        {item.album ? ` — ${item.album}` : ''}
-                    </Text>
+                </Stack>
+            )}
+            {expanded && !isInbox && (
+                <Stack gap="xs" mt="sm">
                     {candidate ? (
                         <Stack gap="xs">
                             <div style={{ aspectRatio: '16 / 9', maxWidth: 400 }}>
@@ -258,55 +261,67 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
                             </Button>
                         </Group>
                     )}
-                </Stack>
-                <Group gap="xs" wrap="wrap">
-                    {item.status === 'wishlist' && (
-                        <>
+                    <Group gap="xs" wrap="wrap">
+                        {item.status === 'wishlist' && (
+                            <>
+                                <Button
+                                    onClick={() => setStatus('downloaded')}
+                                    size="sm"
+                                    variant="default"
+                                >
+                                    {t('action.markDownloaded', { postProcess: 'sentenceCase' })}
+                                </Button>
+                                <Button
+                                    onClick={() => setStatus('ignored')}
+                                    size="sm"
+                                    variant="subtle"
+                                >
+                                    {t('action.ignore', { postProcess: 'sentenceCase' })}
+                                </Button>
+                            </>
+                        )}
+                        {item.status === 'downloaded' && (
+                            <>
+                                <Button
+                                    onClick={() => setStatus('imported')}
+                                    size="sm"
+                                    variant="default"
+                                >
+                                    {t('action.markImported', { postProcess: 'sentenceCase' })}
+                                </Button>
+                                <Button
+                                    onClick={() => setStatus('wishlist')}
+                                    size="sm"
+                                    variant="subtle"
+                                >
+                                    {t('action.markWishlist', { postProcess: 'sentenceCase' })}
+                                </Button>
+                            </>
+                        )}
+                        {item.status === 'imported' && (
                             <Button
-                                onClick={() => setStatus('downloaded')}
+                                onClick={() => setStatus('available')}
                                 size="sm"
                                 variant="default"
                             >
-                                {t('action.markDownloaded', { postProcess: 'sentenceCase' })}
+                                {t('action.markAvailable', { postProcess: 'sentenceCase' })}
                             </Button>
-                            <Button onClick={() => setStatus('ignored')} size="sm" variant="subtle">
-                                {t('action.ignore', { postProcess: 'sentenceCase' })}
-                            </Button>
-                        </>
-                    )}
-                    {item.status === 'downloaded' && (
-                        <>
-                            <Button
-                                onClick={() => setStatus('imported')}
-                                size="sm"
-                                variant="default"
-                            >
-                                {t('action.markImported', { postProcess: 'sentenceCase' })}
-                            </Button>
+                        )}
+                        {item.status === 'ignored' && (
                             <Button
                                 onClick={() => setStatus('wishlist')}
                                 size="sm"
-                                variant="subtle"
+                                variant="default"
                             >
                                 {t('action.markWishlist', { postProcess: 'sentenceCase' })}
                             </Button>
-                        </>
-                    )}
-                    {item.status === 'imported' && (
-                        <Button onClick={() => setStatus('available')} size="sm" variant="default">
-                            {t('action.markAvailable', { postProcess: 'sentenceCase' })}
+                        )}
+                        <Button onClick={handleDelete} size="sm" variant="state-error">
+                            {t('common.delete', { postProcess: 'sentenceCase' })}
                         </Button>
-                    )}
-                    {item.status === 'ignored' && (
-                        <Button onClick={() => setStatus('wishlist')} size="sm" variant="default">
-                            {t('action.markWishlist', { postProcess: 'sentenceCase' })}
-                        </Button>
-                    )}
-                    <Button onClick={handleDelete} size="sm" variant="state-error">
-                        {t('common.delete', { postProcess: 'sentenceCase' })}
-                    </Button>
-                </Group>
-            </Flex>
+                    </Group>
+                </Stack>
+            )}
         </Paper>
     );
 };
