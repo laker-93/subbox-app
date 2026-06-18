@@ -5,3 +5,5 @@ out
 .eslintcache
 *.log*
 release
+.env.ui-snapshot.local*
+.ui-snapshots
