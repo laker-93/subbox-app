@@ -301,6 +301,12 @@ const wishlistSetSheetResponse = z.object({
     success: z.boolean(),
 });
 
+const wishlistSheetStatusResponse = z.object({
+    configured: z.boolean(),
+    error: z.string().nullable(),
+    status: z.enum(['ok', 'error']).nullable(),
+});
+
 const wishlistUpdateParameters = z.object({
     album: z.string().optional(),
     artist: z.string().optional(),
@@ -357,6 +363,7 @@ export const pymixType = {
         wishlistItemResponse,
         wishlistList,
         wishlistSetSheetResponse,
+        wishlistSheetStatusResponse,
         youtubeMatch,
     },
 };

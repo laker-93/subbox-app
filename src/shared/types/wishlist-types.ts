@@ -29,4 +29,8 @@ export type WishlistSetSheetRequest = z.infer<typeof pymixType._parameters.wishl
 
 export type WishlistSetSheetResponse = z.infer<typeof pymixType._response.wishlistSetSheetResponse>;
 
+export type WishlistSheetStatusResponse = z.infer<
+    typeof pymixType._response.wishlistSheetStatusResponse
+>;
+
 export type YoutubeMatch = z.infer<typeof pymixType._response.youtubeMatch>;

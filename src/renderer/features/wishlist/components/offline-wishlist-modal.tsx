@@ -1,12 +1,15 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { t } from 'i18next';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { queryKeys } from '/@/renderer/api/query-keys';
 import {
     WISHLIST_SHEET_SERVICE_ACCOUNT_EMAIL,
     WISHLIST_SHEET_TEMPLATE_COPY_URL,
 } from '/@/renderer/features/wishlist/constants';
 import { useSetWishlistSheet } from '/@/renderer/features/wishlist/hooks/use-set-wishlist-sheet';
+import { useCurrentServerId } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
 import { CopyButton } from '/@/shared/components/copy-button/copy-button';
@@ -24,6 +27,8 @@ const SHEET_ID_RE = /\/d\/([a-zA-Z0-9-_]+)/;
 
 const OfflineWishlistContent = () => {
     const { t } = useTranslation();
+    const queryClient = useQueryClient();
+    const serverId = useCurrentServerId();
     const mutation = useSetWishlistSheet({});
     const [sheetUrl, setSheetUrl] = useState('');
 
@@ -53,6 +58,9 @@ const OfflineWishlistContent = () => {
                         message: t('page.wishlist.offlineWishlist.saveSuccess', {
                             postProcess: 'sentenceCase',
                         }) as string,
+                    });
+                    queryClient.invalidateQueries({
+                        queryKey: queryKeys.wishlist.sheetStatus(serverId),
                     });
                     closeAllModals();
                 },

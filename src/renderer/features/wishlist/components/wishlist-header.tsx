@@ -4,6 +4,7 @@ import { PageHeader } from '/@/renderer/components/page-header/page-header';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { openCreateWishlistModal } from '/@/renderer/features/wishlist/components/create-wishlist-modal';
 import { openOfflineWishlistModal } from '/@/renderer/features/wishlist/components/offline-wishlist-modal';
+import { WishlistSheetStatusBadge } from '/@/renderer/features/wishlist/components/wishlist-sheet-status-badge';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -22,6 +23,7 @@ export const WishlistHeader = () => {
                     </LibraryHeaderBar.Title>
                 </LibraryHeaderBar>
                 <Group wrap="nowrap">
+                    <WishlistSheetStatusBadge />
                     <Button
                         leftSection={<Icon icon="externalLink" size="sm" />}
                         onClick={openOfflineWishlistModal}

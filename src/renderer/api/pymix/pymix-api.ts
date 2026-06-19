@@ -213,6 +213,14 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    wishlistSheetStatus: {
+        method: 'GET',
+        path: 'wishlist/sheet/status',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistSheetStatusResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     wishlistUpdate: {
         body: pymixType._parameters.wishlistUpdate,
         method: 'PATCH',

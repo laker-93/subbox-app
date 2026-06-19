@@ -513,7 +513,10 @@
                 "sheetUrlInvalid": "couldn't find a sheet ID in that URL",
                 "saveSuccess": "wishlist sheet saved",
                 "saveError": "failed to save wishlist sheet",
-                "emailCopied": "email copied"
+                "emailCopied": "email copied",
+                "statusOk": "wishlist sheet connected — pymix can update it",
+                "statusError": "pymix can't access this wishlist sheet",
+                "statusChecking": "checking sheet access..."
             },
             "inboxRawNote": "raw note",
             "status": {

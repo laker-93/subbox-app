@@ -447,5 +447,6 @@ export const queryKeys: Record<
     wishlist: {
         list: (serverId: string) => [serverId, 'wishlist'] as const,
         root: (serverId: string) => [serverId, 'wishlist'] as const,
+        sheetStatus: (serverId: string) => [serverId, 'wishlist', 'sheetStatus'] as const,
     },
 };

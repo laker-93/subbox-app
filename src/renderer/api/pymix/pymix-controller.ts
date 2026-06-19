@@ -345,6 +345,17 @@ export const PymixController = {
         return res.body.data;
     },
 
+    wishlistSheetStatus: async (args: PymixClientArgs) => {
+        const { baseUrl, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistSheetStatus();
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get wishlist sheet status');
+        }
+
+        return res.body.data;
+    },
+
     wishlistUpdate: async (args: PymixClientArgs & WishlistDeleteArgs & WishlistUpdateArgs) => {
         const { baseUrl, body, params, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).wishlistUpdate({
