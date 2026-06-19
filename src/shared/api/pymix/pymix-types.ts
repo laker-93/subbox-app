@@ -248,12 +248,13 @@ const wishlistStatus = z.enum([
 
 const wishlistItem = z.object({
     album: z.string().nullable().optional(),
-    artist: z.string(),
+    artist: z.string().nullable(),
+    bandcamp_url: z.string().nullable().optional(),
     created_at: z.number().nullable().optional(),
     linked_subbox_id: z.string().nullable().optional(),
     raw_note: z.string().nullable().optional(),
     status: wishlistStatus,
-    title: z.string(),
+    title: z.string().nullable(),
     updated_at: z.number().nullable().optional(),
     user_id: z.string(),
     wishlist_id: z.string(),
@@ -285,12 +286,51 @@ const matchYoutubeResponse = z.object({
     matches: z.array(youtubeMatch),
 });
 
+const linkTrackMetadata = z.object({
+    album: z.string().nullable().optional(),
+    artist: z.string(),
+    bandcamp_url: z.string().nullable().optional(),
+    is_collection: z.literal(false),
+    source: z.enum(['youtube', 'bandcamp']),
+    title: z.string(),
+    youtube_url: z.string().nullable().optional(),
+    youtube_video_id: z.string().nullable().optional(),
+});
+
+const linkCollectionMetadata = z.object({
+    is_collection: z.literal(true),
+    source: z.enum(['youtube', 'bandcamp']),
+    tracks: z.array(linkTrackMetadata),
+});
+
+const linkMetadata = z.discriminatedUnion('is_collection', [
+    linkTrackMetadata,
+    linkCollectionMetadata,
+]);
+
+const parseLinkResponse = z.object({
+    metadata: linkMetadata,
+});
+
+const wishlistParseLinkParameters = z.object({
+    url: z.string(),
+});
+
 const wishlistCreateParameters = z.object({
     album: z.string().optional(),
-    artist: z.string(),
-    title: z.string(),
+    artist: z.string().optional(),
+    bandcamp_url: z.string().optional(),
+    title: z.string().optional(),
     youtube_url: z.string().optional(),
     youtube_video_id: z.string().optional(),
+});
+
+const wishlistBulkCreateParameters = z.object({
+    items: z.array(wishlistCreateParameters),
+});
+
+const wishlistBulkCreateResponse = z.object({
+    items: z.array(wishlistItem),
 });
 
 const wishlistSetSheetParameters = z.object({
@@ -304,12 +344,14 @@ const wishlistSetSheetResponse = z.object({
 const wishlistSheetStatusResponse = z.object({
     configured: z.boolean(),
     error: z.string().nullable(),
+    sheet_url: z.string().nullable(),
     status: z.enum(['ok', 'error']).nullable(),
 });
 
 const wishlistUpdateParameters = z.object({
     album: z.string().optional(),
     artist: z.string().optional(),
+    bandcamp_url: z.string().nullable().optional(),
     linked_subbox_id: z.string().optional(),
     status: wishlistStatus.optional(),
     title: z.string().optional(),
@@ -334,7 +376,9 @@ export const pymixType = {
         syncPlan: syncPlanParameters,
         syncPlaylists: syncPlaylistsParameters,
         syncTracks: syncTracksParameters,
+        wishlistBulkCreate: wishlistBulkCreateParameters,
         wishlistCreate: wishlistCreateParameters,
+        wishlistParseLink: wishlistParseLinkParameters,
         wishlistSetSheet: wishlistSetSheetParameters,
         wishlistUpdate: wishlistUpdateParameters,
     },
@@ -351,6 +395,7 @@ export const pymixType = {
         login,
         matchTracks,
         matchYoutubeResponse,
+        parseLinkResponse,
         rbImport,
         seratoImport,
         storageCheck,
@@ -358,6 +403,7 @@ export const pymixType = {
         syncPlan,
         syncPlaylists,
         syncTracks: syncPlaylists,
+        wishlistBulkCreateResponse,
         wishlistDeleteResponse,
         wishlistItem,
         wishlistItemResponse,

@@ -17,11 +17,25 @@ export const WISHLIST_STATUSES: WishlistStatus[] = [
 
 export type CreateWishlistItemRequest = z.infer<typeof pymixType._parameters.wishlistCreate>;
 
+export type CreateWishlistItemsBulkRequest = z.infer<
+    typeof pymixType._parameters.wishlistBulkCreate
+>;
+
 export type MatchYoutubeResponse = z.infer<typeof pymixType._response.matchYoutubeResponse>;
+
+export type ParseWishlistLinkRequest = z.infer<typeof pymixType._parameters.wishlistParseLink>;
+
+export type ParseWishlistLinkResponse = z.infer<typeof pymixType._response.parseLinkResponse>;
 
 export type UpdateWishlistItemRequest = z.infer<typeof pymixType._parameters.wishlistUpdate>;
 
+export type WishlistBulkCreateResponse = z.infer<
+    typeof pymixType._response.wishlistBulkCreateResponse
+>;
+
 export type WishlistItemResponse = z.infer<typeof pymixType._response.wishlistItemResponse>;
+
+export type WishlistLinkMetadata = ParseWishlistLinkResponse['metadata'];
 
 export type WishlistListResponse = z.infer<typeof pymixType._response.wishlistList>;
 

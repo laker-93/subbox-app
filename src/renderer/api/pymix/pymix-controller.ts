@@ -69,6 +69,10 @@ type ValidateTokenArgs = {
     query: z.infer<typeof pymixType._parameters.isValidToken>;
 };
 
+type WishlistBulkCreateArgs = {
+    body: z.infer<typeof pymixType._parameters.wishlistBulkCreate>;
+};
+
 type WishlistCreateArgs = {
     body: z.infer<typeof pymixType._parameters.wishlistCreate>;
 };
@@ -79,6 +83,10 @@ type WishlistDeleteArgs = {
 
 type WishlistMatchYoutubeArgs = {
     params: { id: string };
+};
+
+type WishlistParseLinkArgs = {
+    body: z.infer<typeof pymixType._parameters.wishlistParseLink>;
 };
 
 type WishlistSetSheetArgs = {
@@ -288,6 +296,17 @@ export const PymixController = {
         return res.body.data;
     },
 
+    wishlistBulkCreate: async (args: PymixClientArgs & WishlistBulkCreateArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistBulkCreate({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to create wishlist items');
+        }
+
+        return res.body.data;
+    },
+
     wishlistCreate: async (args: PymixClientArgs & WishlistCreateArgs) => {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).wishlistCreate({ body });
@@ -329,6 +348,17 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to match YouTube video');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistParseLink: async (args: PymixClientArgs & WishlistParseLinkArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistParseLink({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to parse link');
         }
 
         return res.body.data;

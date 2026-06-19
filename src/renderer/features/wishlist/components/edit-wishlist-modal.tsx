@@ -25,8 +25,8 @@ const EditWishlistForm = ({ item, onCancel }: { item: WishlistItem; onCancel: ()
     const form = useForm<EditWishlistFormValues>({
         initialValues: {
             album: item.album ?? '',
-            artist: item.artist,
-            title: item.title,
+            artist: item.artist ?? '',
+            title: item.title ?? '',
         },
         validate: {
             artist: (value) =>

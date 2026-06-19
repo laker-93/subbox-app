@@ -170,6 +170,15 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    wishlistBulkCreate: {
+        body: pymixType._parameters.wishlistBulkCreate,
+        method: 'POST',
+        path: 'wishlist/bulk',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistBulkCreateResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     wishlistCreate: {
         body: pymixType._parameters.wishlistCreate,
         method: 'POST',
@@ -201,6 +210,16 @@ export const contract = c.router({
         path: 'wishlist/:id/match-youtube',
         responses: {
             200: resultWithHeaders(pymixType._response.matchYoutubeResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistParseLink: {
+        body: pymixType._parameters.wishlistParseLink,
+        method: 'POST',
+        path: 'wishlist/parse-link',
+        responses: {
+            200: resultWithHeaders(pymixType._response.parseLinkResponse),
+            400: resultWithHeaders(pymixType._response.error),
             500: resultWithHeaders(pymixType._response.error),
         },
     },

@@ -12,6 +12,7 @@
         "markImported": "mark imported",
         "markWishlist": "mark wishlist",
         "matchYoutubePreview": "match preview",
+        "openOnBandcamp": "open on bandcamp",
         "confirmMatch": "confirm match",
         "nextMatch": "next match",
         "previousMatch": "previous match",
@@ -368,9 +369,13 @@
         "createWishlistItem": {
             "input_album": "album",
             "input_artist": "artist",
+            "input_link": "link (youtube or bandcamp)",
             "input_title": "title",
+            "linkDescription": "paste a track, playlist, or album link to auto-fill artist and title",
+            "needsArtistOrTitle": "provide an artist, title, or link",
             "required": "this field is required",
             "success": "added to wishlist",
+            "successCollection": "added $t(entity.trackWithCount, {\"count\": {{count}} }) to wishlist",
             "title": "$t(action.addToWishlist)"
         },
         "editWishlistItem": {
@@ -514,8 +519,8 @@
                 "saveSuccess": "wishlist sheet saved",
                 "saveError": "failed to save wishlist sheet",
                 "emailCopied": "email copied",
-                "statusOk": "wishlist sheet connected — pymix can update it",
-                "statusError": "pymix can't access this wishlist sheet",
+                "statusOk": "wishlist sheet connected — subbox can update it",
+                "statusError": "subbox can't access this wishlist sheet",
                 "statusChecking": "checking sheet access..."
             },
             "inboxRawNote": "raw note",

@@ -135,11 +135,13 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
             >
                 <Group gap="sm" style={{ flex: 1, minWidth: 0 }} wrap="nowrap">
                     <Text fw={500} size="sm" truncate>
-                        {isInbox ? item.raw_note : item.title}
+                        {isInbox
+                            ? item.raw_note
+                            : item.title || t('common.unknown', { postProcess: 'sentenceCase' })}
                     </Text>
                     {!isInbox && (
                         <Text isMuted size="sm" truncate>
-                            {item.artist}
+                            {item.artist || t('common.unknown', { postProcess: 'sentenceCase' })}
                             {item.album ? ` — ${item.album}` : ''}
                         </Text>
                     )}
@@ -219,6 +221,22 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
                                 </Button>
                             </Group>
                         </Stack>
+                    ) : item.bandcamp_url ? (
+                        <Group gap="xs" wrap="wrap">
+                            <Button
+                                component="a"
+                                href={item.bandcamp_url}
+                                rel="noopener noreferrer"
+                                size="sm"
+                                target="_blank"
+                                variant="default"
+                            >
+                                {t('action.openOnBandcamp', { postProcess: 'sentenceCase' })}
+                            </Button>
+                            <Button onClick={handleEditEntry} size="sm" variant="subtle">
+                                {t('action.editWishlistItem', { postProcess: 'sentenceCase' })}
+                            </Button>
+                        </Group>
                     ) : item.youtube_url ? (
                         <Stack gap="xs">
                             <div style={{ aspectRatio: '16 / 9', maxWidth: 400 }}>
@@ -228,7 +246,11 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
                                     frameBorder="0"
                                     height="100%"
                                     src={`https://www.youtube.com/embed/${item.youtube_video_id}`}
-                                    title={`${item.artist} - ${item.title}`}
+                                    title={
+                                        item.artist || item.title
+                                            ? `${item.artist ?? ''} - ${item.title ?? ''}`
+                                            : t('common.unknown', { postProcess: 'sentenceCase' })
+                                    }
                                     width="100%"
                                 />
                             </div>

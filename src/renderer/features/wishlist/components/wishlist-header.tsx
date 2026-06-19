@@ -5,6 +5,7 @@ import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library
 import { openCreateWishlistModal } from '/@/renderer/features/wishlist/components/create-wishlist-modal';
 import { openOfflineWishlistModal } from '/@/renderer/features/wishlist/components/offline-wishlist-modal';
 import { WishlistSheetStatusBadge } from '/@/renderer/features/wishlist/components/wishlist-sheet-status-badge';
+import { useWishlistSheetStatus } from '/@/renderer/features/wishlist/hooks/use-wishlist-sheet-status';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -13,6 +14,15 @@ import { Icon } from '/@/shared/components/icon/icon';
 
 export const WishlistHeader = () => {
     const { t } = useTranslation();
+    const { data: sheetStatus } = useWishlistSheetStatus();
+
+    const handleOfflineWishlistClick = () => {
+        if (sheetStatus?.status === 'ok' && sheetStatus.sheet_url) {
+            window.open(sheetStatus.sheet_url, '_blank');
+        } else {
+            openOfflineWishlistModal();
+        }
+    };
 
     return (
         <PageHeader>
@@ -26,7 +36,7 @@ export const WishlistHeader = () => {
                     <WishlistSheetStatusBadge />
                     <Button
                         leftSection={<Icon icon="externalLink" size="sm" />}
-                        onClick={openOfflineWishlistModal}
+                        onClick={handleOfflineWishlistClick}
                         variant="default"
                     >
                         {t('page.wishlist.offlineWishlist.title', { postProcess: 'titleCase' })}
