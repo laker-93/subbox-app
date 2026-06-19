@@ -117,7 +117,9 @@ const CreateWishlistForm = ({ onCancel }: { onCancel: () => void }) => {
                     onError: (error) => {
                         toast.error({
                             message: (error as Error).message,
-                            title: t('error.genericError', { postProcess: 'sentenceCase' }) as string,
+                            title: t('error.genericError', {
+                                postProcess: 'sentenceCase',
+                            }) as string,
                         });
                     },
                     onSuccess: (data) => {
