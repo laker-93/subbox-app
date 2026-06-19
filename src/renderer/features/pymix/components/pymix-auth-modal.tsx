@@ -1,10 +1,10 @@
-import isElectron from 'is-electron';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { authenticateServices } from '/@/renderer/features/pymix/utils/authenticate-services';
 import { useAuthStore, useAuthStoreActions } from '/@/renderer/store';
+import { credentialStore } from '/@/renderer/utils/credential-store';
 import { Button } from '/@/shared/components/button/button';
 import { Modal, ModalProps } from '/@/shared/components/modal/modal';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
@@ -21,8 +21,6 @@ type AuthView = 'create' | 'login' | 'select';
 
 type CreateStatus = 'error' | 'idle' | 'loading' | 'success';
 
-const localSettings = isElectron() ? window.api.localSettings : null;
-
 /**
  * Re-login should refresh the existing server entry instead of minting a new one,
  * otherwise stale, credential-stripped entries (and their saved passwords)
@@ -35,12 +33,12 @@ const findExistingServerId = (username: string): string | undefined => {
 };
 
 /**
- * Persist the password so the navidrome 401 interceptor and the filebrowser
- * reauth path can silently refresh expired tokens. No-op outside electron.
+ * Persist the password so the filebrowser reauth path (and, on desktop, the
+ * navidrome 401 interceptor) can silently refresh expired tokens. credentialStore
+ * uses encrypted safeStorage on desktop and sessionStorage on web.
  */
 const persistServerPassword = async (password: string, serverId: string): Promise<void> => {
-    if (!localSettings) return;
-    await localSettings.passwordSet(password, serverId);
+    await credentialStore.set(password, serverId);
 };
 
 interface PymixAuthModalProps {
