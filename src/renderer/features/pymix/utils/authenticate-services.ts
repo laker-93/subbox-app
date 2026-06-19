@@ -11,10 +11,15 @@ import { ServerType } from '/@/shared/types/types';
  * then returns a fully-formed server item ready for the auth store.
  */
 export const authenticateServices = async (args: {
+    /**
+     * Reuse an existing server id (on re-login / token refresh) so the entry and
+     * its saved password are updated in place instead of accumulating duplicates.
+     */
+    id?: string;
     password: string;
     username: string;
 }): Promise<ServerListItemWithCredential> => {
-    const { password, username } = args;
+    const { id, password, username } = args;
 
     const navidromeUrl = getNavidromeUrl(username);
 
@@ -29,10 +34,14 @@ export const authenticateServices = async (args: {
     return {
         credential: authData.credential,
         fbToken,
-        id: nanoid(),
+        id: id ?? nanoid(),
         isAdmin: authData.isAdmin,
         name: username,
         ndCredential: authData.ndCredential,
+        // Enables the navidrome 401 interceptor and the filebrowser reauth path to
+        // silently refresh expired tokens (via the stored password) instead of
+        // logging the user out. The password is persisted by the login flow.
+        savePassword: true,
         type: ServerType.NAVIDROME,
         url: navidromeUrl,
         userId: authData.userId,

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { FilebrowserController } from '/@/renderer/api/filebrowser/filebrowser-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
+import { reauthenticate } from '/@/renderer/features/pymix/utils/reauthenticate';
 import { useAuthStore, useAuthStoreActions, useCurrentServer } from '/@/renderer/store';
 import { AuthState, ServerType } from '/@/shared/types/types';
 
@@ -30,6 +31,19 @@ export const useFBServerAuthenticated = () => {
             });
             setReady(AuthState.VALID);
         } catch {
+            // The filebrowser token has no interceptor-driven refresh, so an
+            // expired token would otherwise force a logout. Try to silently
+            // refresh all tokens with the saved password before giving up.
+            try {
+                const reauthed = await reauthenticate(currentServer);
+                if (reauthed) {
+                    setReady(AuthState.VALID);
+                    return;
+                }
+            } catch {
+                // fall through to logout below
+            }
+
             setReady(AuthState.INVALID);
             updateServer(currentServer.id, {
                 credential: undefined,

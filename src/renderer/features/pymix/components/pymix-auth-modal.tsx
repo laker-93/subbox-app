@@ -1,9 +1,10 @@
+import isElectron from 'is-electron';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { authenticateServices } from '/@/renderer/features/pymix/utils/authenticate-services';
-import { useAuthStoreActions } from '/@/renderer/store';
+import { useAuthStore, useAuthStoreActions } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Modal, ModalProps } from '/@/shared/components/modal/modal';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
@@ -14,10 +15,33 @@ import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
 import { useForm } from '/@/shared/hooks/use-form';
+import { ServerType } from '/@/shared/types/types';
 
 type AuthView = 'create' | 'login' | 'select';
 
 type CreateStatus = 'error' | 'idle' | 'loading' | 'success';
+
+const localSettings = isElectron() ? window.api.localSettings : null;
+
+/**
+ * Re-login should refresh the existing server entry instead of minting a new one,
+ * otherwise stale, credential-stripped entries (and their saved passwords)
+ * accumulate in the store. Match the prior entry for this user.
+ */
+const findExistingServerId = (username: string): string | undefined => {
+    return Object.values(useAuthStore.getState().serverList).find(
+        (server) => server.type === ServerType.NAVIDROME && server.username === username,
+    )?.id;
+};
+
+/**
+ * Persist the password so the navidrome 401 interceptor and the filebrowser
+ * reauth path can silently refresh expired tokens. No-op outside electron.
+ */
+const persistServerPassword = async (password: string, serverId: string): Promise<void> => {
+    if (!localSettings) return;
+    await localSettings.passwordSet(password, serverId);
+};
 
 interface PymixAuthModalProps {
     baseUrl: string;
@@ -145,6 +169,7 @@ function CreateAccountView({
             for (let attempt = 1; attempt <= MAX_LOGIN_ATTEMPTS; attempt++) {
                 try {
                     serverItem = await authenticateServices({
+                        id: findExistingServerId(values.username),
                         password: values.password,
                         username: values.username,
                     });
@@ -159,6 +184,7 @@ function CreateAccountView({
 
             addServer(serverItem);
             setCurrentServer(serverItem);
+            await persistServerPassword(values.password, serverItem.id);
 
             onStatusChange('success');
             setStatusMessage(
@@ -307,12 +333,14 @@ function LoginView({ baseUrl, onSuccess }: { baseUrl: string; onSuccess: () => v
 
             // 2. Authenticate with navidrome + filebrowser and set up server
             const serverItem = await authenticateServices({
+                id: findExistingServerId(values.username),
                 password: values.password,
                 username: values.username,
             });
 
             addServer(serverItem);
             setCurrentServer(serverItem);
+            await persistServerPassword(values.password, serverItem.id);
 
             toast.success({
                 message: t('form.addServer.success', { postProcess: 'sentenceCase' }),
