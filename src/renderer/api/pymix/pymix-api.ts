@@ -170,6 +170,85 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    wishlistBulkCreate: {
+        body: pymixType._parameters.wishlistBulkCreate,
+        method: 'POST',
+        path: 'wishlist/bulk',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistBulkCreateResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistCreate: {
+        body: pymixType._parameters.wishlistCreate,
+        method: 'POST',
+        path: 'wishlist',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistItemResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistDelete: {
+        method: 'DELETE',
+        path: 'wishlist/:id',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistDeleteResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistList: {
+        method: 'GET',
+        path: 'wishlist',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistList),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistMatchYoutube: {
+        body: null,
+        method: 'POST',
+        path: 'wishlist/:id/match-youtube',
+        responses: {
+            200: resultWithHeaders(pymixType._response.matchYoutubeResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistParseLink: {
+        body: pymixType._parameters.wishlistParseLink,
+        method: 'POST',
+        path: 'wishlist/parse-link',
+        responses: {
+            200: resultWithHeaders(pymixType._response.parseLinkResponse),
+            400: resultWithHeaders(pymixType._response.error),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistSetSheet: {
+        body: pymixType._parameters.wishlistSetSheet,
+        method: 'PATCH',
+        path: 'wishlist/sheet',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistSetSheetResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistSheetStatus: {
+        method: 'GET',
+        path: 'wishlist/sheet/status',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistSheetStatusResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    wishlistUpdate: {
+        body: pymixType._parameters.wishlistUpdate,
+        method: 'PATCH',
+        path: 'wishlist/:id',
+        responses: {
+            200: resultWithHeaders(pymixType._response.wishlistItemResponse),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
 });
 
 const axiosClient = axios.create({ withCredentials: true });

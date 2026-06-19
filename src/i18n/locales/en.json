@@ -2,6 +2,22 @@
     "action": {
         "addToFavorites": "add to $t(entity.favorite, {\"count\": 2})",
         "addToPlaylist": "add to $t(entity.playlist, {\"count\": 1})",
+        "addToWishlist": "add to wishlist",
+        "createOfflineWishlist": "create offline wishlist",
+        "saveWishlistSheet": "save",
+        "confirmWishlistItem": "add to wishlist",
+        "ignore": "ignore",
+        "markAvailable": "mark available",
+        "markDownloaded": "mark downloaded",
+        "markImported": "mark imported",
+        "markWishlist": "mark wishlist",
+        "matchYoutubePreview": "match preview",
+        "openOnBandcamp": "open on bandcamp",
+        "confirmMatch": "confirm match",
+        "nextMatch": "next match",
+        "previousMatch": "previous match",
+        "findAnotherMatch": "find another match",
+        "editWishlistItem": "edit details",
         "addOrRemoveFromSelection": "add or remove from selection",
         "selectRangeOfItems": "select a range of items",
         "clearQueue": "clear queue",
@@ -60,6 +76,7 @@
         "backward": "backward",
         "biography": "biography",
         "bitDepth": "bit depth",
+        "copy": "copy",
         "bitrate": "bitrate",
         "bpm": "bpm",
         "cancel": "cancel",
@@ -349,6 +366,26 @@
             "success": "added $t(entity.trackWithCount, {\"count\": {{message}} }) to $t(entity.playlistWithCount, {\"count\": {{numOfPlaylists}} })",
             "title": "add to $t(entity.playlist, {\"count\": 1})"
         },
+        "createWishlistItem": {
+            "input_album": "album",
+            "input_artist": "artist",
+            "input_link": "link (youtube or bandcamp)",
+            "input_title": "title",
+            "linkDescription": "paste a track, playlist, or album link to auto-fill artist and title",
+            "needsArtistOrTitle": "provide an artist, title, or link",
+            "required": "this field is required",
+            "success": "added to wishlist",
+            "successCollection": "added $t(entity.trackWithCount, {\"count\": {{count}} }) to wishlist",
+            "title": "$t(action.addToWishlist)"
+        },
+        "editWishlistItem": {
+            "input_album": "album",
+            "input_artist": "artist",
+            "input_title": "title",
+            "required": "this field is required",
+            "success": "wishlist item updated",
+            "title": "$t(action.editWishlistItem)"
+        },
         "createPlaylist": {
             "input_description": "$t(common.description)",
             "input_name": "$t(common.name)",
@@ -465,6 +502,36 @@
         },
         "radioList": {
             "title": "radio stations"
+        },
+        "wishlist": {
+            "empty": "your wishlist is empty",
+            "matchCandidate": "match {{index}} of {{total}} ({{confidence}}% confidence)",
+            "noMatchesFound": "no YouTube matches found",
+            "offlineWishlist": {
+                "title": "offline wishlist",
+                "description": "capture tracks on your phone, even offline, using a Google Sheet. Each row can have a raw note, an Artist + Title, or a YouTube URL.",
+                "step1": "1. click \"create offline wishlist\" to make your own copy of the template sheet",
+                "step2": "2. share your copy with this email as Editor:",
+                "step3": "3. paste your sheet's URL below and save",
+                "sheetUrlLabel": "wishlist sheet URL",
+                "sheetUrlPlaceholder": "https://docs.google.com/spreadsheets/d/...",
+                "sheetUrlInvalid": "couldn't find a sheet ID in that URL",
+                "saveSuccess": "wishlist sheet saved",
+                "saveError": "failed to save wishlist sheet",
+                "emailCopied": "email copied",
+                "statusOk": "wishlist sheet connected — subbox can update it",
+                "statusError": "subbox can't access this wishlist sheet",
+                "statusChecking": "checking sheet access..."
+            },
+            "inboxRawNote": "raw note",
+            "status": {
+                "available": "available",
+                "downloaded": "downloaded",
+                "ignored": "ignored",
+                "imported": "imported",
+                "inbox": "needs info",
+                "wishlist": "wishlist"
+            }
         },
         "releasenotes": {
             "commitsSinceStable": "commits since {{stable}}",
@@ -657,7 +724,8 @@
             "search": "$t(common.search)",
             "settings": "$t(common.setting, {\"count\": 2})",
             "shared": "shared $t(entity.playlist, {\"count\": 2})",
-            "tracks": "$t(entity.track, {\"count\": 2})"
+            "tracks": "$t(entity.track, {\"count\": 2})",
+            "wishlist": "wishlist"
         },
         "trackList": {
             "artistTracks": "tracks by {{artist}}",

@@ -844,6 +844,7 @@ export enum SidebarItem {
     SEARCH = 'Search',
     SETTINGS = 'Settings',
     TRACKS = 'Tracks',
+    WISHLIST = 'Wishlist',
 }
 
 export type DataGridProps = {
@@ -975,6 +976,12 @@ export const sidebarItems: SidebarItemType[] = [
         id: 'Favorites',
         label: i18n.t('page.sidebar.favorites'),
         route: AppRoute.FAVORITES,
+    },
+    {
+        disabled: false,
+        id: 'Wishlist',
+        label: i18n.t('page.sidebar.wishlist'),
+        route: AppRoute.WISHLIST,
     },
     {
         disabled: false,

@@ -69,6 +69,34 @@ type ValidateTokenArgs = {
     query: z.infer<typeof pymixType._parameters.isValidToken>;
 };
 
+type WishlistBulkCreateArgs = {
+    body: z.infer<typeof pymixType._parameters.wishlistBulkCreate>;
+};
+
+type WishlistCreateArgs = {
+    body: z.infer<typeof pymixType._parameters.wishlistCreate>;
+};
+
+type WishlistDeleteArgs = {
+    params: { id: string };
+};
+
+type WishlistMatchYoutubeArgs = {
+    params: { id: string };
+};
+
+type WishlistParseLinkArgs = {
+    body: z.infer<typeof pymixType._parameters.wishlistParseLink>;
+};
+
+type WishlistSetSheetArgs = {
+    body: z.infer<typeof pymixType._parameters.wishlistSetSheet>;
+};
+
+type WishlistUpdateArgs = {
+    body: z.infer<typeof pymixType._parameters.wishlistUpdate>;
+};
+
 export const PymixController = {
     checkStorage: async (args: PymixClientArgs & StorageCheckArgs) => {
         const { baseUrl, query, signal, token } = args;
@@ -263,6 +291,110 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to validate token');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistBulkCreate: async (args: PymixClientArgs & WishlistBulkCreateArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistBulkCreate({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to create wishlist items');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistCreate: async (args: PymixClientArgs & WishlistCreateArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistCreate({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to create wishlist item');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistDelete: async (args: PymixClientArgs & WishlistDeleteArgs) => {
+        const { baseUrl, params, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistDelete({ params });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to delete wishlist item');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistList: async (args: PymixClientArgs) => {
+        const { baseUrl, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistList();
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get wishlist');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistMatchYoutube: async (args: PymixClientArgs & WishlistMatchYoutubeArgs) => {
+        const { baseUrl, params, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistMatchYoutube({
+            params,
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to match YouTube video');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistParseLink: async (args: PymixClientArgs & WishlistParseLinkArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistParseLink({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to parse link');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistSetSheet: async (args: PymixClientArgs & WishlistSetSheetArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistSetSheet({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to set wishlist sheet');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistSheetStatus: async (args: PymixClientArgs) => {
+        const { baseUrl, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistSheetStatus();
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get wishlist sheet status');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistUpdate: async (args: PymixClientArgs & WishlistDeleteArgs & WishlistUpdateArgs) => {
+        const { baseUrl, body, params, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistUpdate({
+            body,
+            params,
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to update wishlist item');
         }
 
         return res.body.data;

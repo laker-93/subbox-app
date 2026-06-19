@@ -37,6 +37,7 @@ export const MobileSidebar = () => {
             Search: t('page.sidebar.search', { postProcess: 'titleCase' }),
             Settings: t('page.sidebar.settings', { postProcess: 'titleCase' }),
             Tracks: t('page.sidebar.tracks', { postProcess: 'titleCase' }),
+            Wishlist: t('page.sidebar.wishlist', { postProcess: 'titleCase' }),
         }),
         [t],
     );
