@@ -6,6 +6,7 @@ import { authenticateServices } from '/@/renderer/features/pymix/utils/authentic
 import { useAuthStore, useAuthStoreActions } from '/@/renderer/store';
 import { credentialStore } from '/@/renderer/utils/credential-store';
 import { Button } from '/@/shared/components/button/button';
+import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Modal, ModalProps } from '/@/shared/components/modal/modal';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
 import { Spinner } from '/@/shared/components/spinner/spinner';
@@ -40,6 +41,23 @@ const findExistingServerId = (username: string): string | undefined => {
 const persistServerPassword = async (password: string, serverId: string): Promise<void> => {
     await credentialStore.set(password, serverId);
 };
+
+// "Remember me" controls whether the login form pre-fills saved credentials on the
+// next login. It's independent of token reauth, which always keeps the password.
+const REMEMBER_KEY = 'pymix_remember_credentials';
+
+const getRememberPreference = (): boolean => localStorage.getItem(REMEMBER_KEY) !== 'false';
+
+const setRememberPreference = (remember: boolean): void => {
+    localStorage.setItem(REMEMBER_KEY, remember ? 'true' : 'false');
+};
+
+// The most recent saved server to pre-fill from (subbox is single-backend, so this
+// is normally the only entry).
+const findSavedServer = () =>
+    Object.values(useAuthStore.getState().serverList).find(
+        (server) => server.type === ServerType.NAVIDROME && server.username,
+    );
 
 interface PymixAuthModalProps {
     baseUrl: string;
@@ -303,6 +321,7 @@ function LoginView({ baseUrl, onSuccess }: { baseUrl: string; onSuccess: () => v
     const form = useForm({
         initialValues: {
             password: '',
+            rememberCredentials: getRememberPreference(),
             username: '',
         },
         validate: {
@@ -316,9 +335,30 @@ function LoginView({ baseUrl, onSuccess }: { baseUrl: string; onSuccess: () => v
         },
     });
 
+    // Pre-fill the saved credentials on mount so a logged-out user can log back in
+    // without re-typing them. Only when "remember me" was left on.
+    useEffect(() => {
+        if (!getRememberPreference()) return;
+        const saved = findSavedServer();
+        if (!saved) return;
+
+        let cancelled = false;
+        credentialStore.get(saved.id).then((password) => {
+            if (cancelled) return;
+            form.setFieldValue('username', saved.username);
+            if (password) form.setFieldValue('password', password);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const handleSubmit = form.onSubmit(async (values) => {
         try {
             setIsLoading(true);
+            setRememberPreference(values.rememberCredentials);
 
             // 1. Authenticate with pymix
             await PymixController.login({
@@ -381,6 +421,13 @@ function LoginView({ baseUrl, onSuccess }: { baseUrl: string; onSuccess: () => v
                         size="sm"
                         variant="filled"
                         {...form.getInputProps('password')}
+                    />
+                    <Checkbox
+                        label={t('common.rememberMe', {
+                            defaultValue: 'Remember me',
+                            postProcess: 'sentenceCase',
+                        })}
+                        {...form.getInputProps('rememberCredentials', { type: 'checkbox' })}
                     />
                 </Stack>
                 <Button
