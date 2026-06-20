@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { randomUUID } from 'crypto';
 import { app, ipcMain, session } from 'electron';
 import * as fs from 'fs';
@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
 
+import { getStoredPassword } from '/@/main/features/core/settings';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 import {
     extractPlaylists,
@@ -995,6 +996,8 @@ ipcMain.handle(
             filebrowserUrl: string;
             pollIntervalMs?: number;
             pymixUrl: string;
+            serverId: string;
+            username: string;
             watchDir: string;
         },
     ): Promise<void> => {
@@ -1003,6 +1006,8 @@ ipcMain.handle(
             filebrowserUrl,
             pollIntervalMs = 10000,
             pymixUrl,
+            serverId,
+            username,
             watchDir,
         } = args;
 
@@ -1016,6 +1021,54 @@ ipcMain.handle(
 
         const sendProgress = (progress: WatchProgress) => {
             event.sender.send('sync:watch-progress', progress);
+        };
+
+        // The filebrowser token (~2h) outlives by far less than this long-running
+        // poller, so refresh it in place on a 401 instead of failing/logging out.
+        // The password lives in the main-process safeStorage store.
+        let fbToken = filebrowserToken;
+        let fbRefreshInFlight: null | Promise<null | string> = null;
+
+        const refreshFbToken = (): Promise<null | string> => {
+            if (!fbRefreshInFlight) {
+                fbRefreshInFlight = (async () => {
+                    const password = getStoredPassword(serverId);
+                    if (!password) return null;
+                    const res = await axios.post<string>(
+                        `${filebrowserUrl}/api/login`,
+                        { password, username },
+                        { httpsAgent },
+                    );
+                    fbToken = res.data;
+                    // Keep the renderer store canonical so restarts / other sync
+                    // operations start with a valid token.
+                    event.sender.send('sync:filebrowser-token-refreshed', fbToken);
+                    return fbToken;
+                })().finally(() => {
+                    fbRefreshInFlight = null;
+                });
+            }
+            return fbRefreshInFlight;
+        };
+
+        // Filebrowser request that refreshes the token once on a 401 and retries.
+        const fbRequest = async (
+            config: AxiosRequestConfig,
+            retried = false,
+        ): Promise<AxiosResponse> => {
+            try {
+                return await axios.request({
+                    ...config,
+                    headers: { ...config.headers, 'X-Auth': fbToken },
+                    httpsAgent,
+                });
+            } catch (err) {
+                if (!retried && axios.isAxiosError(err) && err.response?.status === 401) {
+                    const token = await refreshFbToken();
+                    if (token) return fbRequest(config, true);
+                }
+                throw err;
+            }
         };
 
         const pollAndUpload = async () => {
@@ -1086,12 +1139,11 @@ ipcMain.handle(
                     });
 
                     try {
-                        await axios.post(resourcePath, fileContents, {
-                            headers: {
-                                'Content-Type': 'application/octet-stream',
-                                'X-Auth': filebrowserToken,
-                            },
-                            httpsAgent,
+                        await fbRequest({
+                            data: fileContents,
+                            headers: { 'Content-Type': 'application/octet-stream' },
+                            method: 'POST',
+                            url: resourcePath,
                         });
                     } catch (err) {
                         if (axios.isAxiosError(err) && err.response?.status === 409) {
@@ -1121,9 +1173,12 @@ ipcMain.handle(
             } catch (err) {
                 console.error('Watch poll error:', err);
 
-                // Any HTTP error response from an endpoint means the session is invalid.
-                // Stop polling and signal the renderer to log out.
-                if (axios.isAxiosError(err) && err.response) {
+                // Only a genuine, unrecoverable auth failure should log the user out.
+                // Filebrowser 401s are already refreshed-and-retried by fbRequest, so a
+                // 401/403 reaching here means reauth failed (no saved password / bad
+                // creds). Transient errors (network, 5xx) must not log the user out.
+                const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+                if (status === 401 || status === 403) {
                     if (watchInterval) {
                         clearInterval(watchInterval);
                         watchInterval = null;

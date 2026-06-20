@@ -67,11 +67,13 @@ export const SyncWatch = () => {
             filebrowserToken: currentServer.fbToken,
             filebrowserUrl: urlConfig.filebrowser,
             pymixUrl: urlConfig.pymix,
+            serverId: currentServer.id,
+            username: currentServer.username,
             watchDir,
         });
         setWatching(true);
         localSettings.set('watch_active', true);
-    }, [currentServer.fbToken, watchDir]);
+    }, [currentServer.fbToken, currentServer.id, currentServer.username, watchDir]);
 
     const handleStopWatch = useCallback(async () => {
         if (!ipc || !localSettings) return;
