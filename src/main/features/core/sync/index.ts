@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { randomUUID } from 'crypto';
-import { app, ipcMain, session } from 'electron';
+import { app, ipcMain, session, shell } from 'electron';
 import * as fs from 'fs';
 import * as https from 'https';
 import { parseFile } from 'music-metadata';
@@ -707,10 +707,17 @@ ipcMain.handle(
             includeRekordboxXml?: boolean;
             playlistIds: string[];
             pymixUrl: string;
+            rekordboxXmlDir?: string;
         },
-    ): Promise<{ tracksExported: number }> => {
-        const { filebrowserToken, filebrowserUrl, includeRekordboxXml, playlistIds, pymixUrl } =
-            args;
+    ): Promise<{ musicPath: string; tracksExported: number; xmlPath?: string }> => {
+        const {
+            filebrowserToken,
+            filebrowserUrl,
+            includeRekordboxXml,
+            playlistIds,
+            pymixUrl,
+            rekordboxXmlDir,
+        } = args;
         const pymixCookies = await getCookiesForUrl(pymixUrl);
 
         // Scan local music directory for existing tracks
@@ -762,6 +769,7 @@ ipcMain.handle(
         }
 
         // Step 4: Optionally export and download Rekordbox XML
+        let xmlPath: string | undefined;
         if (includeRekordboxXml) {
             const musicPath = getMusicPath();
 
@@ -773,22 +781,56 @@ ipcMain.handle(
                 { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
             );
 
-            // Download the XML from filebrowser
-            const xmlDestPath = path.join(appPath, 'subbox_rb_export.xml');
+            // Download the XML from filebrowser into the user-configured directory,
+            // falling back to the app directory when none has been set.
+            const xmlDir =
+                rekordboxXmlDir && rekordboxXmlDir.length > 0 ? rekordboxXmlDir : appPath;
+            if (!fs.existsSync(xmlDir)) {
+                fs.mkdirSync(xmlDir, { recursive: true });
+            }
+            const xmlDestPath = path.join(xmlDir, 'subbox_rb_export.xml');
             await downloadFileFromFilebrowser(
                 filebrowserUrl,
                 filebrowserToken,
                 'subbox_rb_export.xml',
                 xmlDestPath,
             );
+            xmlPath = xmlDestPath;
         }
 
-        return { tracksExported: nTracksExported };
+        return { musicPath: getMusicPath(), tracksExported: nTracksExported, xmlPath };
     },
 );
 
 ipcMain.handle('sync:get-local-tracks', async (): Promise<LocalTrack[]> => {
     return scanLocalTracks();
+});
+
+// ── Choose where downloaded Rekordbox XML is saved ─────────────────────────
+
+ipcMain.handle('sync:select-xml-directory', async (): Promise<null | string> => {
+    const { dialog: electronDialog } = await import('electron');
+    const result = await electronDialog.showOpenDialog({
+        buttonLabel: 'Select Folder',
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Select Rekordbox XML Download Folder',
+    });
+    return result.filePaths[0] || null;
+});
+
+/** Default directory the Rekordbox XML is saved to when the user hasn't picked one. */
+ipcMain.handle('sync:get-default-xml-directory', async (): Promise<string> => {
+    return getAppPath();
+});
+
+/** Open a folder in the OS file manager. */
+ipcMain.handle('sync:open-folder', async (_event, folderPath: string): Promise<void> => {
+    if (folderPath) await shell.openPath(folderPath);
+});
+
+/** Reveal a file in the OS file manager, highlighting it within its folder. */
+ipcMain.handle('sync:reveal-file', async (_event, filePath: string): Promise<void> => {
+    if (filePath) shell.showItemInFolder(filePath);
 });
 
 // ── Watch directory for auto-upload ────────────────────────────────────────

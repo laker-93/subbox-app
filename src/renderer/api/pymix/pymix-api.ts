@@ -3,6 +3,9 @@ import axios, { AxiosError, AxiosResponse, isAxiosError, Method } from 'axios';
 import qs from 'qs';
 
 import i18n from '/@/i18n/i18n';
+import { urlConfig } from '/@/renderer/config/url-config';
+import { useAuthStore } from '/@/renderer/store';
+import { credentialStore } from '/@/renderer/utils/credential-store';
 import { pymixType } from '/@/shared/api/pymix/pymix-types';
 import { resultWithHeaders } from '/@/shared/api/utils';
 
@@ -277,14 +280,89 @@ const parsePath = (fullPath: string) => {
     return { params: newParams, path };
 };
 
+// pymix authenticates via the httponly `session_id` cookie set by `/user/login`.
+// When that session lapses (or never made it onto a request), pymix rejects with
+// 400 "Must have a username or session ID to identify user" or 404 "User not found"
+// rather than 401. Mirror the navidrome/filebrowser reauth flow: on such an auth
+// failure, silently log back in to refresh the cookie and replay the request once.
+// Deduped so concurrent failures trigger a single login.
+let pymixReauthPromise: null | Promise<boolean> = null;
+
+const reauthenticatePymix = (): Promise<boolean> => {
+    if (!pymixReauthPromise) {
+        pymixReauthPromise = (async () => {
+            const currentServer = useAuthStore.getState().currentServer;
+
+            if (!currentServer?.savePassword) {
+                return false;
+            }
+
+            const password = await credentialStore.get(currentServer.id);
+            if (!password) {
+                return false;
+            }
+
+            // Use plain axios (not axiosClient) so the login itself can't recurse
+            // back through this interceptor. withCredentials lets the refreshed
+            // session_id cookie land in the shared cookie jar.
+            await axios.post(
+                `${urlConfig.pymix}/user/login`,
+                { password, username: currentServer.username },
+                { withCredentials: true },
+            );
+
+            return true;
+        })().finally(() => {
+            pymixReauthPromise = null;
+        });
+    }
+
+    return pymixReauthPromise;
+};
+
+const isPymixAuthError = (status?: number, data?: unknown): boolean => {
+    if (status === 401) return true;
+    const detail =
+        typeof (data as { detail?: unknown })?.detail === 'string'
+            ? ((data as { detail: string }).detail.toLowerCase() as string)
+            : '';
+    if (status === 400 && detail.includes('session id to identify user')) return true;
+    if (status === 404 && detail === 'user not found') return true;
+    return false;
+};
+
 axiosClient.interceptors.response.use(
     (response) => response,
-    (error) => {
+    async (error) => {
         if (isAxiosError(error) && error.code === 'ERR_NETWORK') {
             throw new Error(
                 i18n.t('error.networkError', { postProcess: 'sentenceCase' }) as string,
             );
         }
+
+        const config = error.config as
+            | (typeof error.config & { _pymixRetried?: boolean })
+            | undefined;
+        const status = error.response?.status;
+        const isLoginRequest = config?.url?.includes('user/login');
+
+        if (
+            config &&
+            !config._pymixRetried &&
+            !isLoginRequest &&
+            isPymixAuthError(status, error.response?.data)
+        ) {
+            try {
+                const reauthed = await reauthenticatePymix();
+                if (reauthed) {
+                    config._pymixRetried = true;
+                    return axiosClient.request(config);
+                }
+            } catch {
+                // fall through to reject with the original error
+            }
+        }
+
         return Promise.reject(error);
     },
 );
