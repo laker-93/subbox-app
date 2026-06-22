@@ -2396,10 +2396,37 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 28) {
+                    // Wishlist was added to the default sidebar items without a migration,
+                    // so existing users never received it in their persisted list.
+                    const hasWishlist = state.general.sidebarItems?.some(
+                        (item) => item.id === 'Wishlist',
+                    );
+
+                    if (!hasWishlist) {
+                        const wishlistItem: SidebarItemType = {
+                            disabled: false,
+                            id: 'Wishlist',
+                            label: i18n.t('page.sidebar.wishlist'),
+                            route: AppRoute.WISHLIST,
+                        };
+
+                        const favoritesIndex = state.general.sidebarItems.findIndex(
+                            (item) => item.id === 'Favorites',
+                        );
+
+                        if (favoritesIndex >= 0) {
+                            state.general.sidebarItems.splice(favoritesIndex + 1, 0, wishlistItem);
+                        } else {
+                            state.general.sidebarItems.push(wishlistItem);
+                        }
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 27,
+            version: 28,
         },
     ),
 );
