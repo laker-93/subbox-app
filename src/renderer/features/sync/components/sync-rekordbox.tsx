@@ -16,6 +16,7 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
+import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 
 const ipc = isElectron() ? window.api.ipc : null;
 
@@ -335,7 +336,20 @@ export const SyncRekordbox = () => {
                             {error}
                         </Text>
                     )}
-                    <Button fullWidth onClick={handleSelectXml} variant="filled">
+                    <Button
+                        fullWidth
+                        onClick={handleSelectXml}
+                        tooltip={{
+                            label: t('page.sync.rekordbox.selectXmlTooltip', {
+                                defaultValue:
+                                    'In Rekordbox, go to File → Export Collection in xml format, then choose that .xml file here. Subbox reads your playlists and tracks from it.',
+                            }),
+                            multiline: true,
+                            openDelay: 300,
+                            w: 300,
+                        }}
+                        variant="filled"
+                    >
                         {t('page.sync.rekordbox.selectXml', {
                             defaultValue: 'Select XML File',
                             postProcess: 'titleCase',
@@ -409,11 +423,21 @@ export const SyncRekordbox = () => {
                     </Button>
                 </Group>
 
-                <Checkbox
-                    checked={metadataOnly}
-                    label="Import metadata only (no track uploads)"
-                    onChange={(e) => setMetadataOnly(e.currentTarget.checked)}
-                />
+                <Tooltip
+                    label="Only update track info (cue points, ratings, tags) for music already in your library — no audio files are uploaded. Leave unticked to upload the actual tracks."
+                    multiline
+                    openDelay={300}
+                    position="right"
+                    w={300}
+                >
+                    <span style={{ width: 'fit-content' }}>
+                        <Checkbox
+                            checked={metadataOnly}
+                            label="Import metadata only (no track uploads)"
+                            onChange={(e) => setMetadataOnly(e.currentTarget.checked)}
+                        />
+                    </span>
+                </Tooltip>
 
                 <Stack gap="xs">
                     {playlists.map((pl) => {
@@ -453,6 +477,14 @@ export const SyncRekordbox = () => {
                     fullWidth
                     onClick={handleUpload}
                     size="md"
+                    tooltip={{
+                        label: metadataOnly
+                            ? 'Send the selected playlists’ track info to your library without uploading any audio files.'
+                            : 'Upload the selected playlists and their audio files to your Subbox cloud library, then import them so they appear in your collection.',
+                        multiline: true,
+                        openDelay: 300,
+                        w: 300,
+                    }}
                     variant="filled"
                 >
                     {metadataOnly

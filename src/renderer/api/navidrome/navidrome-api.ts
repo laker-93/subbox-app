@@ -1,6 +1,5 @@
 import { initClient, initContract } from '@ts-rest/core';
 import axios, { AxiosError, AxiosResponse, isAxiosError, Method } from 'axios';
-import isElectron from 'is-electron';
 import debounce from 'lodash/debounce';
 import omitBy from 'lodash/omitBy';
 import qs from 'qs';
@@ -8,13 +7,12 @@ import qs from 'qs';
 import i18n from '/@/i18n/i18n';
 import { authenticationFailure } from '/@/renderer/api/utils';
 import { useAuthStore } from '/@/renderer/store';
+import { credentialStore } from '/@/renderer/utils/credential-store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
 import { ndType } from '/@/shared/api/navidrome/navidrome-types';
 import { resultWithHeaders } from '/@/shared/api/utils';
 import { toast } from '/@/shared/components/toast/toast';
 import { ServerListItemWithCredential } from '/@/shared/types/domain-types';
-
-const localSettings = isElectron() ? window.api.localSettings : null;
 
 const c = initContract();
 
@@ -292,9 +290,9 @@ axiosClient.interceptors.response.use(
         if (error.response && error.response.status === 401) {
             const currentServer = useAuthStore.getState().currentServer;
 
-            if (localSettings && currentServer?.savePassword) {
-                return localSettings
-                    .passwordGet(currentServer.id)
+            if (currentServer?.savePassword) {
+                return credentialStore
+                    .get(currentServer.id)
                     .then(async (password: null | string) => {
                         authSuccess = false;
 

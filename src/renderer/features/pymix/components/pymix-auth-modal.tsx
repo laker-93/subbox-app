@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { authenticateServices } from '/@/renderer/features/pymix/utils/authenticate-services';
-import { useAuthStoreActions } from '/@/renderer/store';
+import { useAuthStore, useAuthStoreActions } from '/@/renderer/store';
+import { credentialStore } from '/@/renderer/utils/credential-store';
 import { Button } from '/@/shared/components/button/button';
+import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Modal, ModalProps } from '/@/shared/components/modal/modal';
 import { PasswordInput } from '/@/shared/components/password-input/password-input';
 import { Spinner } from '/@/shared/components/spinner/spinner';
@@ -14,10 +16,73 @@ import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
 import { useForm } from '/@/shared/hooks/use-form';
+import { ServerType } from '/@/shared/types/types';
 
 type AuthView = 'create' | 'login' | 'select';
 
 type CreateStatus = 'error' | 'idle' | 'loading' | 'success';
+
+// "Remember me" controls whether the login form pre-fills saved credentials on the
+// next login. It's independent of token reauth, which always keeps the password.
+//
+// The pointer (username + serverId) is stored separately from the auth store because
+// logging out deletes the server from serverList (app-menu handleLogOff), while the
+// saved password survives in credentialStore keyed by serverId. So we remember which
+// serverId to look the password up under, independent of the (now-empty) serverList.
+const REMEMBER_KEY = 'pymix_remember_credentials';
+const REMEMBERED_LOGIN_KEY = 'pymix_remembered_login';
+
+interface RememberedLogin {
+    serverId: string;
+    username: string;
+}
+
+const getRememberPreference = (): boolean => localStorage.getItem(REMEMBER_KEY) !== 'false';
+
+const setRememberPreference = (remember: boolean): void => {
+    localStorage.setItem(REMEMBER_KEY, remember ? 'true' : 'false');
+};
+
+const getRememberedLogin = (): null | RememberedLogin => {
+    try {
+        return JSON.parse(localStorage.getItem(REMEMBERED_LOGIN_KEY) || 'null');
+    } catch {
+        return null;
+    }
+};
+
+const setRememberedLogin = (login: null | RememberedLogin): void => {
+    if (login) {
+        localStorage.setItem(REMEMBERED_LOGIN_KEY, JSON.stringify(login));
+    } else {
+        localStorage.removeItem(REMEMBERED_LOGIN_KEY);
+    }
+};
+
+/**
+ * Re-login should refresh the existing server entry instead of minting a new one,
+ * otherwise stale, credential-stripped entries (and their saved passwords)
+ * accumulate. Prefer a live serverList entry; fall back to the remembered pointer so
+ * a re-login after logout reuses the same serverId (and its saved password).
+ */
+const findExistingServerId = (username: string): string | undefined => {
+    const fromList = Object.values(useAuthStore.getState().serverList).find(
+        (server) => server.type === ServerType.NAVIDROME && server.username === username,
+    )?.id;
+    if (fromList) return fromList;
+
+    const remembered = getRememberedLogin();
+    return remembered?.username === username ? remembered.serverId : undefined;
+};
+
+/**
+ * Persist the password so the filebrowser reauth path (and, on desktop, the
+ * navidrome 401 interceptor) can silently refresh expired tokens. credentialStore
+ * uses encrypted safeStorage on desktop and sessionStorage on web.
+ */
+const persistServerPassword = async (password: string, serverId: string): Promise<void> => {
+    await credentialStore.set(password, serverId);
+};
 
 interface PymixAuthModalProps {
     baseUrl: string;
@@ -145,6 +210,7 @@ function CreateAccountView({
             for (let attempt = 1; attempt <= MAX_LOGIN_ATTEMPTS; attempt++) {
                 try {
                     serverItem = await authenticateServices({
+                        id: findExistingServerId(values.username),
                         password: values.password,
                         username: values.username,
                     });
@@ -159,6 +225,10 @@ function CreateAccountView({
 
             addServer(serverItem);
             setCurrentServer(serverItem);
+            await persistServerPassword(values.password, serverItem.id);
+            if (getRememberPreference()) {
+                setRememberedLogin({ serverId: serverItem.id, username: values.username });
+            }
 
             onStatusChange('success');
             setStatusMessage(
@@ -279,6 +349,7 @@ function LoginView({ baseUrl, onSuccess }: { baseUrl: string; onSuccess: () => v
     const form = useForm({
         initialValues: {
             password: '',
+            rememberCredentials: getRememberPreference(),
             username: '',
         },
         validate: {
@@ -292,9 +363,31 @@ function LoginView({ baseUrl, onSuccess }: { baseUrl: string; onSuccess: () => v
         },
     });
 
+    // Pre-fill the saved credentials on mount so a logged-out user can log back in
+    // without re-typing them. Only when "remember me" was left on.
+    useEffect(() => {
+        if (!getRememberPreference()) return;
+        const remembered = getRememberedLogin();
+        if (!remembered) return;
+
+        let cancelled = false;
+        credentialStore.get(remembered.serverId).then((password) => {
+            if (cancelled) return;
+            form.setFieldValue('username', remembered.username);
+            if (password) form.setFieldValue('password', password);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const handleSubmit = form.onSubmit(async (values) => {
         try {
             setIsLoading(true);
+            setRememberPreference(values.rememberCredentials);
+            if (!values.rememberCredentials) setRememberedLogin(null);
 
             // 1. Authenticate with pymix
             await PymixController.login({
@@ -307,12 +400,17 @@ function LoginView({ baseUrl, onSuccess }: { baseUrl: string; onSuccess: () => v
 
             // 2. Authenticate with navidrome + filebrowser and set up server
             const serverItem = await authenticateServices({
+                id: findExistingServerId(values.username),
                 password: values.password,
                 username: values.username,
             });
 
             addServer(serverItem);
             setCurrentServer(serverItem);
+            await persistServerPassword(values.password, serverItem.id);
+            if (values.rememberCredentials) {
+                setRememberedLogin({ serverId: serverItem.id, username: values.username });
+            }
 
             toast.success({
                 message: t('form.addServer.success', { postProcess: 'sentenceCase' }),
@@ -355,6 +453,13 @@ function LoginView({ baseUrl, onSuccess }: { baseUrl: string; onSuccess: () => v
                         size="sm"
                         variant="filled"
                         {...form.getInputProps('password')}
+                    />
+                    <Checkbox
+                        label={t('common.rememberMe', {
+                            defaultValue: 'Remember me',
+                            postProcess: 'sentenceCase',
+                        })}
+                        {...form.getInputProps('rememberCredentials', { type: 'checkbox' })}
                     />
                 </Stack>
                 <Button

@@ -1,5 +1,4 @@
 import { isAxiosError } from 'axios';
-import isElectron from 'is-electron';
 import debounce from 'lodash/debounce';
 import isEqual from 'lodash/isEqual';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -9,12 +8,11 @@ import { api } from '/@/renderer/api';
 import { controller } from '/@/renderer/api/controller';
 import { AppRoute } from '/@/renderer/router/routes';
 import { getServerById, useAuthStoreActions, useCurrentServer } from '/@/renderer/store';
+import { credentialStore } from '/@/renderer/utils/credential-store';
 import { LogCategory, logFn } from '/@/renderer/utils/logger';
 import { logMsg } from '/@/renderer/utils/logger-message';
 import { toast } from '/@/shared/components/toast/toast';
 import { AuthState } from '/@/shared/types/types';
-
-const localSettings = isElectron() ? window.api.localSettings : null;
 
 const MIN_AUTH_DELAY_MS = 1000;
 const MAX_NETWORK_RETRIES = 1;
@@ -158,8 +156,8 @@ export const useServerAuthenticated = () => {
                         getUserInfoError?.message?.toLowerCase().includes('unauthorized');
 
                     // Only reauthenticate if it's a forbidden error AND password is saved
-                    if (isForbiddenError && serverWithAuth.savePassword && localSettings) {
-                        const password = await localSettings.passwordGet(serverWithAuth.id);
+                    if (isForbiddenError && serverWithAuth.savePassword) {
+                        const password = await credentialStore.get(serverWithAuth.id);
 
                         if (password) {
                             logFn.info(logMsg[LogCategory.SYSTEM].authenticatingServer, {
@@ -328,8 +326,8 @@ export const useServerAuthenticated = () => {
                 });
 
                 // Clear server credentials and saved password on failure
-                if (serverWithAuth.savePassword && localSettings) {
-                    localSettings.passwordRemove(serverWithAuth.id);
+                if (serverWithAuth.savePassword) {
+                    credentialStore.remove(serverWithAuth.id);
                 }
 
                 toast.error({

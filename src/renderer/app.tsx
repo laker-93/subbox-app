@@ -56,6 +56,22 @@ export const App = () => {
         };
     }, []);
 
+    // The main-process watch poller refreshes the filebrowser token on expiry;
+    // mirror it into the store so restarts and other sync operations stay valid.
+    useEffect(() => {
+        if (!isElectron() || !ipc) return;
+        const handler = (_event: unknown, token: string) => {
+            const server = useAuthStore.getState().currentServer;
+            if (server && token) {
+                useAuthStore.getState().actions.updateServer(server.id, { fbToken: token });
+            }
+        };
+        ipc.on('sync:filebrowser-token-refreshed', handler);
+        return () => {
+            ipc.removeListener('sync:filebrowser-token-refreshed', handler);
+        };
+    }, []);
+
     // Auto-resume watch directory on app launch if it was active before shutdown
     useEffect(() => {
         if (!isElectron() || !ipc) return;
@@ -69,6 +85,8 @@ export const App = () => {
                     filebrowserToken: currentServer.fbToken,
                     filebrowserUrl: urlConfig.filebrowser,
                     pymixUrl: urlConfig.pymix,
+                    serverId: currentServer.id,
+                    username: currentServer.username,
                     watchDir,
                 }).catch(console.error);
             },

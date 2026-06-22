@@ -37,6 +37,15 @@ export const WishlistHeader = () => {
                     <Button
                         leftSection={<Icon icon="externalLink" size="sm" />}
                         onClick={handleOfflineWishlistClick}
+                        tooltip={{
+                            label: t('page.wishlist.offlineWishlist.tooltip', {
+                                defaultValue:
+                                    'Capture tracks on the go using a linked Google Sheet — add a note, an artist and title, or a YouTube link from your phone, even offline, and Subbox pulls them into your wishlist.',
+                            }),
+                            multiline: true,
+                            openDelay: 300,
+                            w: 300,
+                        }}
                         variant="default"
                     >
                         {t('page.wishlist.offlineWishlist.title', { postProcess: 'titleCase' })}
@@ -47,7 +56,13 @@ export const WishlistHeader = () => {
                         onClick={openCreateWishlistModal}
                         size="lg"
                         tooltip={{
-                            label: t('action.addToWishlist', { postProcess: 'sentenceCase' }),
+                            label: t('action.addToWishlistTooltip', {
+                                defaultValue:
+                                    'Add a track you want to your wishlist — paste a YouTube/streaming link or type an artist and title, and Subbox finds and adds it to your library.',
+                            }),
+                            multiline: true,
+                            openDelay: 300,
+                            w: 300,
                         }}
                         variant="default"
                     />
