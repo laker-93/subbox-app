@@ -30,6 +30,7 @@ import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Icon } from '/@/shared/components/icon/icon';
 import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { Spinner } from '/@/shared/components/spinner/spinner';
+import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 
 const MINIMUM_SIDEBAR_WIDTH = 260;
 
@@ -282,17 +283,45 @@ function ModeToggle() {
             <SegmentedControl
                 data={[
                     {
-                        label: t('page.sidebar.library', {
-                            defaultValue: 'Library',
-                            postProcess: 'titleCase',
-                        }),
+                        label: (
+                            <Tooltip
+                                label={t('page.modeToggle.libraryTooltip', {
+                                    defaultValue:
+                                        'Browse and play the music already in your Subbox library.',
+                                })}
+                                multiline
+                                openDelay={300}
+                                w={260}
+                            >
+                                <span>
+                                    {t('page.sidebar.library', {
+                                        defaultValue: 'Library',
+                                        postProcess: 'titleCase',
+                                    })}
+                                </span>
+                            </Tooltip>
+                        ),
                         value: 'library',
                     },
                     {
-                        label: t('page.sidebar.sync', {
-                            defaultValue: 'Sync',
-                            postProcess: 'titleCase',
-                        }),
+                        label: (
+                            <Tooltip
+                                label={t('page.modeToggle.syncTooltip', {
+                                    defaultValue:
+                                        'Move music between Rekordbox and Subbox — upload tracks to your library or download playlists (with Rekordbox XML) to use elsewhere.',
+                                })}
+                                multiline
+                                openDelay={300}
+                                w={260}
+                            >
+                                <span>
+                                    {t('page.sidebar.sync', {
+                                        defaultValue: 'Sync',
+                                        postProcess: 'titleCase',
+                                    })}
+                                </span>
+                            </Tooltip>
+                        ),
                         value: 'sync',
                     },
                 ]}

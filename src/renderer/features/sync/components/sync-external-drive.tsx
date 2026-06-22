@@ -221,7 +221,17 @@ export const SyncExternalDrive = () => {
                         Root folder
                     </Text>
                     <Group gap="sm">
-                        <Button onClick={handleSelectDrive} size="sm" variant="default">
+                        <Button
+                            onClick={handleSelectDrive}
+                            size="sm"
+                            tooltip={{
+                                label: 'Pick the root folder on your USB or external drive that you want to load music onto.',
+                                multiline: true,
+                                openDelay: 300,
+                                w: 280,
+                            }}
+                            variant="default"
+                        >
                             {drivePath ? 'Change Folder' : 'Select Folder'}
                         </Button>
                         {drivePath && (
@@ -339,6 +349,12 @@ export const SyncExternalDrive = () => {
                     fullWidth
                     onClick={handleCompare}
                     size="md"
+                    tooltip={{
+                        label: 'Check which of the selected tracks are not yet on the drive. Nothing is copied until you confirm on the next screen.',
+                        multiline: true,
+                        openDelay: 300,
+                        w: 280,
+                    }}
                     variant="filled"
                 >
                     Compare
@@ -589,6 +605,12 @@ export const SyncExternalDrive = () => {
                 fullWidth
                 onClick={handleDownload}
                 size="md"
+                tooltip={{
+                    label: 'Copy the missing tracks from your Subbox library onto the selected drive folder.',
+                    multiline: true,
+                    openDelay: 300,
+                    w: 280,
+                }}
                 variant="filled"
             >
                 Download Missing Tracks

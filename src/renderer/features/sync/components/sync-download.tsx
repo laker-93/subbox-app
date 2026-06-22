@@ -8,17 +8,21 @@ import { urlConfig } from '/@/renderer/config/url-config';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { useCurrentServerId, useCurrentServerWithCredential } from '/@/renderer/store';
 import { pymixType } from '/@/shared/api/pymix/pymix-types';
+import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Group } from '/@/shared/components/group/group';
+import { Modal } from '/@/shared/components/modal/modal';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
+import { Tooltip } from '/@/shared/components/tooltip/tooltip';
+import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { Playlist, PlaylistListSort, SortOrder } from '/@/shared/types/domain-types';
 
 type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'select';
@@ -60,6 +64,7 @@ export const SyncDownload = () => {
     );
     const [downloadResult, setDownloadResult] = useState<null | { tracksExported: number }>(null);
     const [includeRekordboxXml, setIncludeRekordboxXml] = useState(true);
+    const [xmlHelpOpened, xmlHelpHandlers] = useDisclosure(false);
 
     const getLocalTracks = useCallback(async (): Promise<LocalTrack[]> => {
         if (!isElectron()) return [];
@@ -306,6 +311,12 @@ export const SyncDownload = () => {
                     fullWidth
                     onClick={handleGetPlan}
                     size="md"
+                    tooltip={{
+                        label: 'See exactly what will be downloaded — which tracks are missing locally, which you already have, and the total download size — before anything is saved.',
+                        multiline: true,
+                        openDelay: 300,
+                        w: 300,
+                    }}
                     variant="filled"
                 >
                     Preview Download
@@ -585,18 +596,78 @@ export const SyncDownload = () => {
                 )}
             </ScrollArea>
 
-            <Group
-                gap="md"
-                onClick={() => setIncludeRekordboxXml((v) => !v)}
-                style={{ cursor: 'pointer' }}
-            >
-                <Checkbox
-                    checked={includeRekordboxXml}
-                    label="Include Rekordbox XML"
-                    readOnly
+            <Group gap="xs" style={{ width: 'fit-content' }}>
+                <Tooltip
+                    label="Also create a Rekordbox XML alongside the tracks. Import that file into Rekordbox to recreate these playlists there — click the info icon for step-by-step instructions."
+                    multiline
+                    openDelay={300}
+                    position="top-start"
+                    w={300}
+                >
+                    <Group
+                        gap="md"
+                        onClick={() => setIncludeRekordboxXml((v) => !v)}
+                        style={{ cursor: 'pointer', width: 'fit-content' }}
+                    >
+                        <Checkbox
+                            checked={includeRekordboxXml}
+                            label="Include Rekordbox XML"
+                            readOnly
+                            size="sm"
+                        />
+                    </Group>
+                </Tooltip>
+                <ActionIcon
+                    icon="info"
+                    iconProps={{ size: 'md' }}
+                    onClick={xmlHelpHandlers.open}
                     size="sm"
+                    tooltip={{ label: 'How to import the XML into Rekordbox' }}
+                    variant="subtle"
                 />
             </Group>
+
+            <Modal
+                handlers={xmlHelpHandlers}
+                opened={xmlHelpOpened}
+                size="lg"
+                title="Importing the XML into Rekordbox"
+            >
+                <Stack gap="lg">
+                    <Text size="sm">
+                        After downloading, follow these steps to bring the exported playlists into
+                        your Rekordbox collection.
+                    </Text>
+                    <Stack gap="md">
+                        <Stack gap="xs">
+                            <TextTitle order={5}>1. Enable the XML View</TextTitle>
+                            <Text size="sm">
+                                Open Rekordbox, go to Preferences (File &gt; Preferences), click the
+                                View tab, and ensure &quot;rekordbox xml&quot; is checked under the
+                                Layout section.
+                            </Text>
+                        </Stack>
+                        <Stack gap="xs">
+                            <TextTitle order={5}>2. Link Your XML File</TextTitle>
+                            <Text size="sm">
+                                In the same Preferences window, navigate to the Advanced tab. Under
+                                the Database section, find Imported Library and click the Browse
+                                button to locate and select your .xml file.
+                            </Text>
+                        </Stack>
+                        <Stack gap="xs">
+                            <TextTitle order={5}>3. Import to Collection</TextTitle>
+                            <Text size="sm">
+                                Close the Preferences window. On the far left of your Rekordbox
+                                screen, click the newly appeared rekordbox xml icon. Click the
+                                little drop-down arrow/play button to refresh the file. Right-click
+                                your desired playlists and click Import Playlist to bring them into
+                                your primary Rekordbox collection.
+                            </Text>
+                        </Stack>
+                    </Stack>
+                </Stack>
+            </Modal>
 
             {error && (
                 <Text c="red" size="sm">
@@ -613,6 +684,14 @@ export const SyncDownload = () => {
                 fullWidth
                 onClick={handleDownload}
                 size="md"
+                tooltip={{
+                    label: isElectron()
+                        ? 'Download the missing tracks and save them into your local music folder, ready to use (plus a Rekordbox XML if ticked above).'
+                        : 'Download the selected tracks as a zip file (plus a Rekordbox XML if ticked above) to this device.',
+                    multiline: true,
+                    openDelay: 300,
+                    w: 300,
+                }}
                 variant="filled"
             >
                 {isElectron() ? 'Download & Extract' : 'Download Zip'}

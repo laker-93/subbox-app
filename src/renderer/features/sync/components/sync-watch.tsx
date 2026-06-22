@@ -93,7 +93,16 @@ export const SyncWatch = () => {
             </Text>
 
             <Group gap="sm">
-                <Button onClick={handleSelectDirectory} variant="subtle">
+                <Button
+                    onClick={handleSelectDirectory}
+                    tooltip={{
+                        label: 'Choose the local folder to monitor — for example the folder where you save new downloads or recordings.',
+                        multiline: true,
+                        openDelay: 300,
+                        w: 280,
+                    }}
+                    variant="subtle"
+                >
                     {watchDir ? 'Change Directory' : 'Select Directory'}
                 </Button>
                 {watchDir && (
@@ -106,11 +115,30 @@ export const SyncWatch = () => {
             {watchDir && (
                 <Group gap="sm">
                     {!watching ? (
-                        <Button onClick={handleStartWatch} variant="filled">
+                        <Button
+                            onClick={handleStartWatch}
+                            tooltip={{
+                                label: 'Start watching this folder. New audio files added here will be uploaded to your Subbox library automatically while the app is open.',
+                                multiline: true,
+                                openDelay: 300,
+                                w: 280,
+                            }}
+                            variant="filled"
+                        >
                             Start Watching
                         </Button>
                     ) : (
-                        <Button color="red" onClick={handleStopWatch} variant="filled">
+                        <Button
+                            color="red"
+                            onClick={handleStopWatch}
+                            tooltip={{
+                                label: 'Stop watching this folder. New files will no longer be uploaded automatically.',
+                                multiline: true,
+                                openDelay: 300,
+                                w: 280,
+                            }}
+                            variant="filled"
+                        >
                             Stop Watching
                         </Button>
                     )}
