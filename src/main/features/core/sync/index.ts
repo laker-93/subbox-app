@@ -1,6 +1,6 @@
-import axios from 'axios';
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { randomUUID } from 'crypto';
-import { app, ipcMain, session } from 'electron';
+import { app, ipcMain, session, shell } from 'electron';
 import * as fs from 'fs';
 import * as https from 'https';
 import { parseFile } from 'music-metadata';
@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
 
+import { getStoredPassword } from '/@/main/features/core/settings';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 import {
     extractPlaylists,
@@ -38,6 +39,16 @@ export interface UploadResult {
     uploaded: number;
 }
 
+interface FbAuth {
+    /** The current filebrowser token (updated in place after a refresh). */
+    getToken(): string;
+    /**
+     * Re-login via the stored password and return the new token, or null when no
+     * stored password is available (e.g. the user never opted into "remember me").
+     */
+    refresh(): Promise<null | string>;
+}
+
 type LocalTrack = {
     album?: string;
     artist: string;
@@ -45,6 +56,48 @@ type LocalTrack = {
     fromTag: boolean;
     title: string;
 };
+
+/**
+ * Build a filebrowser auth helper that can silently re-login when its short-lived
+ * (~2h) token expires mid-operation. The token outlives by far less than a long
+ * download, so refresh it in place on a 401 instead of failing the whole flow.
+ * On refresh it notifies the renderer (`sync:filebrowser-token-refreshed`) so the
+ * store stays canonical. Refreshes are deduped so concurrent 401s trigger a single
+ * login. Mirrors the watch poller's refresh logic.
+ */
+function createFbAuth(args: {
+    event: Electron.IpcMainInvokeEvent;
+    filebrowserUrl: string;
+    initialToken: string;
+    serverId?: string;
+    username?: string;
+}): FbAuth {
+    let token = args.initialToken;
+    let inFlight: null | Promise<null | string> = null;
+
+    const refresh = (): Promise<null | string> => {
+        if (!inFlight) {
+            inFlight = (async () => {
+                if (!args.serverId || !args.username) return null;
+                const password = getStoredPassword(args.serverId);
+                if (!password) return null;
+                const res = await axios.post<string>(
+                    `${args.filebrowserUrl}/api/login`,
+                    { password, username: args.username },
+                    { httpsAgent },
+                );
+                token = res.data;
+                args.event.sender.send('sync:filebrowser-token-refreshed', token);
+                return token;
+            })().finally(() => {
+                inFlight = null;
+            });
+        }
+        return inFlight;
+    };
+
+    return { getToken: () => token, refresh };
+}
 
 async function getCookiesForUrl(url: string): Promise<string> {
     const cookies = await session.defaultSession.cookies.get({ url });
@@ -500,16 +553,32 @@ ipcMain.handle(
 
 async function downloadFileFromFilebrowser(
     filebrowserUrl: string,
-    filebrowserToken: string,
+    auth: FbAuth,
     fileName: string,
     destPath: string,
 ): Promise<void> {
     const url = `${filebrowserUrl}/api/raw/downloads/${fileName}`;
-    const response = await axios.get(url, {
-        headers: { 'X-Auth': filebrowserToken },
-        httpsAgent,
-        responseType: 'stream',
-    });
+    const requestStream = (token: string): Promise<AxiosResponse> =>
+        axios.get(url, {
+            headers: { 'X-Auth': token },
+            httpsAgent,
+            responseType: 'stream',
+        });
+
+    let response: AxiosResponse;
+    try {
+        response = await requestStream(auth.getToken());
+    } catch (err) {
+        // The filebrowser token can expire mid-session; refresh it once and retry
+        // before giving up so an expired token self-heals instead of failing.
+        if (axios.isAxiosError(err) && err.response?.status === 401) {
+            const token = await auth.refresh();
+            if (!token) throw err;
+            response = await requestStream(token);
+        } else {
+            throw err;
+        }
+    }
 
     const writer = fs.createWriteStream(destPath);
     response.data.pipe(writer);
@@ -699,18 +768,39 @@ async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promis
 ipcMain.handle(
     'sync:download-playlists',
     async (
-        _event,
+        event,
         args: {
             filebrowserToken: string;
             filebrowserUrl: string;
             includeRekordboxXml?: boolean;
             playlistIds: string[];
             pymixUrl: string;
+            rekordboxXmlDir?: string;
+            serverId?: string;
+            username?: string;
         },
-    ): Promise<{ tracksExported: number }> => {
-        const { filebrowserToken, filebrowserUrl, includeRekordboxXml, playlistIds, pymixUrl } =
-            args;
+    ): Promise<{ musicPath: string; tracksExported: number; xmlPath?: string }> => {
+        const {
+            filebrowserToken,
+            filebrowserUrl,
+            includeRekordboxXml,
+            playlistIds,
+            pymixUrl,
+            rekordboxXmlDir,
+            serverId,
+            username,
+        } = args;
         const pymixCookies = await getCookiesForUrl(pymixUrl);
+
+        // Filebrowser auth that self-heals on a 401 by re-logging in with the
+        // stored password — the token (~2h) can lapse before a long download.
+        const fbAuth = createFbAuth({
+            event,
+            filebrowserUrl,
+            initialToken: filebrowserToken,
+            serverId,
+            username,
+        });
 
         // Scan local music directory for existing tracks
         const localTracks = await scanLocalTracks();
@@ -743,12 +833,7 @@ ipcMain.handle(
             fs.mkdirSync(appPath, { recursive: true });
         }
         const localZipPath = path.join(appPath, zipFileName);
-        await downloadFileFromFilebrowser(
-            filebrowserUrl,
-            filebrowserToken,
-            zipFileName,
-            localZipPath,
-        );
+        await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
 
         // Step 3: Unzip and merge into app directory (zip contains music/ prefix)
         await unzipAndMerge(localZipPath, appPath);
@@ -761,6 +846,7 @@ ipcMain.handle(
         }
 
         // Step 4: Optionally export and download Rekordbox XML
+        let xmlPath: string | undefined;
         if (includeRekordboxXml) {
             const musicPath = getMusicPath();
 
@@ -772,22 +858,56 @@ ipcMain.handle(
                 { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
             );
 
-            // Download the XML from filebrowser
-            const xmlDestPath = path.join(appPath, 'subbox_rb_export.xml');
+            // Download the XML from filebrowser into the user-configured directory,
+            // falling back to the app directory when none has been set.
+            const xmlDir =
+                rekordboxXmlDir && rekordboxXmlDir.length > 0 ? rekordboxXmlDir : appPath;
+            if (!fs.existsSync(xmlDir)) {
+                fs.mkdirSync(xmlDir, { recursive: true });
+            }
+            const xmlDestPath = path.join(xmlDir, 'subbox_rb_export.xml');
             await downloadFileFromFilebrowser(
                 filebrowserUrl,
-                filebrowserToken,
+                fbAuth,
                 'subbox_rb_export.xml',
                 xmlDestPath,
             );
+            xmlPath = xmlDestPath;
         }
 
-        return { tracksExported: nTracksExported };
+        return { musicPath: getMusicPath(), tracksExported: nTracksExported, xmlPath };
     },
 );
 
 ipcMain.handle('sync:get-local-tracks', async (): Promise<LocalTrack[]> => {
     return scanLocalTracks();
+});
+
+// ── Choose where downloaded Rekordbox XML is saved ─────────────────────────
+
+ipcMain.handle('sync:select-xml-directory', async (): Promise<null | string> => {
+    const { dialog: electronDialog } = await import('electron');
+    const result = await electronDialog.showOpenDialog({
+        buttonLabel: 'Select Folder',
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Select Rekordbox XML Download Folder',
+    });
+    return result.filePaths[0] || null;
+});
+
+/** Default directory the Rekordbox XML is saved to when the user hasn't picked one. */
+ipcMain.handle('sync:get-default-xml-directory', async (): Promise<string> => {
+    return getAppPath();
+});
+
+/** Open a folder in the OS file manager. */
+ipcMain.handle('sync:open-folder', async (_event, folderPath: string): Promise<void> => {
+    if (folderPath) await shell.openPath(folderPath);
+});
+
+/** Reveal a file in the OS file manager, highlighting it within its folder. */
+ipcMain.handle('sync:reveal-file', async (_event, filePath: string): Promise<void> => {
+    if (filePath) shell.showItemInFolder(filePath);
 });
 
 // ── Watch directory for auto-upload ────────────────────────────────────────
@@ -995,6 +1115,8 @@ ipcMain.handle(
             filebrowserUrl: string;
             pollIntervalMs?: number;
             pymixUrl: string;
+            serverId: string;
+            username: string;
             watchDir: string;
         },
     ): Promise<void> => {
@@ -1003,6 +1125,8 @@ ipcMain.handle(
             filebrowserUrl,
             pollIntervalMs = 10000,
             pymixUrl,
+            serverId,
+            username,
             watchDir,
         } = args;
 
@@ -1016,6 +1140,54 @@ ipcMain.handle(
 
         const sendProgress = (progress: WatchProgress) => {
             event.sender.send('sync:watch-progress', progress);
+        };
+
+        // The filebrowser token (~2h) outlives by far less than this long-running
+        // poller, so refresh it in place on a 401 instead of failing/logging out.
+        // The password lives in the main-process safeStorage store.
+        let fbToken = filebrowserToken;
+        let fbRefreshInFlight: null | Promise<null | string> = null;
+
+        const refreshFbToken = (): Promise<null | string> => {
+            if (!fbRefreshInFlight) {
+                fbRefreshInFlight = (async () => {
+                    const password = getStoredPassword(serverId);
+                    if (!password) return null;
+                    const res = await axios.post<string>(
+                        `${filebrowserUrl}/api/login`,
+                        { password, username },
+                        { httpsAgent },
+                    );
+                    fbToken = res.data;
+                    // Keep the renderer store canonical so restarts / other sync
+                    // operations start with a valid token.
+                    event.sender.send('sync:filebrowser-token-refreshed', fbToken);
+                    return fbToken;
+                })().finally(() => {
+                    fbRefreshInFlight = null;
+                });
+            }
+            return fbRefreshInFlight;
+        };
+
+        // Filebrowser request that refreshes the token once on a 401 and retries.
+        const fbRequest = async (
+            config: AxiosRequestConfig,
+            retried = false,
+        ): Promise<AxiosResponse> => {
+            try {
+                return await axios.request({
+                    ...config,
+                    headers: { ...config.headers, 'X-Auth': fbToken },
+                    httpsAgent,
+                });
+            } catch (err) {
+                if (!retried && axios.isAxiosError(err) && err.response?.status === 401) {
+                    const token = await refreshFbToken();
+                    if (token) return fbRequest(config, true);
+                }
+                throw err;
+            }
         };
 
         const pollAndUpload = async () => {
@@ -1086,12 +1258,11 @@ ipcMain.handle(
                     });
 
                     try {
-                        await axios.post(resourcePath, fileContents, {
-                            headers: {
-                                'Content-Type': 'application/octet-stream',
-                                'X-Auth': filebrowserToken,
-                            },
-                            httpsAgent,
+                        await fbRequest({
+                            data: fileContents,
+                            headers: { 'Content-Type': 'application/octet-stream' },
+                            method: 'POST',
+                            url: resourcePath,
                         });
                     } catch (err) {
                         if (axios.isAxiosError(err) && err.response?.status === 409) {
@@ -1121,9 +1292,12 @@ ipcMain.handle(
             } catch (err) {
                 console.error('Watch poll error:', err);
 
-                // Any HTTP error response from an endpoint means the session is invalid.
-                // Stop polling and signal the renderer to log out.
-                if (axios.isAxiosError(err) && err.response) {
+                // Only a genuine, unrecoverable auth failure should log the user out.
+                // Filebrowser 401s are already refreshed-and-retried by fbRequest, so a
+                // 401/403 reaching here means reauth failed (no saved password / bad
+                // creds). Transient errors (network, 5xx) must not log the user out.
+                const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+                if (status === 401 || status === 403) {
                     if (watchInterval) {
                         clearInterval(watchInterval);
                         watchInterval = null;
@@ -1269,11 +1443,12 @@ ipcMain.handle(
 ipcMain.handle(
     'sync:download-missing-tracks',
     async (
-        _event,
+        event,
         args: {
             filebrowserToken: string;
             filebrowserUrl: string;
             pymixUrl: string;
+            serverId?: string;
             tracksToDownload: Array<{
                 album?: string;
                 artist: string;
@@ -1281,10 +1456,21 @@ ipcMain.handle(
                 fromTag: boolean;
                 title: string;
             }>;
+            username?: string;
         },
     ): Promise<{ tracksExported: number }> => {
-        const { filebrowserToken, filebrowserUrl, pymixUrl, tracksToDownload } = args;
+        const { filebrowserToken, filebrowserUrl, pymixUrl, serverId, tracksToDownload, username } =
+            args;
         const pymixCookies = await getCookiesForUrl(pymixUrl);
+
+        // Filebrowser auth that self-heals on a 401 by re-logging in (see download-playlists).
+        const fbAuth = createFbAuth({
+            event,
+            filebrowserUrl,
+            initialToken: filebrowserToken,
+            serverId,
+            username,
+        });
 
         // Step 1: Call sync/tracks to prepare the zip on the server
         const syncResponse = await axios.post(
@@ -1306,12 +1492,7 @@ ipcMain.handle(
             fs.mkdirSync(appPath, { recursive: true });
         }
         const localZipPath = path.join(appPath, zipFileName);
-        await downloadFileFromFilebrowser(
-            filebrowserUrl,
-            filebrowserToken,
-            zipFileName,
-            localZipPath,
-        );
+        await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
 
         // Step 3: Unzip and merge into app directory
         await unzipAndMerge(localZipPath, appPath);

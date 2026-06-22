@@ -68,22 +68,26 @@ ipcMain.on('settings-set', (__event, data: { property: string; value: any }) => 
     }
 });
 
-ipcMain.handle('password-get', (_event, server: string): null | string => {
-    if (safeStorage.isEncryptionAvailable()) {
-        const servers = store.get('server') as Record<string, string> | undefined;
-
-        if (!servers) {
-            return null;
-        }
-
-        const encrypted = servers[server];
-        if (!encrypted) return null;
-
-        const decrypted = safeStorage.decryptString(Buffer.from(encrypted, 'hex'));
-        return decrypted;
+// Decrypt a saved server password. Shared with the sync module so it can silently
+// re-authenticate filebrowser when its token expires.
+export const getStoredPassword = (server: string): null | string => {
+    if (!safeStorage.isEncryptionAvailable()) {
+        return null;
     }
 
-    return null;
+    const servers = store.get('server') as Record<string, string> | undefined;
+    if (!servers) {
+        return null;
+    }
+
+    const encrypted = servers[server];
+    if (!encrypted) return null;
+
+    return safeStorage.decryptString(Buffer.from(encrypted, 'hex'));
+};
+
+ipcMain.handle('password-get', (_event, server: string): null | string => {
+    return getStoredPassword(server);
 });
 
 ipcMain.on('password-remove', (_event, server: string) => {

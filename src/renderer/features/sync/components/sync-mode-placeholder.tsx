@@ -23,6 +23,12 @@ export const SyncModePlaceholder = () => {
                 <Button
                     onClick={() => setTab('upload')}
                     size="sm"
+                    tooltip={{
+                        label: 'Add music to Subbox from a Rekordbox XML export — pick the playlists you want and upload the tracks to your cloud library.',
+                        multiline: true,
+                        openDelay: 300,
+                        w: 280,
+                    }}
                     variant={tab === 'upload' ? 'filled' : 'subtle'}
                 >
                     Upload (Rekordbox)
@@ -30,6 +36,12 @@ export const SyncModePlaceholder = () => {
                 <Button
                     onClick={() => setTab('download')}
                     size="sm"
+                    tooltip={{
+                        label: 'Download playlists from your Subbox library to this device. Optionally include a Rekordbox XML so you can import them straight back into Rekordbox.',
+                        multiline: true,
+                        openDelay: 300,
+                        w: 280,
+                    }}
                     variant={tab === 'download' ? 'filled' : 'subtle'}
                 >
                     Download
@@ -37,6 +49,12 @@ export const SyncModePlaceholder = () => {
                 <Button
                     onClick={() => setTab('watch')}
                     size="sm"
+                    tooltip={{
+                        label: 'Watch a local folder — any new audio files you drop in are uploaded to your Subbox library automatically.',
+                        multiline: true,
+                        openDelay: 300,
+                        w: 280,
+                    }}
                     variant={tab === 'watch' ? 'filled' : 'subtle'}
                 >
                     Watch
@@ -45,6 +63,12 @@ export const SyncModePlaceholder = () => {
                     <Button
                         onClick={() => setTab('external-drive')}
                         size="sm"
+                        tooltip={{
+                            label: 'Compare a folder on a USB or external drive against your library and copy across any missing tracks — handy for loading a DJ USB.',
+                            multiline: true,
+                            openDelay: 300,
+                            w: 280,
+                        }}
                         variant={tab === 'external-drive' ? 'filled' : 'subtle'}
                     >
                         External Drive
