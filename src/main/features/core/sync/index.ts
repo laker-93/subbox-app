@@ -39,6 +39,16 @@ export interface UploadResult {
     uploaded: number;
 }
 
+interface FbAuth {
+    /** The current filebrowser token (updated in place after a refresh). */
+    getToken(): string;
+    /**
+     * Re-login via the stored password and return the new token, or null when no
+     * stored password is available (e.g. the user never opted into "remember me").
+     */
+    refresh(): Promise<null | string>;
+}
+
 type LocalTrack = {
     album?: string;
     artist: string;
@@ -46,6 +56,48 @@ type LocalTrack = {
     fromTag: boolean;
     title: string;
 };
+
+/**
+ * Build a filebrowser auth helper that can silently re-login when its short-lived
+ * (~2h) token expires mid-operation. The token outlives by far less than a long
+ * download, so refresh it in place on a 401 instead of failing the whole flow.
+ * On refresh it notifies the renderer (`sync:filebrowser-token-refreshed`) so the
+ * store stays canonical. Refreshes are deduped so concurrent 401s trigger a single
+ * login. Mirrors the watch poller's refresh logic.
+ */
+function createFbAuth(args: {
+    event: Electron.IpcMainInvokeEvent;
+    filebrowserUrl: string;
+    initialToken: string;
+    serverId?: string;
+    username?: string;
+}): FbAuth {
+    let token = args.initialToken;
+    let inFlight: null | Promise<null | string> = null;
+
+    const refresh = (): Promise<null | string> => {
+        if (!inFlight) {
+            inFlight = (async () => {
+                if (!args.serverId || !args.username) return null;
+                const password = getStoredPassword(args.serverId);
+                if (!password) return null;
+                const res = await axios.post<string>(
+                    `${args.filebrowserUrl}/api/login`,
+                    { password, username: args.username },
+                    { httpsAgent },
+                );
+                token = res.data;
+                args.event.sender.send('sync:filebrowser-token-refreshed', token);
+                return token;
+            })().finally(() => {
+                inFlight = null;
+            });
+        }
+        return inFlight;
+    };
+
+    return { getToken: () => token, refresh };
+}
 
 async function getCookiesForUrl(url: string): Promise<string> {
     const cookies = await session.defaultSession.cookies.get({ url });
@@ -501,16 +553,32 @@ ipcMain.handle(
 
 async function downloadFileFromFilebrowser(
     filebrowserUrl: string,
-    filebrowserToken: string,
+    auth: FbAuth,
     fileName: string,
     destPath: string,
 ): Promise<void> {
     const url = `${filebrowserUrl}/api/raw/downloads/${fileName}`;
-    const response = await axios.get(url, {
-        headers: { 'X-Auth': filebrowserToken },
-        httpsAgent,
-        responseType: 'stream',
-    });
+    const requestStream = (token: string): Promise<AxiosResponse> =>
+        axios.get(url, {
+            headers: { 'X-Auth': token },
+            httpsAgent,
+            responseType: 'stream',
+        });
+
+    let response: AxiosResponse;
+    try {
+        response = await requestStream(auth.getToken());
+    } catch (err) {
+        // The filebrowser token can expire mid-session; refresh it once and retry
+        // before giving up so an expired token self-heals instead of failing.
+        if (axios.isAxiosError(err) && err.response?.status === 401) {
+            const token = await auth.refresh();
+            if (!token) throw err;
+            response = await requestStream(token);
+        } else {
+            throw err;
+        }
+    }
 
     const writer = fs.createWriteStream(destPath);
     response.data.pipe(writer);
@@ -700,7 +768,7 @@ async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promis
 ipcMain.handle(
     'sync:download-playlists',
     async (
-        _event,
+        event,
         args: {
             filebrowserToken: string;
             filebrowserUrl: string;
@@ -708,6 +776,8 @@ ipcMain.handle(
             playlistIds: string[];
             pymixUrl: string;
             rekordboxXmlDir?: string;
+            serverId?: string;
+            username?: string;
         },
     ): Promise<{ musicPath: string; tracksExported: number; xmlPath?: string }> => {
         const {
@@ -717,8 +787,20 @@ ipcMain.handle(
             playlistIds,
             pymixUrl,
             rekordboxXmlDir,
+            serverId,
+            username,
         } = args;
         const pymixCookies = await getCookiesForUrl(pymixUrl);
+
+        // Filebrowser auth that self-heals on a 401 by re-logging in with the
+        // stored password — the token (~2h) can lapse before a long download.
+        const fbAuth = createFbAuth({
+            event,
+            filebrowserUrl,
+            initialToken: filebrowserToken,
+            serverId,
+            username,
+        });
 
         // Scan local music directory for existing tracks
         const localTracks = await scanLocalTracks();
@@ -751,12 +833,7 @@ ipcMain.handle(
             fs.mkdirSync(appPath, { recursive: true });
         }
         const localZipPath = path.join(appPath, zipFileName);
-        await downloadFileFromFilebrowser(
-            filebrowserUrl,
-            filebrowserToken,
-            zipFileName,
-            localZipPath,
-        );
+        await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
 
         // Step 3: Unzip and merge into app directory (zip contains music/ prefix)
         await unzipAndMerge(localZipPath, appPath);
@@ -791,7 +868,7 @@ ipcMain.handle(
             const xmlDestPath = path.join(xmlDir, 'subbox_rb_export.xml');
             await downloadFileFromFilebrowser(
                 filebrowserUrl,
-                filebrowserToken,
+                fbAuth,
                 'subbox_rb_export.xml',
                 xmlDestPath,
             );
@@ -1366,11 +1443,12 @@ ipcMain.handle(
 ipcMain.handle(
     'sync:download-missing-tracks',
     async (
-        _event,
+        event,
         args: {
             filebrowserToken: string;
             filebrowserUrl: string;
             pymixUrl: string;
+            serverId?: string;
             tracksToDownload: Array<{
                 album?: string;
                 artist: string;
@@ -1378,10 +1456,21 @@ ipcMain.handle(
                 fromTag: boolean;
                 title: string;
             }>;
+            username?: string;
         },
     ): Promise<{ tracksExported: number }> => {
-        const { filebrowserToken, filebrowserUrl, pymixUrl, tracksToDownload } = args;
+        const { filebrowserToken, filebrowserUrl, pymixUrl, serverId, tracksToDownload, username } =
+            args;
         const pymixCookies = await getCookiesForUrl(pymixUrl);
+
+        // Filebrowser auth that self-heals on a 401 by re-logging in (see download-playlists).
+        const fbAuth = createFbAuth({
+            event,
+            filebrowserUrl,
+            initialToken: filebrowserToken,
+            serverId,
+            username,
+        });
 
         // Step 1: Call sync/tracks to prepare the zip on the server
         const syncResponse = await axios.post(
@@ -1403,12 +1492,7 @@ ipcMain.handle(
             fs.mkdirSync(appPath, { recursive: true });
         }
         const localZipPath = path.join(appPath, zipFileName);
-        await downloadFileFromFilebrowser(
-            filebrowserUrl,
-            filebrowserToken,
-            zipFileName,
-            localZipPath,
-        );
+        await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
 
         // Step 3: Unzip and merge into app directory
         await unzipAndMerge(localZipPath, appPath);

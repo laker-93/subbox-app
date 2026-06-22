@@ -170,12 +170,16 @@ export const SyncExternalDrive = () => {
                 filebrowserToken: server.fbToken ?? '',
                 filebrowserUrl: urlConfig.filebrowser,
                 pymixUrl: urlConfig.pymix,
+                // Let the main process silently re-login to filebrowser if its
+                // token has expired by the time the download runs.
+                serverId: serverId ?? undefined,
                 tracksToDownload: plan.tracks.missing.map((t) => ({
                     album: t.album,
                     artist: t.artist,
                     fromTag: true,
                     title: t.title,
                 })),
+                username: server.username,
             });
 
             setDownloadResult(result as { tracksExported: number });
@@ -185,7 +189,7 @@ export const SyncExternalDrive = () => {
             setError(err?.message || 'Download failed');
             setStep('preview');
         }
-    }, [plan, server.fbToken]);
+    }, [plan, server.fbToken, server.username, serverId]);
 
     // ── Select drive + playlists ──────────────────────────────────────────
     if (step === 'select') {

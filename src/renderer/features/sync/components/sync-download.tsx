@@ -222,6 +222,10 @@ export const SyncDownload = () => {
                     playlistIds: Array.from(selectedPlaylists),
                     pymixUrl: urlConfig.pymix,
                     rekordboxXmlDir: xmlDir ?? '',
+                    // Let the main process silently re-login to filebrowser if its
+                    // token has expired by the time the download runs.
+                    serverId: serverId ?? undefined,
+                    username: server.username,
                 });
                 setDownloadResult(
                     result as { musicPath?: string; tracksExported: number; xmlPath?: string },
@@ -287,7 +291,7 @@ export const SyncDownload = () => {
             setError(err?.message || 'Download failed');
             setStep('preview');
         }
-    }, [includeRekordboxXml, selectedPlaylists, server.fbToken, xmlDir]);
+    }, [includeRekordboxXml, selectedPlaylists, server.fbToken, server.username, serverId, xmlDir]);
 
     // ── Select playlists ───────────────────────────────────────────────────
     if (step === 'select') {
