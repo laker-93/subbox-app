@@ -98,6 +98,10 @@ export function extractPlaylists(filePath: string): ParsedXmlResult {
     };
 }
 
+export function sanitizeName(name: null | string): string {
+    return (name || '').replace(/[/\\?%*:|"<>]/g, '-');
+}
+
 function parseNodes<T, R>(nodes: Node[], callback: (node: T) => R): R[] {
     return Array.from(nodes as T[]).map(callback);
 }
@@ -116,8 +120,4 @@ function parseTrack(track: Track): ParsedTrack {
         name: track.getAttribute('Name') || null,
         totalTime: track.getAttribute('TotalTime') || '',
     };
-}
-
-export function sanitizeName(name: null | string): string {
-    return (name || '').replace(/[/\\?%*:|"<>]/g, '-');
 }
