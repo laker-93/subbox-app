@@ -118,6 +118,6 @@ function parseTrack(track: Track): ParsedTrack {
     };
 }
 
-function sanitizeName(name: null | string): string {
+export function sanitizeName(name: null | string): string {
     return (name || '').replace(/[/\\?%*:|"<>]/g, '-');
 }
