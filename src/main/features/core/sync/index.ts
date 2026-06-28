@@ -15,6 +15,7 @@ import {
     extractPlaylists,
     ParsedPlaylist,
     ParsedTrack,
+    sanitizeName,
 } from '/@/main/features/core/sync/rekordbox-xml';
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
@@ -389,7 +390,14 @@ ipcMain.handle(
                 continue;
             }
 
-            const stagingPath = `${track.artist}/${track.album}/${track.cleanName}${track.fileExtension}`;
+            // Sanitize each path component so characters like '%' don't reach
+            // filebrowser's TUS endpoint, which double-unescapes the path and 400s
+            // on an invalid URL escape (e.g. album "99.9%" → ".../99.9%/..." →
+            // "invalid URL escape"). sanitizeName strips the same character set
+            // already used for playlist/folder names. The file extension is a
+            // controlled value (path.extname) so it's left as-is. This is the same
+            // value sent to /sync/map_meta below, so server-side tagging still matches.
+            const stagingPath = `${sanitizeName(track.artist)}/${sanitizeName(track.album)}/${sanitizeName(track.cleanName)}${track.fileExtension}`;
             uploadableTracks.push({ stagingPath, track, trackName });
 
             originalTrackMetaData.push({
@@ -1225,7 +1233,10 @@ ipcMain.handle(
                     const presenceRes = await axios.post(
                         `${pymixUrl}/tracks/presence`,
                         { subbox_ids: uncheckedFiles.map((f) => fileIdMap.get(f)!) },
-                        { headers: { Cookie: pymixCookies }, httpsAgent },
+                        // Pass username explicitly: the session cookie can be absent
+                        // here, and without it the server resolves the user as None
+                        // and 500s (AssertionError: found 0 users with username None).
+                        { headers: { Cookie: pymixCookies }, httpsAgent, params: { username } },
                     );
                     const presence: Record<string, boolean> = presenceRes.data.presence;
 
