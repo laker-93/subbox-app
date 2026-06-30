@@ -305,11 +305,11 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
                         {item.status === 'downloaded' && (
                             <>
                                 <Button
-                                    onClick={() => setStatus('imported')}
+                                    onClick={() => setStatus('available')}
                                     size="sm"
                                     variant="default"
                                 >
-                                    {t('action.markImported', { postProcess: 'sentenceCase' })}
+                                    {t('action.markAvailable', { postProcess: 'sentenceCase' })}
                                 </Button>
                                 <Button
                                     onClick={() => setStatus('wishlist')}
@@ -319,15 +319,6 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
                                     {t('action.markWishlist', { postProcess: 'sentenceCase' })}
                                 </Button>
                             </>
-                        )}
-                        {item.status === 'imported' && (
-                            <Button
-                                onClick={() => setStatus('available')}
-                                size="sm"
-                                variant="default"
-                            >
-                                {t('action.markAvailable', { postProcess: 'sentenceCase' })}
-                            </Button>
                         )}
                         {item.status === 'ignored' && (
                             <Button

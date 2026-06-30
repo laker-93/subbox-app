@@ -10,7 +10,6 @@ export const WISHLIST_STATUSES: WishlistStatus[] = [
     'inbox',
     'wishlist',
     'downloaded',
-    'imported',
     'available',
     'ignored',
 ];

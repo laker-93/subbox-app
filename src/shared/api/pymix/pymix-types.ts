@@ -237,14 +237,7 @@ const syncTracksParameters = z.object({
 
 // --- Wishlist types ---
 
-const wishlistStatus = z.enum([
-    'inbox',
-    'wishlist',
-    'downloaded',
-    'imported',
-    'available',
-    'ignored',
-]);
+const wishlistStatus = z.enum(['inbox', 'wishlist', 'downloaded', 'available', 'ignored']);
 
 const wishlistItem = z.object({
     album: z.string().nullable().optional(),

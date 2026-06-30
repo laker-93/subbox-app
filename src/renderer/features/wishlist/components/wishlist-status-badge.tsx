@@ -11,7 +11,6 @@ const STATUS_COLORS: Record<WishlistStatus, string> = {
     available: 'green',
     downloaded: 'blue',
     ignored: 'gray',
-    imported: 'teal',
     inbox: 'orange',
     wishlist: 'yellow',
 };
