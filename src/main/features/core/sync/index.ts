@@ -1054,10 +1054,7 @@ function readSubboxId(filePath: string): null | string {
         }
 
         if (types & TagLib.TagTypes.Apple) {
-            const apple = file.getTag(
-                TagLib.TagTypes.Apple,
-                false,
-            ) as null | TagLib.Mpeg4AppleTag;
+            const apple = file.getTag(TagLib.TagTypes.Apple, false) as null | TagLib.Mpeg4AppleTag;
             const val = apple?.getFirstItunesString(APPLE_ITUNES_MEAN, SUBBOX_ID_FIELD);
             if (val) return val;
         }
