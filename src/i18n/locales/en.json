@@ -12,6 +12,7 @@
         "markWishlist": "mark wishlist",
         "matchYoutubePreview": "match preview",
         "openOnBandcamp": "open on bandcamp",
+        "openOnSoundcloud": "open on soundcloud",
         "confirmMatch": "confirm match",
         "nextMatch": "next match",
         "previousMatch": "previous match",
@@ -368,7 +369,7 @@
         "createWishlistItem": {
             "input_album": "album",
             "input_artist": "artist",
-            "input_link": "link (youtube or bandcamp)",
+            "input_link": "link (youtube, bandcamp or soundcloud)",
             "input_title": "title",
             "linkDescription": "paste a track, playlist, or album link to auto-fill artist and title",
             "needsArtistOrTitle": "provide an artist, title, or link",
