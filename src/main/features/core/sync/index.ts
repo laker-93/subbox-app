@@ -946,6 +946,12 @@ const knownPresentIds = new Set<string>();
 
 const SUBBOX_ID_FIELD = 'SUBBOX_ID';
 
+// MP4/M4A files store custom tags as iTunes-style freeform atoms keyed by a
+// MEAN/NAME pair (the "----:<mean>:<name>" atom). This MEAN mirrors what the
+// pymix backend writes via mutagen ("----:com.apple.iTunes:SUBBOX_ID"), so a
+// SUBBOX_ID written by either side is readable by the other.
+const APPLE_ITUNES_MEAN = 'com.apple.iTunes';
+
 function getAudioFiles(dirPath: string): string[] {
     if (!fs.existsSync(dirPath)) return [];
 
@@ -1047,6 +1053,12 @@ function readSubboxId(filePath: string): null | string {
             if (val) return val;
         }
 
+        if (types & TagLib.TagTypes.Apple) {
+            const apple = file.getTag(TagLib.TagTypes.Apple, false) as null | TagLib.Mpeg4AppleTag;
+            const val = apple?.getFirstItunesString(APPLE_ITUNES_MEAN, SUBBOX_ID_FIELD);
+            if (val) return val;
+        }
+
         return null;
     } catch {
         return null;
@@ -1091,6 +1103,12 @@ function writeSubboxId(filePath: string, id: string): void {
         } else if (types & TagLib.TagTypes.Asf) {
             const asf = file.getTag(TagLib.TagTypes.Asf, true) as TagLib.AsfTag;
             asf.setDescriptorStrings([id], SUBBOX_ID_FIELD);
+        } else if (types & TagLib.TagTypes.Apple) {
+            // MP4/M4A: store as an iTunes freeform atom. ID3v2 (the fallback below)
+            // cannot be attached to an MP4 container, so this branch is required —
+            // without it, SUBBOX_ID silently never persists on .m4a files.
+            const apple = file.getTag(TagLib.TagTypes.Apple, true) as TagLib.Mpeg4AppleTag;
+            apple.setItunesStrings(APPLE_ITUNES_MEAN, SUBBOX_ID_FIELD, id);
         } else {
             // No recognised tag type — create an ID3v2 tag as the most portable option
             const id3 = file.getTag(TagLib.TagTypes.Id3v2, true) as TagLib.Id3v2Tag;

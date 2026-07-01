@@ -237,14 +237,7 @@ const syncTracksParameters = z.object({
 
 // --- Wishlist types ---
 
-const wishlistStatus = z.enum([
-    'inbox',
-    'wishlist',
-    'downloaded',
-    'imported',
-    'available',
-    'ignored',
-]);
+const wishlistStatus = z.enum(['inbox', 'wishlist', 'downloaded', 'available', 'ignored']);
 
 const wishlistItem = z.object({
     album: z.string().nullable().optional(),
@@ -253,6 +246,7 @@ const wishlistItem = z.object({
     created_at: z.number().nullable().optional(),
     linked_subbox_id: z.string().nullable().optional(),
     raw_note: z.string().nullable().optional(),
+    soundcloud_url: z.string().nullable().optional(),
     status: wishlistStatus,
     title: z.string().nullable(),
     updated_at: z.number().nullable().optional(),
@@ -291,7 +285,8 @@ const linkTrackMetadata = z.object({
     artist: z.string(),
     bandcamp_url: z.string().nullable().optional(),
     is_collection: z.literal(false),
-    source: z.enum(['youtube', 'bandcamp']),
+    soundcloud_url: z.string().nullable().optional(),
+    source: z.enum(['youtube', 'bandcamp', 'soundcloud']),
     title: z.string(),
     youtube_url: z.string().nullable().optional(),
     youtube_video_id: z.string().nullable().optional(),
@@ -299,7 +294,7 @@ const linkTrackMetadata = z.object({
 
 const linkCollectionMetadata = z.object({
     is_collection: z.literal(true),
-    source: z.enum(['youtube', 'bandcamp']),
+    source: z.enum(['youtube', 'bandcamp', 'soundcloud']),
     tracks: z.array(linkTrackMetadata),
 });
 
@@ -320,6 +315,7 @@ const wishlistCreateParameters = z.object({
     album: z.string().optional(),
     artist: z.string().optional(),
     bandcamp_url: z.string().optional(),
+    soundcloud_url: z.string().optional(),
     title: z.string().optional(),
     youtube_url: z.string().optional(),
     youtube_video_id: z.string().optional(),
