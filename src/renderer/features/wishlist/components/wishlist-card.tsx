@@ -237,6 +237,40 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
                                 {t('action.editWishlistItem', { postProcess: 'sentenceCase' })}
                             </Button>
                         </Group>
+                    ) : item.soundcloud_url ? (
+                        <Stack gap="xs">
+                            <iframe
+                                allow="autoplay"
+                                frameBorder="no"
+                                height="166"
+                                scrolling="no"
+                                src={`https://w.soundcloud.com/player/?url=${encodeURIComponent(
+                                    item.soundcloud_url,
+                                )}&color=%23ff5500&auto_play=false&show_comments=false`}
+                                style={{ maxWidth: 400 }}
+                                title={
+                                    item.artist || item.title
+                                        ? `${item.artist ?? ''} - ${item.title ?? ''}`
+                                        : t('common.unknown', { postProcess: 'sentenceCase' })
+                                }
+                                width="100%"
+                            />
+                            <Group gap="xs" wrap="wrap">
+                                <Button
+                                    component="a"
+                                    href={item.soundcloud_url}
+                                    rel="noopener noreferrer"
+                                    size="sm"
+                                    target="_blank"
+                                    variant="default"
+                                >
+                                    {t('action.openOnSoundcloud', { postProcess: 'sentenceCase' })}
+                                </Button>
+                                <Button onClick={handleEditEntry} size="sm" variant="subtle">
+                                    {t('action.editWishlistItem', { postProcess: 'sentenceCase' })}
+                                </Button>
+                            </Group>
+                        </Stack>
                     ) : item.youtube_url ? (
                         <Stack gap="xs">
                             <div style={{ aspectRatio: '16 / 9', maxWidth: 400 }}>
@@ -305,11 +339,11 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
                         {item.status === 'downloaded' && (
                             <>
                                 <Button
-                                    onClick={() => setStatus('imported')}
+                                    onClick={() => setStatus('available')}
                                     size="sm"
                                     variant="default"
                                 >
-                                    {t('action.markImported', { postProcess: 'sentenceCase' })}
+                                    {t('action.markAvailable', { postProcess: 'sentenceCase' })}
                                 </Button>
                                 <Button
                                     onClick={() => setStatus('wishlist')}
@@ -319,15 +353,6 @@ export const WishlistCard = ({ item }: WishlistCardProps) => {
                                     {t('action.markWishlist', { postProcess: 'sentenceCase' })}
                                 </Button>
                             </>
-                        )}
-                        {item.status === 'imported' && (
-                            <Button
-                                onClick={() => setStatus('available')}
-                                size="sm"
-                                variant="default"
-                            >
-                                {t('action.markAvailable', { postProcess: 'sentenceCase' })}
-                            </Button>
                         )}
                         {item.status === 'ignored' && (
                             <Button

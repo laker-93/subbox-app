@@ -3,6 +3,7 @@ import axios, { AxiosError, AxiosResponse, isAxiosError, Method } from 'axios';
 import qs from 'qs';
 
 import i18n from '/@/i18n/i18n';
+import { authenticationFailure } from '/@/renderer/api/utils';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { useAuthStore } from '/@/renderer/store';
 import { credentialStore } from '/@/renderer/utils/credential-store';
@@ -352,15 +353,25 @@ axiosClient.interceptors.response.use(
             !isLoginRequest &&
             isPymixAuthError(status, error.response?.data)
         ) {
+            let reauthed = false;
             try {
-                const reauthed = await reauthenticatePymix();
-                if (reauthed) {
-                    config._pymixRetried = true;
-                    return axiosClient.request(config);
-                }
+                reauthed = await reauthenticatePymix();
             } catch {
-                // fall through to reject with the original error
+                // fall through to the logout path below
             }
+
+            if (reauthed) {
+                config._pymixRetried = true;
+                return axiosClient.request(config);
+            }
+
+            // The pymix session lapsed and we couldn't silently refresh it — no saved
+            // password to re-login with (e.g. on web, sessionStorage was cleared when
+            // the tab closed even though the persisted auth store restored the server).
+            // Log the user out so they re-authenticate cleanly instead of being stuck
+            // on silent 401s. authenticationFailure no-ops once the server is cleared,
+            // so concurrent failures don't stack toasts.
+            authenticationFailure(useAuthStore.getState().currentServer);
         }
 
         return Promise.reject(error);
