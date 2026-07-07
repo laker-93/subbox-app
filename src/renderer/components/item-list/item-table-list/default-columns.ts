@@ -232,7 +232,7 @@ export const SONG_TABLE_COLUMNS: DefaultTableColumn[] = [
     {
         align: 'center',
         autoSize: false,
-        isEnabled: false,
+        isEnabled: true,
         label: i18n.t('table.config.label.bpm', { postProcess: 'titleCase' }),
         pinned: null,
         value: TableColumn.BPM,

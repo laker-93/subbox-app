@@ -2423,10 +2423,43 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     }
                 }
 
+                if (version <= 28) {
+                    // Enable the BPM column by default in song tables (DJ workflow)
+                    const listKeysToUpdate: ItemListKey[] = [
+                        ItemListKey.SONG,
+                        ItemListKey.FOLDER,
+                        ItemListKey.PLAYLIST_SONG,
+                        ItemListKey.ALBUM_ARTIST_SONG,
+                        ItemListKey.GENRE_SONG,
+                        ItemListKey.QUEUE_SONG,
+                        ItemListKey.FULL_SCREEN,
+                    ];
+
+                    listKeysToUpdate.forEach((listKey) => {
+                        const listConfig = state.lists[listKey as keyof typeof state.lists];
+                        if (listConfig?.table?.columns) {
+                            const columns = listConfig.table.columns;
+                            const bpmColumn = columns.find((col) => col.id === TableColumn.BPM);
+                            if (bpmColumn) {
+                                bpmColumn.isEnabled = true;
+                            } else {
+                                columns.push({
+                                    align: 'center',
+                                    autoSize: false,
+                                    id: TableColumn.BPM,
+                                    isEnabled: true,
+                                    pinned: null,
+                                    width: 100,
+                                });
+                            }
+                        }
+                    });
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 28,
+            version: 29,
         },
     ),
 );

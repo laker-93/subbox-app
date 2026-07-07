@@ -81,6 +81,10 @@ type WishlistDeleteArgs = {
     params: { id: string };
 };
 
+type WishlistMatchMetadataArgs = {
+    body: z.infer<typeof pymixType._parameters.wishlistMatchMetadata>;
+};
+
 type WishlistMatchYoutubeArgs = {
     params: { id: string };
 };
@@ -335,6 +339,19 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to get wishlist');
+        }
+
+        return res.body.data;
+    },
+
+    wishlistMatchMetadata: async (args: PymixClientArgs & WishlistMatchMetadataArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).wishlistMatchMetadata({
+            body,
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to match metadata');
         }
 
         return res.body.data;
