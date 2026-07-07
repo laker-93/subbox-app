@@ -24,9 +24,9 @@ export type MatchMetadataRequest = z.infer<typeof pymixType._parameters.wishlist
 
 export type MatchMetadataResponse = z.infer<typeof pymixType._response.matchMetadataResponse>;
 
-export type MusicBrainzMatch = NonNullable<MatchMetadataResponse['match']>;
-
 export type MatchYoutubeResponse = z.infer<typeof pymixType._response.matchYoutubeResponse>;
+
+export type MusicBrainzMatch = NonNullable<MatchMetadataResponse['match']>;
 
 export type ParseWishlistLinkRequest = z.infer<typeof pymixType._parameters.wishlistParseLink>;
 
