@@ -208,6 +208,16 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    wishlistMatchMetadata: {
+        body: pymixType._parameters.wishlistMatchMetadata,
+        method: 'POST',
+        path: 'wishlist/match-metadata',
+        responses: {
+            200: resultWithHeaders(pymixType._response.matchMetadataResponse),
+            400: resultWithHeaders(pymixType._response.error),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     wishlistMatchYoutube: {
         body: null,
         method: 'POST',

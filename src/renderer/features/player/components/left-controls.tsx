@@ -11,6 +11,7 @@ import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
 import { RadioMetadataDisplay } from '/@/renderer/features/player/components/radio-metadata-display';
+import { SongPlaylistsIndicator } from '/@/renderer/features/playlists/components/song-playlists-indicator';
 import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
@@ -221,6 +222,12 @@ export const LeftControls = () => {
                                                 },
                                             }}
                                             variant="subtle"
+                                        />
+                                    )}
+                                    {isSongDefined && (
+                                        <SongPlaylistsIndicator
+                                            serverId={currentSong?._serverId}
+                                            songId={currentSong?.id}
                                         />
                                     )}
                                 </Group>

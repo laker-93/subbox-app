@@ -1,8 +1,11 @@
 import { t } from 'i18next';
 import { useTranslation } from 'react-i18next';
 
+import { useMatchMetadata } from '/@/renderer/features/wishlist/hooks/use-match-metadata';
 import { useUpdateWishlistItem } from '/@/renderer/features/wishlist/hooks/use-update-wishlist-item';
+import { Button } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
+import { Icon } from '/@/shared/components/icon/icon';
 import { closeAllModals, openModal } from '/@/shared/components/modal/modal';
 import { ModalButton } from '/@/shared/components/modal/model-shared';
 import { Stack } from '/@/shared/components/stack/stack';
@@ -21,6 +24,7 @@ interface EditWishlistFormValues {
 const EditWishlistForm = ({ item, onCancel }: { item: WishlistItem; onCancel: () => void }) => {
     const { t } = useTranslation();
     const mutation = useUpdateWishlistItem({});
+    const matchMutation = useMatchMetadata({});
 
     const form = useForm<EditWishlistFormValues>({
         initialValues: {
@@ -39,6 +43,54 @@ const EditWishlistForm = ({ item, onCancel }: { item: WishlistItem; onCancel: ()
                     : t('form.editWishlistItem.required', { postProcess: 'sentenceCase' }),
         },
     });
+
+    // Runs the MusicBrainz matcher on the current field text (falling back to an inbox
+    // item's raw note when both fields are still empty) and fills in the result.
+    const handleFindMatch = () => {
+        const artist = form.values.artist.trim();
+        const title = form.values.title.trim();
+        const query = !artist && !title ? (item.raw_note ?? '').trim() : undefined;
+
+        if (!artist && !title && !query) {
+            toast.warn({
+                message: t('form.matchMetadata.needsText', { postProcess: 'sentenceCase' }),
+            });
+            return;
+        }
+
+        matchMutation.mutate(
+            { artist: artist || undefined, query, title: title || undefined },
+            {
+                onError: (error) => {
+                    toast.error({
+                        message: (error as Error).message,
+                        title: t('error.genericError', { postProcess: 'sentenceCase' }) as string,
+                    });
+                },
+                onSuccess: (match) => {
+                    if (!match) {
+                        toast.warn({
+                            message: t('form.matchMetadata.noMatch', {
+                                postProcess: 'sentenceCase',
+                            }),
+                        });
+                        return;
+                    }
+                    form.setFieldValue('artist', match.artist);
+                    form.setFieldValue('title', match.title);
+                    if (match.album && !form.values.album.trim()) {
+                        form.setFieldValue('album', match.album);
+                    }
+                    toast.success({
+                        message: t('form.matchMetadata.applied', {
+                            artist: match.artist,
+                            title: match.title,
+                        }) as string,
+                    });
+                },
+            },
+        );
+    };
 
     const handleSubmit = form.onSubmit((values) => {
         mutation.mutate(
@@ -99,15 +151,25 @@ const EditWishlistForm = ({ item, onCancel }: { item: WishlistItem; onCancel: ()
                     })}
                     {...form.getInputProps('album')}
                 />
-                <Group justify="flex-end">
-                    <ModalButton onClick={onCancel} variant="subtle">
-                        {t('common.cancel', { postProcess: 'sentenceCase' })}
-                    </ModalButton>
-                    <ModalButton loading={mutation.isPending} type="submit" variant="filled">
-                        {item.status === 'inbox'
-                            ? t('action.confirmWishlistItem', { postProcess: 'sentenceCase' })
-                            : t('common.save', { postProcess: 'sentenceCase' })}
-                    </ModalButton>
+                <Group justify="space-between">
+                    <Button
+                        leftSection={<Icon icon="search" size="sm" />}
+                        loading={matchMutation.isPending}
+                        onClick={handleFindMatch}
+                        variant="default"
+                    >
+                        {t('action.findMetadataMatch', { postProcess: 'sentenceCase' })}
+                    </Button>
+                    <Group>
+                        <ModalButton onClick={onCancel} variant="subtle">
+                            {t('common.cancel', { postProcess: 'sentenceCase' })}
+                        </ModalButton>
+                        <ModalButton loading={mutation.isPending} type="submit" variant="filled">
+                            {item.status === 'inbox'
+                                ? t('action.confirmWishlistItem', { postProcess: 'sentenceCase' })
+                                : t('common.save', { postProcess: 'sentenceCase' })}
+                        </ModalButton>
+                    </Group>
                 </Group>
             </Stack>
         </form>
