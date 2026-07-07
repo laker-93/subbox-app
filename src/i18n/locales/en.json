@@ -541,7 +541,9 @@
                 "statusChecking": "checking sheet access..."
             },
             "inboxRawNote": "raw note",
+            "openInLibrary": "go to track in library",
             "resolving": "resolving…",
+            "trackNotFound": "couldn't find this track in your library yet — it may still be scanning",
             "status": {
                 "available": "available",
                 "downloaded": "downloaded",
