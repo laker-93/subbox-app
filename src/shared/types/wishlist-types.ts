@@ -20,7 +20,13 @@ export type CreateWishlistItemsBulkRequest = z.infer<
     typeof pymixType._parameters.wishlistBulkCreate
 >;
 
+export type MatchMetadataRequest = z.infer<typeof pymixType._parameters.wishlistMatchMetadata>;
+
+export type MatchMetadataResponse = z.infer<typeof pymixType._response.matchMetadataResponse>;
+
 export type MatchYoutubeResponse = z.infer<typeof pymixType._response.matchYoutubeResponse>;
+
+export type MusicBrainzMatch = NonNullable<MatchMetadataResponse['match']>;
 
 export type ParseWishlistLinkRequest = z.infer<typeof pymixType._parameters.wishlistParseLink>;
 

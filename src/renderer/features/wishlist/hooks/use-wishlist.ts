@@ -18,5 +18,11 @@ export const useWishlist = () => {
             return result.items;
         },
         queryKey: queryKeys.wishlist.list(serverId),
+        // While any item is still resolving in the background (pymix's resolve loop fixes
+        // hand-typed artist/title against MusicBrainz off the critical path), poll so the
+        // corrected metadata and cleared "resolving…" badge appear without a manual
+        // refresh. Stops polling once nothing is pending.
+        refetchInterval: (query) =>
+            query.state.data?.some((item) => item.resolve_state === 'pending') ? 15000 : false,
     });
 };

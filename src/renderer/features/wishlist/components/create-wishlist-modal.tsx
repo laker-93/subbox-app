@@ -4,8 +4,11 @@ import { useTranslation } from 'react-i18next';
 
 import { useCreateWishlistItem } from '/@/renderer/features/wishlist/hooks/use-create-wishlist-item';
 import { useCreateWishlistItemsBulk } from '/@/renderer/features/wishlist/hooks/use-create-wishlist-items-bulk';
+import { useMatchMetadata } from '/@/renderer/features/wishlist/hooks/use-match-metadata';
 import { useParseWishlistLink } from '/@/renderer/features/wishlist/hooks/use-parse-wishlist-link';
+import { Button } from '/@/shared/components/button/button';
 import { Group } from '/@/shared/components/group/group';
+import { Icon } from '/@/shared/components/icon/icon';
 import { closeAllModals, openModal } from '/@/shared/components/modal/modal';
 import { ModalButton } from '/@/shared/components/modal/model-shared';
 import { Stack } from '/@/shared/components/stack/stack';
@@ -31,6 +34,7 @@ const CreateWishlistForm = ({ onCancel }: { onCancel: () => void }) => {
     const mutation = useCreateWishlistItem({});
     const bulkMutation = useCreateWishlistItemsBulk({});
     const parseLinkMutation = useParseWishlistLink({});
+    const matchMutation = useMatchMetadata({});
     const resolvedLinkRef = useRef<null | ResolvedLink>(null);
 
     const form = useForm<CreateWishlistFormValues>({
@@ -83,6 +87,53 @@ const CreateWishlistForm = ({ onCancel }: { onCancel: () => void }) => {
         } catch {
             // Best-effort prefill only — submit re-resolves and surfaces any error.
         }
+    };
+
+    // Runs the MusicBrainz matcher on the typed artist/title and fills in the result —
+    // the same matcher pymix uses to refine parsed links, exposed for hand-entered text.
+    const handleFindMatch = () => {
+        const artist = form.values.artist.trim();
+        const title = form.values.title.trim();
+
+        if (!artist && !title) {
+            toast.warn({
+                message: t('form.matchMetadata.needsText', { postProcess: 'sentenceCase' }),
+            });
+            return;
+        }
+
+        matchMutation.mutate(
+            { artist: artist || undefined, title: title || undefined },
+            {
+                onError: (error) => {
+                    toast.error({
+                        message: (error as Error).message,
+                        title: t('error.genericError', { postProcess: 'sentenceCase' }) as string,
+                    });
+                },
+                onSuccess: (match) => {
+                    if (!match) {
+                        toast.warn({
+                            message: t('form.matchMetadata.noMatch', {
+                                postProcess: 'sentenceCase',
+                            }),
+                        });
+                        return;
+                    }
+                    form.setFieldValue('artist', match.artist);
+                    form.setFieldValue('title', match.title);
+                    if (match.album && !form.values.album.trim()) {
+                        form.setFieldValue('album', match.album);
+                    }
+                    toast.success({
+                        message: t('form.matchMetadata.applied', {
+                            artist: match.artist,
+                            title: match.title,
+                        }) as string,
+                    });
+                },
+            },
+        );
     };
 
     const handleSubmit = form.onSubmit(async (values) => {
@@ -197,21 +248,31 @@ const CreateWishlistForm = ({ onCancel }: { onCancel: () => void }) => {
                     })}
                     {...form.getInputProps('album')}
                 />
-                <Group justify="flex-end">
-                    <ModalButton onClick={onCancel} variant="subtle">
-                        {t('common.cancel', { postProcess: 'sentenceCase' })}
-                    </ModalButton>
-                    <ModalButton
-                        loading={
-                            mutation.isPending ||
-                            parseLinkMutation.isPending ||
-                            bulkMutation.isPending
-                        }
-                        type="submit"
-                        variant="filled"
+                <Group justify="space-between">
+                    <Button
+                        leftSection={<Icon icon="search" size="sm" />}
+                        loading={matchMutation.isPending}
+                        onClick={handleFindMatch}
+                        variant="default"
                     >
-                        {t('common.create', { postProcess: 'sentenceCase' })}
-                    </ModalButton>
+                        {t('action.findMetadataMatch', { postProcess: 'sentenceCase' })}
+                    </Button>
+                    <Group>
+                        <ModalButton onClick={onCancel} variant="subtle">
+                            {t('common.cancel', { postProcess: 'sentenceCase' })}
+                        </ModalButton>
+                        <ModalButton
+                            loading={
+                                mutation.isPending ||
+                                parseLinkMutation.isPending ||
+                                bulkMutation.isPending
+                            }
+                            type="submit"
+                            variant="filled"
+                        >
+                            {t('common.create', { postProcess: 'sentenceCase' })}
+                        </ModalButton>
+                    </Group>
                 </Group>
             </Stack>
         </form>

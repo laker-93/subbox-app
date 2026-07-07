@@ -6,6 +6,7 @@
         "createOfflineWishlist": "create offline wishlist",
         "saveWishlistSheet": "save",
         "confirmWishlistItem": "add to wishlist",
+        "clearSelection": "clear selection",
         "ignore": "ignore",
         "markAvailable": "mark available",
         "markDownloaded": "mark downloaded",
@@ -17,6 +18,7 @@
         "nextMatch": "next match",
         "previousMatch": "previous match",
         "findAnotherMatch": "find another match",
+        "findMetadataMatch": "find match",
         "editWishlistItem": "edit details",
         "addOrRemoveFromSelection": "add or remove from selection",
         "selectRangeOfItems": "select a range of items",
@@ -386,6 +388,11 @@
             "success": "wishlist item updated",
             "title": "$t(action.editWishlistItem)"
         },
+        "matchMetadata": {
+            "applied": "applied match: {{artist}} — {{title}}",
+            "needsText": "enter an artist or title first",
+            "noMatch": "no confident match found"
+        },
         "createPlaylist": {
             "input_description": "$t(common.description)",
             "input_name": "$t(common.name)",
@@ -504,8 +511,18 @@
             "title": "radio stations"
         },
         "wishlist": {
+            "columns": {
+                "album": "album",
+                "artist": "artist",
+                "status": "status",
+                "title": "title"
+            },
+            "confirmBulkDelete": "delete {{count}} wishlist item(s)?",
             "empty": "your wishlist is empty",
             "matchCandidate": "match {{index}} of {{total}} ({{confidence}}% confidence)",
+            "selectAll": "select all",
+            "selectRow": "select row",
+            "selectedCount": "{{count}} selected",
             "noMatchesFound": "no YouTube matches found",
             "offlineWishlist": {
                 "title": "offline wishlist",
@@ -524,6 +541,9 @@
                 "statusChecking": "checking sheet access..."
             },
             "inboxRawNote": "raw note",
+            "openInLibrary": "go to track in library",
+            "resolving": "resolving…",
+            "trackNotFound": "couldn't find this track in your library yet — it may still be scanning",
             "status": {
                 "available": "available",
                 "downloaded": "downloaded",
@@ -742,9 +762,12 @@
         "artistRadio": "artist radio",
         "holdToShuffle": "hold to shuffle",
         "favorite": "favorite",
+        "inPlaylistCount_one": "in {{count}} playlist",
+        "inPlaylistCount_other": "in {{count}} playlists",
         "lyrics": "lyrics",
         "mute": "mute",
         "muted": "muted",
+        "notInAnyPlaylist": "not in any playlist",
         "next": "next",
         "play": "play",
         "playbackFetchCancel": "this is taking a while… close the notification to cancel",

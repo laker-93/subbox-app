@@ -245,7 +245,9 @@ const wishlistItem = z.object({
     bandcamp_url: z.string().nullable().optional(),
     created_at: z.number().nullable().optional(),
     linked_subbox_id: z.string().nullable().optional(),
+    metadata_source: z.enum(['auto', 'user']).optional(),
     raw_note: z.string().nullable().optional(),
+    resolve_state: z.enum(['pending', 'resolved', 'nomatch']).optional(),
     soundcloud_url: z.string().nullable().optional(),
     status: wishlistStatus,
     title: z.string().nullable(),
@@ -280,16 +282,37 @@ const matchYoutubeResponse = z.object({
     matches: z.array(youtubeMatch),
 });
 
+const matchSource = z.enum(['structured', 'musicbrainz', 'string']);
+
 const linkTrackMetadata = z.object({
     album: z.string().nullable().optional(),
     artist: z.string(),
     bandcamp_url: z.string().nullable().optional(),
+    confidence: z.number().nullable().optional(),
     is_collection: z.literal(false),
+    match_source: matchSource.optional(),
     soundcloud_url: z.string().nullable().optional(),
     source: z.enum(['youtube', 'bandcamp', 'soundcloud']),
     title: z.string(),
     youtube_url: z.string().nullable().optional(),
     youtube_video_id: z.string().nullable().optional(),
+});
+
+const musicBrainzMatch = z.object({
+    album: z.string().nullable().optional(),
+    artist: z.string(),
+    score: z.number(),
+    title: z.string(),
+});
+
+const matchMetadataResponse = z.object({
+    match: musicBrainzMatch.nullable(),
+});
+
+const wishlistMatchMetadataParameters = z.object({
+    artist: z.string().optional(),
+    query: z.string().optional(),
+    title: z.string().optional(),
 });
 
 const linkCollectionMetadata = z.object({
@@ -374,6 +397,7 @@ export const pymixType = {
         syncTracks: syncTracksParameters,
         wishlistBulkCreate: wishlistBulkCreateParameters,
         wishlistCreate: wishlistCreateParameters,
+        wishlistMatchMetadata: wishlistMatchMetadataParameters,
         wishlistParseLink: wishlistParseLinkParameters,
         wishlistSetSheet: wishlistSetSheetParameters,
         wishlistUpdate: wishlistUpdateParameters,
@@ -389,6 +413,7 @@ export const pymixType = {
         isValidToken,
         librarySize,
         login,
+        matchMetadataResponse,
         matchTracks,
         matchYoutubeResponse,
         parseLinkResponse,
