@@ -11,3 +11,4 @@ feature doc written), `bug-fixed` (commit made, see bugs.md), `ux-improved`
 (couldn't proceed — e.g. dev stack down; say why).
 
 <!-- entries start below -->
+2026-07-09 10:20 | SUBBOX_ID sync directive: read diffs, drove sync/plan preview live (Electron + rebuilt pymix) | logged (1 pymix bug, 1 client ux-note; directive left IN PROGRESS, several sub-steps remain)

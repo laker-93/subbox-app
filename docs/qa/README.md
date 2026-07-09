@@ -55,8 +55,19 @@ Don't build browser automation from scratch — extend what's already here:
   Credentials come from `.env.ui-snapshot.local` (gitignored — see
   `.env.ui-snapshot.local.example`; must exist locally already or the loop
   needs it created once with a local dev test account).
-- Requires `pnpm run build:electron` before a run reflects the latest source
-  — rebuild whenever you've made a fix you want to re-verify.
+- Requires an Electron build reflecting the latest source before a run
+  actually exercises it. **Use `pnpm exec electron-vite build --mode
+  development`, not plain `pnpm run build:electron`** — the latter defaults
+  to Vite's production mode and bakes in the real prod pymix URL
+  (`pymix.sub-box.net`) instead of the local stack
+  (`pymix.docker.localhost`). Rebuild whenever you've made a fix you want to
+  re-verify.
+- Known local dev test account (already in `.env.ui-snapshot.local`, which
+  is gitignored — recorded here so it isn't lost): `test260526` /
+  `1234test260526`. Matches the running `navidrometest260526` /
+  `beetstest260526` per-user containers and has a real populated library
+  (774 local tracks, 13 playlists at last check) — useful for realistic
+  journeys, not just empty-state smoke tests.
 - Add new driver scripts under `scripts/qa/` (create if missing) rather than
   bloating the snapshot scripts — reuse the shared helpers by importing from
   `../ui-snapshot-shared.mjs`.
