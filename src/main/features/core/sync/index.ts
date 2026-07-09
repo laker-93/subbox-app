@@ -644,6 +644,9 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
     const tracks: LocalTrack[] = [];
     const subboxIdCache = loadSubboxIdCache();
     let subboxIdCacheChanged = false;
+    // Every audio file we visit this scan; anything left in the cache that we didn't
+    // visit is a deleted/moved file, pruned below so the cache can't grow unbounded.
+    const seenPaths = new Set<string>();
 
     let artistDirs: string[];
     try {
@@ -705,6 +708,7 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
                 // is taken — when present, the server can match this track exactly
                 // instead of falling back to fuzzy title/artist matching. Cached by
                 // (path, mtime, size) so unchanged files skip the TagLib open entirely.
+                seenPaths.add(filePath);
                 const subboxIdResult = resolveSubboxId(filePath, fileStat, subboxIdCache);
                 if (subboxIdResult.changed) subboxIdCacheChanged = true;
                 const subboxId = subboxIdResult.subboxId ?? undefined;
@@ -752,14 +756,23 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
         }
     }
 
+    // Prune entries for files that no longer exist (deleted or moved since a prior scan),
+    // so the on-disk cache tracks the current library rather than growing forever.
+    for (const cachedPath of Object.keys(subboxIdCache)) {
+        if (!seenPaths.has(cachedPath)) {
+            delete subboxIdCache[cachedPath];
+            subboxIdCacheChanged = true;
+        }
+    }
+
     if (subboxIdCacheChanged) saveSubboxIdCache(subboxIdCache);
 
     return tracks;
 }
 
-async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promise<string[]> {
+async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promise<void> {
     const newFilePaths: string[] = [];
-    return new Promise<string[]>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
         fs.createReadStream(zipFilePath)
             .pipe(unzipper.Parse())
             .on('entry', (entry: unzipper.Entry) => {
@@ -789,7 +802,14 @@ async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promis
                     newFilePaths.push(filePath);
                 }
             })
-            .on('finish', () => resolve(newFilePaths))
+            .on('finish', () => {
+                // pymix already tagged these files with SUBBOX_ID before zipping them up,
+                // so read it now and cache it — the next scanLocalTracks() then recognizes
+                // these tracks straight from the cache instead of reopening files we just
+                // wrote. Keeps this concern in one place for every unzip call site.
+                cacheSubboxIdsForNewFiles(newFilePaths);
+                resolve();
+            })
             .on('error', reject);
     });
 }
@@ -864,13 +884,9 @@ ipcMain.handle(
         const localZipPath = path.join(appPath, zipFileName);
         await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
 
-        // Step 3: Unzip and merge into app directory (zip contains music/ prefix)
-        const newFilePaths = await unzipAndMerge(localZipPath, appPath);
-
-        // pymix already tagged these files with SUBBOX_ID before zipping them up, so
-        // read it now and cache it — the next scanLocalTracks() then recognizes these
-        // tracks straight from the cache instead of reopening files we just wrote.
-        cacheSubboxIdsForNewFiles(newFilePaths);
+        // Step 3: Unzip and merge into app directory (zip contains music/ prefix).
+        // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
+        await unzipAndMerge(localZipPath, appPath);
 
         // Clean up the zip
         try {
@@ -1634,13 +1650,9 @@ ipcMain.handle(
         const localZipPath = path.join(appPath, zipFileName);
         await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
 
-        // Step 3: Unzip and merge into app directory
-        const newFilePaths = await unzipAndMerge(localZipPath, appPath);
-
-        // pymix already tagged these files with SUBBOX_ID before zipping them up, so
-        // read it now and cache it — the next scanLocalTracks() then recognizes these
-        // tracks straight from the cache instead of reopening files we just wrote.
-        cacheSubboxIdsForNewFiles(newFilePaths);
+        // Step 3: Unzip and merge into app directory.
+        // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
+        await unzipAndMerge(localZipPath, appPath);
 
         // Clean up the zip
         try {
