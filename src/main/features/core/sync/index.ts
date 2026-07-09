@@ -601,7 +601,12 @@ async function downloadFileFromFilebrowser(
 
 function getAppPath(): string {
     const userPath = app.getPath('userData');
-    return path.join(path.dirname(userPath), 'subbox');
+    const base = path.join(path.dirname(userPath), 'subbox');
+    // In development, isolate the local library under `subbox-dev` so a dev
+    // build can't read from or write into a staging/production `subbox`
+    // collection running on the same machine. Mirrors the same `-dev` suffix
+    // the settings store and the subbox-id cache already apply.
+    return process.env.NODE_ENV === 'development' ? `${base}-dev` : base;
 }
 
 function getMusicPath(): string {
