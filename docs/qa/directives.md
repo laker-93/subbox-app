@@ -30,10 +30,8 @@ when it looks plausible from reading code.
      Notes: <breakdown into sub-steps, if any>
 -->
 
-### From phone (Discord) — 2026-07-09
-Added: 2026-07-09
-Request: Use wishlist import skill to import new music and test the user flow of importing new music and then sorting it in to playlists and downloading and missing tracks to the subbox local music directory
-Notes: submitted via Discord by lakerluke_55259; break into sub-steps as needed.
+_(none currently pending — the phone/Discord wishlist-import directive was
+promoted to IN PROGRESS below.)_
 
 ### yt-dlp cookie auth (split out from the SUBBOX_ID sync directive)
 Added: 2026-07-09
@@ -54,8 +52,123 @@ to the phone directive.
 <!-- Move here once a cycle starts on it. Keep notes updated each cycle with
      what step it's on, so a fresh-context cycle can resume correctly. -->
 
-_(none — the SUBBOX_ID sync directive below is DONE; yt-dlp was split into its
-own PENDING entry above.)_
+### From phone (Discord) — wishlist import → playlist → download journey
+Added: 2026-07-09. Started: 2026-07-09 (21:30 cycle).
+Request: Use wishlist import skill to import new music and test the user flow
+of importing new music and then sorting it in to playlists and downloading and
+missing tracks to the subbox local music directory
+Origin: submitted via Discord by lakerluke_55259.
+
+**Sub-step breakdown** (each cycle = one sub-step; keep this updated):
+
+1. [DONE 21:30] **Seed + resolve.** Seeded `Aphex Twin - Xtal`
+   (album `qa-scratch`, `wishlist_id=91ce2e1072bd4122b1c2b887e902a01b`) via
+   `POST /wishlist`. Landed `pending`, resolve loop flipped it to `resolved`
+   within one poll; `linked_subbox_id=None` (correctly not-yet-owned). slskd
+   confirmed up (200 on :5030). **Leave this row in place** — sub-steps 2-5
+   depend on it; a later cycle should clean it up (it's marked qa-scratch)
+   only once the journey is done or abandoned.
+2. [BLOCKED 21:30 — see blocker below; BYPASSED via import-half shortcut for
+   sub-steps 3+] **Download via Soulseek.** Run
+   `download_wishlist.py` dry-run first,
+   then a real capped run (`--max-downloads 1`). Watch slskd pull the file
+   into the watch dir (local-dev caveat: may need the filebrowser/`docker cp`
+   bridge into the `user-updownloads` volume — see skill Step 3).
+3. [DONE 20:38 cycle] **Verify import.** Done via the sanctioned import-half
+   shortcut (no Soulseek): dropped a genuinely-new real audio file straight
+   into `test260526`'s watch dir and verified pymix's watcher ingested it,
+   assigned + physically wrote a fresh `SUBBOX_ID`, and Navidrome scanned it
+   in. Full verified writeup: `../pymix-qa/docs/qa/features/watch-dir-import.md`.
+   (The wishlist-row `downloaded`/`available` flip is NOT covered by this
+   shortcut — that transition belongs to the Soulseek/`download_wishlist.py`
+   half, still blocked below. The seeded Aphex Twin - Xtal wishlist row is
+   untouched and still `resolved`; the imported track is a separate scratch
+   track, see below.)
+4. [ ] **Sort into a playlist.** In the client (Electron), find the newly
+   imported track and add it to a playlist (new or existing). Verify it
+   persists server-side. **Ready to start** — use the scratch track imported
+   in sub-step 3 (see identity below); no rebuild needed unless you want the
+   latest client. Search the library for `Import Probe 2026-07-09` /
+   `QA UX Loop`.
+5. [ ] **Download missing tracks to local music dir.** Drive the sync
+   "Preview Download" → "Download & Extract" for that playlist; confirm the
+   newly-imported track (and any other missing playlist tracks) land in the
+   isolated `subbox-dev/music` local directory, shared `subbox/music`
+   untouched.
+
+**Scratch track imported in sub-step 3 (needed for 4 & 5 — leave in place):**
+- Library path: `/music/test260526/QA UX Loop/qa-scratch/00 - QA UX Loop -
+  Import Probe 2026-07-09.mp3`
+- `subbox_id = 1e5002e2-9050-4067-8192-b317278d1cf0`, beet id `665`
+- Identity: artist `QA UX Loop`, album `qa-scratch`, title
+  `Import Probe 2026-07-09`. Real 231 s audio.
+- Cleanup when 4 & 5 done/abandoned: delete the file, its beets entry
+  (`beet remove` in `beetstest260526`), and let Navidrome purge it
+  (`Scanner.PurgeMissing = "always"`). Scratch source at `/tmp/qa-import-scratch/`.
+
+**Progress notes:**
+- Cycle 21:30 — preflight done: stack up, pymix idle (only periodic
+  wishlist-reconcile/sheet-sync jobs), slskd reachable (200 on :5030).
+  Wishlist had 2 pre-existing resolved rows ("Text Chunk - High Time",
+  "Blood of Aza，SISSY MISFIT - BREAK THAT"), both status=wishlist.
+  Sub-step 1 completed (see above).
+- Cycle 20:38 (2026-07-09) — Soulseek blocker (sub-step 2) re-confirmed still
+  present (`navidrometest260526.docker.localhost` still unresolvable by Python
+  `getaddrinfo`; `/etc/hosts` still lacks the per-user vhost; needs sudo).
+  Rather than re-log the blocker in a hot loop, **pivoted to the sanctioned
+  import-half shortcut** and completed sub-step 3 end to end (see above +
+  `features/watch-dir-import.md`). Also logged one pre-existing OPEN pymix
+  observation found along the way (`orphaned-downloads-beets-entries` in
+  `../pymix-qa/docs/qa/bugs.md`). No code changes / no fix committed this
+  cycle — the import path worked correctly as-is. Next cycle: sub-step 4.
+
+**BLOCKER on sub-step 2 (download_wishlist.py) — needs user/host action, not
+a QA-loop fix:**
+
+The `wishlist-import-dev` skill's documented downloader run fails immediately:
+
+```
+error: could not reach Navidrome at https://navidrometest260526.docker.localhost:
+GET .../rest/ping.view -> connection error ... [Errno 8] nodename nor servname
+provided, or not known
+```
+
+Root cause (verified): `/etc/hosts` maps `pymix.docker.localhost` and
+`browser.docker.localhost` to 127.0.0.1, but **not** the per-user
+`navidrome<user>.docker.localhost`. `curl` resolves any `*.localhost` to
+loopback (RFC 6761) so the pymix calls and manual `curl` checks all work —
+which masks the gap — but `download_wishlist.py` uses Python `urllib`, and
+Python's `getaddrinfo` on this macOS does **not** map `*.localhost`.
+`python3 -c 'socket.gethostbyname("navidrometest260526.docker.localhost")'`
+raises `gaierror`, while `pymix.docker.localhost` resolves (it's in
+/etc/hosts). The script connects to the Navidrome URL host directly (no
+Host-header override — `download_wishlist.py:1119` `Navidrome(navidrome_url,…)`
+→ `urlopen`), so the name must actually resolve, and the owned-check aborts
+the whole run when it can't.
+
+Adding the /etc/hosts line needs sudo, which is not available non-interactively
+in a background cycle, so this loop cannot self-unblock. **This is not a
+subbox-app or pymix product bug** — the fix lies outside the QA worktrees:
+  (a) **user/host:** add `127.0.0.1  navidrometest260526.docker.localhost`
+      (and any other per-user vhosts you test) to `/etc/hosts`; **or**
+  (b) **durable code fix in `../subbox-slskd`** (out of this loop's
+      auto-commit scope): the script already rewrites a `localhost` slskd URL
+      to `127.0.0.1` in `_ipv4_localhost()` (download_wishlist.py:1067) for
+      exactly this class of Python-vs-loopback problem — extend the same
+      rewrite to map any `*.docker.localhost` host in the pymix/navidrome URLs
+      to `127.0.0.1` when `--insecure`/local-dev is in play; **or**
+  (c) **doc fix:** note the /etc/hosts prerequisite in the skill SKILL.md.
+
+**Resume plan:** once (a)/(b) is in place, re-run the dry-run then a real
+`--max-downloads 1` run and continue at sub-step 2. Alternatively a future
+cycle can pivot to the skill's sanctioned **import-half** shortcut (drop a
+real, no-SUBBOX_ID audio file into `test260526/watch/` via filebrowser or
+`docker cp` into the `user-updownloads` volume) to exercise sub-steps 3-5
+(import → tag → Navidrome → playlist → sync-download) without the Soulseek
+acquisition — but that needs a genuinely new real audio file (the skill says
+use real files for the import flow, not fabricated silence). NB: there's a
+pile of prior real Soulseek downloads in `~/Downloads/test-watch`, but those
+are the user's own files and none is the seeded Aphex Twin - Xtal.
 
 ## DONE
 
