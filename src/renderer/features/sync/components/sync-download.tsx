@@ -55,6 +55,7 @@ type LocalTrack = {
     artist: string;
     fileExtension?: string;
     fromTag: boolean;
+    subboxId?: string;
     title: string;
 };
 
