@@ -47,12 +47,13 @@ Confirmed via pymix's own logs (`sync.py`), not just source reading:
   missing, 1 metadata update — identical to what the **pre-PR fuzzy-only
   server** produced for the same request, confirming the fast path doesn't
   change the actual sync outcome, just how it gets there.
-- **Known logging bug found here**: pymix logs `subbox_id_match_summary` at
-  ERROR level almost every time for a real library (see
-  `../pymix-qa/docs/qa/bugs.md` — the denominator isn't scoped to the
-  requested playlist, so it fires on any sync where the local library is
-  bigger than what's selected). Don't treat that ERROR log alone as a signal
-  something is wrong — the actual sync result is what to check.
+- **Logging bug found and fixed here**: pymix's `subbox_id_match_summary`
+  used to log ERROR almost every time for a real library (denominator
+  wasn't scoped to the requested playlist). Fixed and merged —
+  [laker-93/pymix#22](https://github.com/laker-93/pymix/pull/22). Now logs
+  `subbox_id_summary` (INFO, informational) and `subbox_id_divergence`
+  (ERROR, only on the precise "tagged but genuinely still missing" signal).
+  See `../pymix-qa/docs/qa/bugs.md` FIXED section for the full story.
 
 ## Verified safe (not a bug, checked while investigating something that looked worrying)
 
@@ -67,6 +68,42 @@ Worst case is one wasted reopen per affected file, not incorrect data.
 `readSubboxId()` also catches all errors and returns `null`, so a read of a
 truly-incomplete file just means "no id yet, try again next scan," not a
 crash or bad cache entry.
+
+## Investigated, turned out to be a false lead (not a bug — don't re-chase this)
+
+While checking the subboxId cache's on-disk location, initially suspected a
+real bug: `sync/index.ts`'s module-level `subboxIdCacheStorePath` computation
+runs (via `import './features'` in `main/index.ts`, hoisted before that
+file's own body) *before* `main/index.ts`'s own `app.setPath('userData',
+devUserDataPath)` dev-mode reassignment, so it looked like it could compute
+its own "-dev" suffix against the wrong (pre-reassignment) base path.
+Live-testing via the Playwright `_electron.launch` harness seemed to confirm
+this: the cache landed in a generic `~/Library/Application
+Support/Electron-dev/` folder rather than alongside the rest of the app's
+own `subbox-dev` userData.
+
+**Turned out to be a test-harness artifact, not a real bug.** `app.getName()`
+returned the generic default `"Electron"` in that harness because
+`out/main/index.js` has no adjacent `package.json` for Electron to resolve a
+real app identity from (confirmed directly: `electronApp.evaluate(({app}) =>
+app.getName())` → `"Electron"`, independent of `cwd` passed to
+`electron.launch`). In **real** usage (`pnpm dev`, or a packaged build),
+Electron resolves the app name from `package.json` (`productName: "subbox"`)
+very early in its own native bootstrap, before any of the app's own JS
+executes — independent of import order between `main/index.ts` and
+`sync/index.ts`. So both computations converge on the same correct
+`subbox-dev` path regardless of which one runs "first". Confirmed
+circumstantially too: a real `~/Library/Application Support/subbox-dev`
+directory already exists on this machine with genuine browser-session
+artifacts (Cookies, IndexedDB) from an earlier real `pnpm dev` session.
+
+A quick fix was drafted and even briefly verified changing nothing
+observable (same result, same lack of an actual bug) — reverted rather than
+shipped, since it wasn't fixing anything real. Kept
+`scripts/qa/check-userdata.mjs` (prints `app.getName()`/`app.getPath('userData')`
+for a bare Electron launch) as a reusable diagnostic, but note its own
+limitation in its header comment so it doesn't mislead a future cycle the
+same way.
 
 ## Not yet verified (next steps for a future cycle)
 

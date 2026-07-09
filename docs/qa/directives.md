@@ -66,15 +66,19 @@ worktree and in `../pymix-qa`.
       matched via subbox_id) and the result is identical to pre-PR fuzzy-only
       behavior.
 - [x] Sanity-checked the "fuzzy fallback = error log" behavior (sub-step 7)
-      — **found a real issue**, logged as OPEN in
-      `../pymix-qa/docs/qa/bugs.md` (`subbox_id_match_summary` logs ERROR on
-      almost every normal sync, not just genuine divergence). Not fixed —
-      needs a design call on correct semantics, per the conservative policy.
+      — found a real issue (`subbox_id_match_summary` ERROR'd on almost every
+      normal sync). **Fixed, live-retested twice, PR opened and merged**
+      ([laker-93/pymix#22](https://github.com/laker-93/pymix/pull/22)). New
+      precise signal (`subbox_id_divergence`) confirmed correctly scoped
+      (`count=1`, correlating with the actual missing track, not
+      library-wide noise). `pymix-qa`'s branch rebased cleanly onto the
+      merged `main` — `sync.py` now byte-identical, zero conflict.
 - [x] Also found (logged in `ux-notes.md`): the first "Preview Download"
       click after a fresh launch always gets one `400 Bad Request` from
-      `sync/plan`, silently retried and succeeded — reproduced identically
-      pre- and post-pymix-rebuild, so unrelated to this PR pair. Not yet
-      root-caused.
+      `sync/plan`, silently retried and succeeded. **Root-caused — not a
+      bug.** `pymix-api.ts`'s `isPymixAuthError`/`reauthenticatePymix`
+      explicitly treats this exact 400 as an expired pymix session and
+      silently re-logs in by design. Moved to RESOLVED in `ux-notes.md`.
 
 **Not yet done** (pick up here next cycle):
 
@@ -93,7 +97,6 @@ worktree and in `../pymix-qa`.
       no cookies file locally (expected in dev), but the actual auth path
       needs prod-like conditions; consider splitting into its own directive
       since it's unrelated to sync.
-- [ ] Root-cause the first-click 400 (see `ux-notes.md`).
 
 ## DONE
 
