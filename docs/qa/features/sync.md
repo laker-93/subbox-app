@@ -113,6 +113,45 @@ Using the 8 real files downloaded above:
   (down from 8), all matching real files with zero stale/orphaned entries.
   The moved file's old cache entry was gone, not left dangling.
 
+## Fuzzy fallback for untagged local tracks (sub-step 3 — verified)
+
+Verified live 2026-07-09. Goal: confirm a local file with **no** SUBBOX_ID tag
+still gets matched to its server track via the pre-existing fuzzy
+(title/artist) fallback, rather than being wrongly reported missing.
+
+Method: took the real "Oleo" (Pat Martino) file — a Kodzo-playlist track that
+had been moved out of `subbox-dev/music` in the earlier pruning test — copied
+it back in with its SUBBOX_ID **stripped** (`mutagen`, removed only the
+`SUBBOX_ID` TXXX frame; title/artist/album left intact). Then re-ran "Preview
+Download" on Kodzo.
+
+- First attempt: the file was **silently skipped** — `scanLocalTracks` walks a
+  strict `music/<artist>/<album>/<title>.<ext>` three-level layout (see
+  `sync/index.ts:645`), and I'd dropped the file one level too shallow
+  (`Pat Martino/oleo-untagged-qa.mp3`). `local_tracks` stayed 7. **Not a bug** —
+  real downloads always land at the 3-level depth via `unzipAndMerge`; a
+  manually-misplaced file being ignored is expected. Worth remembering when
+  seeding scratch files by hand: put them at `artist/album/track`, not
+  `artist/track`.
+- After moving it to `Pat Martino/Live at Yoshi's/oleo-untagged-qa.mp3`: the
+  scan picked it up — pymix logged `local_tracks=8`, `7/8 carry a subboxId`
+  (the untagged one being the exception), and the untagged track went through
+  the fuzzy path: `local_track_matched ... via=fuzzy ...
+  Oleo/Pat Martino/"Live at Yoshi's" ... similarity=1.000`, correctly
+  resolving the exact "Oleo" server track (subbox_id `f948441b`) "out of 2
+  candidates". Plan result moved Oleo from missing → **already present** (9
+  requested / 8 present / 1 missing).
+- **Bonus corroboration of the pymix OPEN bug** (`subbox_id_divergence`
+  over-fires — see `../pymix-qa/docs/qa/bugs.md`): with Oleo now present via
+  fuzzy, the divergence ERROR count dropped from 2 → 1, leaving only the
+  genuine "Damager (Hamdi Edit)" duplicate. This confirms directly that the
+  earlier `count=2` was inflated by a **plain not-yet-downloaded** track
+  (Oleo), which is normal, not "stale/duplicate" — exactly the misfire that
+  bug describes.
+
+Test file was removed afterward; `subbox-dev/music` restored to its documented
+7-file state.
+
 ## Investigated, turned out to be a false lead (not a bug — don't re-chase this)
 
 While checking the subboxId cache's on-disk location, initially suspected a
@@ -151,16 +190,17 @@ same way.
 
 ## Not yet verified (next steps for a future cycle)
 
-- `sync/playlists` (actual "Download & Extract") — only `sync/plan`
-  (preview) has been driven so far.
 - Warm-cache re-scan timing (does the second scan actually skip TagLib
   reads for unchanged files, and is it meaningfully faster).
-- Cache invalidation (edit/touch a file, confirm re-read) and pruning
-  (remove/move a file, confirm cache entry dropped).
-- Fuzzy fallback correctness for untagged local tracks in isolation.
-- The unexplained first-click 400 (see `ux-notes.md`) — reproduced twice,
-  not yet root-caused.
 - yt-dlp cookie auth (bundled in pymix #21, unrelated to sync) — not tested
   this cycle; local dev has no cookies file mounted, confirmed it degrades
   gracefully (`ytdlp_support.py` warning logged at startup, no crash) but
   the actual cookie-auth path itself needs prod-like conditions to test.
+  Split out into its own directive (see `directives.md`) since it's
+  unrelated to sync matching.
+
+(Previously listed here but since resolved: `sync/playlists` "Download &
+Extract" is now driven end-to-end — see the "Download side" section above; the
+first-click 400 is root-caused as working-as-designed — see `ux-notes.md`
+RESOLVED; fuzzy fallback for untagged locals is verified — see the sub-step 3
+section above.)

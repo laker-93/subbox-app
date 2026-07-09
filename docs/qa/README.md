@@ -115,8 +115,13 @@ separately (e.g. drag-and-drop reorder within playlists, context menus, theming)
   `bugs.md` or `ux-notes.md` as OPEN, not into a commit.
 - **One fix commit per repo per cycle**, on the `claude/continuous-ux` branch
   only. A cross-repo fix may commit once here *and* once in `../pymix-qa`.
-- **Never push.** Never open a PR. Never merge to `development`. The user
-  reviews and pushes manually.
+- **Open a PR per verified fix; never merge.** After committing a verified fix to
+  `claude/continuous-ux`, run `../subbox-workspace/qa-runner/open-pr.sh <this
+  worktree>` — it cuts a clean branch off `development` (cherry-pick into a
+  throwaway worktree), pushes, and opens **one PR per fix** labelled `qa-auto`.
+  Record the PR URL in this `bugs.md` `FIXED` entry. **Never merge, never
+  force-push a shared branch.** The user merges on GitHub; the next daily run
+  rebases this branch onto the updated `development` to pull the merged code in.
 - **Never touch staging or prod.** Only the local dev stack
   (`../traefik/docker-compose.yml`) and the local Electron/dev builds.
 - **Cross-repo fixes are allowed, but only as a coordinated, end-to-end-verified

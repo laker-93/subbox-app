@@ -30,14 +30,47 @@ when it looks plausible from reading code.
      Notes: <breakdown into sub-steps, if any>
 -->
 
-_(none — see IN PROGRESS)_
+### From phone (Discord) — 2026-07-09
+Added: 2026-07-09
+Request: Use wishlist import skill to import new music and test the user flow of importing new music and then sorting it in to playlists and downloading and missing tracks to the subbox local music directory
+Notes: submitted via Discord by lakerluke_55259; break into sub-steps as needed.
+
+### yt-dlp cookie auth (split out from the SUBBOX_ID sync directive)
+Added: 2026-07-09
+Request: Validate the yt-dlp cookie-auth path bundled into pymix #21 (the
+`ytdlp_support.py` change). Unrelated to sync matching; split out of the sync
+directive so it can be validated on its own.
+Notes: In local dev there's no cookies file mounted — confirmed it degrades
+gracefully (startup warning logged, no crash), but the actual authenticated
+download path needs prod-like conditions (a real cookies file) to exercise.
+Likely needs the user to supply/point at a cookies file, or to be validated in
+a prod-like environment rather than the local dev stack. Low priority relative
+to the phone directive.
+
+
 
 ## IN PROGRESS
 
 <!-- Move here once a cycle starts on it. Keep notes updated each cycle with
      what step it's on, so a fresh-context cycle can resume correctly. -->
 
+_(none — the SUBBOX_ID sync directive below is DONE; yt-dlp was split into its
+own PENDING entry above.)_
+
+## DONE
+
+<!-- Move here once fully verified end-to-end. Link to the features/*.md
+     doc(s) and any bugs.md/ux-notes.md entries produced along the way. -->
+
 ### Validate SUBBOX_ID-based sync matching (subbox-app #14 + pymix #21)
+
+**DONE 2026-07-09.** Full verified writeup: `features/sync.md`. Produced
+[laker-93/pymix#22](https://github.com/laker-93/pymix/pull/22) (merged — logging
+fix) and one OPEN follow-up in `../pymix-qa/docs/qa/bugs.md`
+(`subbox_id_divergence` over-fires on plain not-yet-downloaded tracks — left
+OPEN, needs a design call, not a conservative fix). The remaining yt-dlp
+cookie-auth sub-step was unrelated to sync and is split into its own PENDING
+directive above.
 
 Added: 2026-07-09. Started: 2026-07-09.
 
@@ -122,23 +155,18 @@ worktree and in `../pymix-qa`.
       this directive's scope — noted in `bugs.md` as informational, not
       urgent).
 
-**Not yet done** (pick up here next cycle):
+**Remaining sub-steps — resolved 2026-07-09:**
 
-- [ ] Repeat with local tracks that have **no** SUBBOX_ID tag in isolation
-      (sub-step 3) — needs deliberate untagged test files now that
-      `subbox-dev/music` is isolated (the old shared folder's 15 untagged
-      locals no longer apply here). The moved-aside `Oleo.mp3` at
-      `/private/tmp/claude-501/.../scratchpad/oleo-moved-aside.mp3` (from
-      the pruning test) could be re-copied back in without its tag, or
-      stripped, to test this deliberately.
-- [ ] yt-dlp cookie auth (sub-step 8) — confirmed it degrades gracefully with
-      no cookies file locally (expected in dev), but the actual auth path
-      needs prod-like conditions; consider splitting into its own directive
-      since it's unrelated to sync.
-
-## DONE
-
-<!-- Move here once fully verified end-to-end. Link to the features/*.md
-     doc(s) and any bugs.md/ux-notes.md entries produced along the way. -->
-
-_(none yet)_
+- [x] Repeat with local tracks that have **no** SUBBOX_ID tag in isolation
+      (sub-step 3) — **verified 2026-07-09**. Copied the real Oleo file back
+      into `subbox-dev/music` with its SUBBOX_ID stripped (`mutagen`); after
+      placing it at the correct `artist/album/track` depth the scan sent it
+      as untagged (`7/8 carry a subboxId`), pymix fuzzy-matched it at
+      similarity 1.000 (`via=fuzzy`), and the plan moved Oleo from missing →
+      already-present. Also corroborated the OPEN pymix `subbox_id_divergence`
+      over-fire (count 2→1 once Oleo was present). Full writeup in
+      `features/sync.md` → "Fuzzy fallback for untagged local tracks". Test
+      file cleaned up; folder back to 7.
+- [~] yt-dlp cookie auth (sub-step 8) — **split into its own PENDING
+      directive** (unrelated to sync matching; needs prod-like conditions to
+      exercise the actual auth path).
