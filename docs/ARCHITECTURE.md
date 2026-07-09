@@ -95,6 +95,14 @@ music-server controller (they are not in `endpoints`):
 UI for these is under `src/renderer/features/{pymix,sync,sharing}/`. `sync` covers rekordbox XML
 (`src/main/features/core/sync/`), external drive, and watch-dir flows.
 
+The **local library** the sync flows read/write lives at `getAppPath()/music` — i.e.
+`~/Library/Application Support/subbox/music` (see `getAppPath`/`getMusicPath` in
+`src/main/features/core/sync/index.ts`). In **development** (`NODE_ENV === 'development'`) this is
+isolated to `subbox-dev/music` so a dev build can't read from or mutate a staging/production
+`subbox` collection running on the same machine — matching the same `-dev` suffix the settings
+store and the subbox-id cache apply. A dev build therefore starts with an empty local library and
+populates it via download.
+
 When extending these: add the endpoint to the `*-api.ts` (HTTP client) and `*-controller.ts`
 (typed wrapper), define request/response Zod schemas in the shared `*-types.ts`, then build the
 React Query hook + UI.

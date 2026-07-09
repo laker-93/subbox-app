@@ -99,3 +99,7 @@ See `docs/ARCHITECTURE.md` for full walkthroughs. In short:
 - Three build targets share one codebase via vite config + `vite-plugin-conditional-import`
   (`electron.vite.config.ts`, `web.vite.config.ts`, `remote.vite.config.ts`). A change can affect
   all three.
+- Local library dir is environment-split: `getAppPath()` (`src/main/features/core/sync/index.ts`)
+  resolves to `~/Library/Application Support/subbox/music`, but in dev (`NODE_ENV === 'development'`)
+  to `subbox-dev/music` — so a dev build stays off a staging/prod `subbox` collection on the same
+  machine. The settings store and subbox-id cache apply the same `-dev` suffix; keep them in sync.
