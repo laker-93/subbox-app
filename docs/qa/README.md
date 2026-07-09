@@ -113,14 +113,24 @@ separately (e.g. drag-and-drop reorder within playlists, context menus, theming)
   flow that exposed the issue and confirmed it now behaves correctly. Anything
   you can't fully verify, or that's a subjective/design judgment call, goes in
   `bugs.md` or `ux-notes.md` as OPEN, not into a commit.
-- **One fix commit per cycle**, on this branch (`claude/continuous-ux`) only.
+- **One fix commit per repo per cycle**, on the `claude/continuous-ux` branch
+  only. A cross-repo fix may commit once here *and* once in `../pymix-qa`.
 - **Never push.** Never open a PR. Never merge to `development`. The user
   reviews and pushes manually.
 - **Never touch staging or prod.** Only the local dev stack
   (`../traefik/docker-compose.yml`) and the local Electron/dev builds.
-- **Cross-repo bugs**: if the root cause is in `pymix` (or fixing the
-  subbox-app side requires a matching pymix change), do not implement a
-  one-sided fix. Log it in `bugs.md` (and cross-reference in
-  `../pymix-qa/docs/qa/bugs.md`) with which side needs what, and stop there.
+- **Cross-repo fixes are allowed, but only as a coordinated, end-to-end-verified
+  pair — never one-sided.** If the root cause is in `pymix` (or fixing the
+  subbox-app side requires a matching pymix change), you may implement both sides:
+  the client change here, the server change in `../pymix-qa`, one commit per repo
+  on each `claude/continuous-ux` branch. Commit **only** after you've driven the
+  full flow with *both* changes live — rebuild the pymix image to
+  `laker93/pymix:qa-local` and swap the running container (per the pymix journal's
+  rules), rebuild this Electron client, then reproduce the original symptom and
+  confirm it's resolved. Cross-reference both commit SHAs in this `bugs.md` and in
+  `../pymix-qa/docs/qa/bugs.md`. If you can't verify both sides in this cycle (the
+  shared `pymix` container is busy, or the flow won't drive), do **not** ship a
+  one-sided fix: log both `bugs.md` files as OPEN with which side needs what, and
+  stop there.
 - Kill any Electron process you launch before ending the cycle — don't leave
   orphaned windows/processes across cycles.

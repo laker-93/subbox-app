@@ -69,6 +69,50 @@ Worst case is one wasted reopen per affected file, not incorrect data.
 truly-incomplete file just means "no id yet, try again next scan," not a
 crash or bad cache entry.
 
+## Download side ("Download & Extract"), and dev/prod folder isolation
+
+Verified live 2026-07-09 after subbox-app #15 merged (`getAppPath()` now
+isolates dev's local music folder as `subbox-dev/music`, not the shared
+`subbox/music` used by staging/prod on the same machine — this was itself a
+real, confirmed bug, fixed separately from the SUBBOX_ID work).
+
+- Before #15: a dev build's `scanLocalTracks()` saw the **real**
+  `subbox/music` folder (808 files on this machine) regardless of
+  `NODE_ENV`. After #15 + rebuild: dev correctly sees only
+  `subbox-dev/music`, isolated and initially empty. "Choose XML Folder"'s
+  default path updated to match.
+- This made it safe to actually drive "Download & Extract" for real (before,
+  doing so risked writing into the shared/real folder). Did so: "Kodzo"
+  playlist, 9 requested → 8 tracks physically downloaded (163 MB) into
+  `subbox-dev/music`. Confirmed the shared `subbox/music` stayed at exactly
+  808 files throughout — genuine isolation, not just a config flag with no
+  effect.
+- subboxId cache priming for newly-downloaded files (`cacheSubboxIdsForNewFiles`)
+  confirmed working: cache went from 759 → 767 entries (exactly +8), all
+  under the new `subbox-dev/music` paths. A second "Preview Download"
+  immediately after correctly recognized all 8 as already-present via the
+  subbox_id fast path — no unnecessary re-download.
+- Real-world bonus validation of pymix#22's new `subbox_id_divergence`
+  signal: it correctly fired `count=1` on the second preview, for a genuine
+  reason (see `bugs.md` — the playlist has a duplicate track server-side,
+  each copy with its own subbox_id; only one was downloaded). Confirms the
+  fix's precision isn't just theoretical.
+
+## Cache invalidation and pruning (sub-steps 5 & 6 — both verified)
+
+Using the 8 real files downloaded above:
+
+- **Invalidation**: touched one file's mtime (`touch`, no content change).
+  Re-ran "Preview Download" — result unchanged (still correctly
+  already-present), and direct inspection of the cache JSON confirmed the
+  entry's `mtimeMs` was refreshed to the new value. Proves a real re-read
+  happens on mtime change rather than trusting a stale cache entry blindly.
+- **Pruning**: moved one file out of `subbox-dev/music` entirely. Re-ran
+  preview — correctly dropped to 7 already-present / 2 to-download, and
+  direct inspection of the full cache confirmed exactly 7 entries remained
+  (down from 8), all matching real files with zero stale/orphaned entries.
+  The moved file's old cache entry was gone, not left dangling.
+
 ## Investigated, turned out to be a false lead (not a bug — don't re-chase this)
 
 While checking the subboxId cache's on-disk location, initially suspected a

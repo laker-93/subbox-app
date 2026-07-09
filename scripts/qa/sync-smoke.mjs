@@ -94,6 +94,22 @@ async function main() {
         });
     }
 
+    if (process.env.QA_DOWNLOAD === '1') {
+        const downloadButton = page.getByRole('button', { name: /^download & extract$/i });
+        const downloadEnabled = await downloadButton.isEnabled().catch(() => false);
+        console.log('download & extract button enabled:', downloadEnabled);
+        if (downloadEnabled) {
+            await downloadButton.click();
+            // Real network transfer (zip download from filebrowser + unzip) — poll
+            // rather than guess a fixed wait.
+            const downloading = page.getByText(/downloading|extracting/i).first();
+            await downloading
+                .waitFor({ state: 'hidden', timeout: 120_000 })
+                .catch((e) => console.log('still downloading after 120s:', e.message));
+            await page.waitForTimeout(1000);
+        }
+    }
+
     fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
     const shotPath = path.join(SNAPSHOT_DIR, `qa-sync-smoke-${Date.now()}.png`);
     await page.screenshot({ path: shotPath });

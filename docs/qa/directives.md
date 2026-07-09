@@ -80,19 +80,57 @@ worktree and in `../pymix-qa`.
       explicitly treats this exact 400 as an expired pymix session and
       silently re-logs in by design. Moved to RESOLVED in `ux-notes.md`.
 
+- [x] pymix#15 merged too (`getAppPath()` now isolates dev's local music
+      folder under `subbox-dev/music`, not shared with staging/prod's
+      `subbox/music`). Rebased both worktrees again — clean. **Live-verified
+      end to end**: pre-fix, dev scans saw the real `subbox/music`'s 808
+      files; post-fix (rebuilt), dev sees 0 (isolated `subbox-dev/music`,
+      confirmed empty), and "Choose XML Folder" default path updated to
+      match. This also made it *safe* to actually drive sub-step 4 for real
+      (previously any real download risked writing into the shared/real
+      folder).
+- [x] Drove an actual `sync/playlists` download ("Download & Extract") for
+      real, now that it's isolated — 9 requested, 8 tracks physically
+      downloaded (163 MB) into `subbox-dev/music`, shared `subbox/music`
+      confirmed untouched (still exactly 808 files). subboxId cache
+      correctly primed for all 8 new files immediately after extraction. A
+      second "Preview Download" afterward correctly recognized all 8 as
+      already-present via the subbox_id fast path (sub-step 4 fully done).
+      (Correction: an intermediate cache-count reading of "767" taken right
+      after the download doesn't match the clean, fully-consistent 7/8-entry
+      state confirmed by direct inspection afterward — likely a stale read
+      on my part mid-investigation, not a real inconsistency. Trust the
+      sub-step 5/6 findings below, which were re-verified by listing every
+      cache entry directly.)
+- [x] Cache invalidation (sub-step 5): touched one downloaded file's mtime,
+      re-ran preview — result unchanged (still correct), and the cache
+      entry's `mtimeMs` was confirmed refreshed to the new value (direct
+      before/after inspection of the cache JSON), proving a real re-read
+      happened rather than trusting a stale entry.
+- [x] Cache pruning (sub-step 6): moved one downloaded file out of
+      `subbox-dev/music`, re-ran preview — correctly dropped to 7
+      already-present/2-to-download, and direct inspection of the full
+      cache confirmed exactly 7 entries remained, all matching real files,
+      zero stale/orphaned entries (the moved file's entry was gone).
+- [x] **Bonus real-world validation of the pymix#22 fix**: the second
+      preview's `subbox_id_divergence: count=1` correctly flagged a genuine
+      case — the "Kodzo" playlist has *two* distinct server-side tracks with
+      identical title/artist/album ("Damager (Hamdi Edit)"), each its own
+      subbox_id; only one was ever downloaded, so the second is a real
+      potential duplicate-download risk, not noise. True positive, not a bug
+      to fix (duplicate playlist entries are a data/dedup question, out of
+      this directive's scope — noted in `bugs.md` as informational, not
+      urgent).
+
 **Not yet done** (pick up here next cycle):
 
 - [ ] Repeat with local tracks that have **no** SUBBOX_ID tag in isolation
-      (sub-step 3) — this cycle's test account happened to have 15 untagged
-      locals mixed in already and fuzzy fallback worked for whatever needed
-      it, but hasn't been isolated/verified deliberately.
-- [ ] Drive an actual `sync/playlists` download ("Download & Extract") and
-      verify newly-downloaded files' subbox_ids get primed into the client
-      cache (sub-step 4).
-- [ ] Cache invalidation test — touch/edit a previously-scanned file, confirm
-      re-read (sub-step 5).
-- [ ] Cache pruning test — remove/move a cached file, confirm entry dropped
-      (sub-step 6).
+      (sub-step 3) — needs deliberate untagged test files now that
+      `subbox-dev/music` is isolated (the old shared folder's 15 untagged
+      locals no longer apply here). The moved-aside `Oleo.mp3` at
+      `/private/tmp/claude-501/.../scratchpad/oleo-moved-aside.mp3` (from
+      the pruning test) could be re-copied back in without its tag, or
+      stripped, to test this deliberately.
 - [ ] yt-dlp cookie auth (sub-step 8) — confirmed it degrades gracefully with
       no cookies file locally (expected in dev), but the actual auth path
       needs prod-like conditions; consider splitting into its own directive
