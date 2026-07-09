@@ -11,37 +11,34 @@ when friction is worth actually fixing vs. just logging.
      find confusing/awkward and why, evidence (screenshot path), and whether
      you think it's a safe small fix or needs a design call. -->
 
+_(none open — see RESOLVED below)_
+
+## RESOLVED (not a bug — keep this so it isn't re-investigated)
+
 ### First "Preview Download" click after launch always 400s once, then silently retries and succeeds
 
-Added: 2026-07-09. Found validating the SUBBOX_ID sync directive (see
-`directives.md`) — reproduced identically twice (once against the pre-#21
-pymix image, once against the rebuilt one with the fast-path change, so it's
-unrelated to that PR).
+Added: 2026-07-09. Root-caused: 2026-07-09.
 
-**Repro**: fresh Electron launch → Sync mode → Download tab → select a
-playlist with tracks → click "Preview Download". Client-visible console
-shows `Failed to load resource: the server responded with a status of 400`,
-but the UI ends up showing a correct plan a few seconds later (no visible
-error to the user) — pymix's access log confirms: same client connection
-(same source port) makes a `POST /sync/plan` that gets `400 Bad Request`,
-immediately followed by another `POST /sync/plan` from the same connection
-that succeeds (`200 OK`).
+**Verdict: working as designed, not a bug.** `src/renderer/api/pymix/pymix-api.ts`
+(`isPymixAuthError` / the `axiosClient.interceptors.response` handler, lines
+~294-378) explicitly treats a `400` with detail `"...session id to identify
+user..."` as pymix's way of saying "your session cookie lapsed" (documented
+in a comment right above `reauthenticatePymix`: pymix returns 400/404 instead
+of 401 for this case). On such an error it silently re-logs in
+(`POST /user/login`) and replays the original request once — by design, so
+the user never sees an error for what is themselves a normal "session
+expired, refresh it" case. On a fresh Electron launch the persisted
+`session_id` cookie is often already stale (pymix sessions are short-lived —
+see the `bugs.md`/architecture notes elsewhere), so the *first* pymix call
+after launch commonly hits this path. This matches the 400's exact detail
+string (`"Must have a username or session ID to identify user"`, raised in
+`pymix/routers/sync.py`'s `sync_plan()`) and reproduced identically
+regardless of the pymix image under test, consistent with pre-existing,
+unrelated-to-#21 behavior.
 
-**Why this is here and not in `bugs.md`**: the end result is correct and the
-user never sees an error — this is UX/robustness friction (a silent
-retry-after-failure masking something), not a confirmed correctness bug.
-FastAPI 400s from Pydantic validation happen before our app-level logger
-runs, so the pymix access log alone doesn't say what was malformed about the
-first request.
-
-**Not yet root-caused** — hypothesis for a future cycle: possibly the first
-`scanLocalTracks()`-driven request fires before the local track list/some
-field is fully populated (e.g. a race between the UI enabling "Preview
-Download" and the underlying data being ready), and something retries on
-failure. Next step: temporarily log the outgoing request body client-side
-(or capture it with a network inspector) for the first vs. second attempt to
-diff them, then check `sync.py`'s Pydantic `Track`/request model for what
-would reject the first one specifically.
+No fix needed. Left here (not deleted) so a future cycle doesn't
+re-investigate the same "why does the console show a 400" observation from
+scratch.
 
 ## IMPROVED
 
