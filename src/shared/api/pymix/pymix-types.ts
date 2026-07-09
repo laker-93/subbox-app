@@ -169,6 +169,9 @@ const track = z.object({
     artist: z.string(),
     fileExtension: z.string().optional(),
     fromTag: z.boolean().default(true),
+    // SUBBOX_ID read off the local file's tags, when present. Lets sync/plan match
+    // this track exactly instead of falling back to fuzzy title/artist matching.
+    subboxId: z.string().optional(),
     title: z.string(),
 });
 
