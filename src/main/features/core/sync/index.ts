@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { randomUUID } from 'crypto';
 import { app, ipcMain, session, shell } from 'electron';
+import Store from 'electron-store';
 import * as fs from 'fs';
 import * as https from 'https';
 import { parseFile } from 'music-metadata';
@@ -55,6 +56,7 @@ type LocalTrack = {
     artist: string;
     fileExtension?: string;
     fromTag: boolean;
+    subboxId?: string;
     title: string;
 };
 
@@ -640,6 +642,11 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
     if (!fs.existsSync(musicDir)) return [];
 
     const tracks: LocalTrack[] = [];
+    const subboxIdCache = loadSubboxIdCache();
+    let subboxIdCacheChanged = false;
+    // Every audio file we visit this scan; anything left in the cache that we didn't
+    // visit is a deleted/moved file, pruned below so the cache can't grow unbounded.
+    const seenPaths = new Set<string>();
 
     let artistDirs: string[];
     try {
@@ -680,8 +687,10 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
 
             for (const fileName of files) {
                 const filePath = path.join(albumPath, fileName);
+                let fileStat: fs.Stats;
                 try {
-                    if (fs.statSync(filePath).isDirectory()) continue;
+                    fileStat = fs.statSync(filePath);
+                    if (fileStat.isDirectory()) continue;
                 } catch {
                     continue;
                 }
@@ -694,6 +703,16 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
                 )
                     continue;
 
+                // SUBBOX_ID survives independently of how title/artist get resolved
+                // below (filename vs tag), so resolve it once regardless of which path
+                // is taken — when present, the server can match this track exactly
+                // instead of falling back to fuzzy title/artist matching. Cached by
+                // (path, mtime, size) so unchanged files skip the TagLib open entirely.
+                seenPaths.add(filePath);
+                const subboxIdResult = resolveSubboxId(filePath, fileStat, subboxIdCache);
+                if (subboxIdResult.changed) subboxIdCacheChanged = true;
+                const subboxId = subboxIdResult.subboxId ?? undefined;
+
                 // Fast path: parse artist/title directly from the filename
                 const nameWithoutExt = path.basename(fileName, ext);
                 const fromFilename = parseFilename(nameWithoutExt);
@@ -702,6 +721,7 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
                         album: albumName,
                         artist: fromFilename.artist,
                         fromTag: false,
+                        subboxId,
                         title: fromFilename.title,
                     });
                     continue;
@@ -729,16 +749,29 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
                     album: (fromTag ? tagAlbum : albumName) ?? albumName,
                     artist: fromTag ? tagArtist! : artistName,
                     fromTag,
+                    subboxId,
                     title: fromTag ? tagTitle! : nameWithoutExt,
                 });
             }
         }
     }
 
+    // Prune entries for files that no longer exist (deleted or moved since a prior scan),
+    // so the on-disk cache tracks the current library rather than growing forever.
+    for (const cachedPath of Object.keys(subboxIdCache)) {
+        if (!seenPaths.has(cachedPath)) {
+            delete subboxIdCache[cachedPath];
+            subboxIdCacheChanged = true;
+        }
+    }
+
+    if (subboxIdCacheChanged) saveSubboxIdCache(subboxIdCache);
+
     return tracks;
 }
 
 async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promise<void> {
+    const newFilePaths: string[] = [];
     return new Promise<void>((resolve, reject) => {
         fs.createReadStream(zipFilePath)
             .pipe(unzipper.Parse())
@@ -766,9 +799,17 @@ async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promis
                     entry.autodrain();
                 } else {
                     entry.pipe(fs.createWriteStream(filePath));
+                    newFilePaths.push(filePath);
                 }
             })
-            .on('finish', resolve)
+            .on('finish', () => {
+                // pymix already tagged these files with SUBBOX_ID before zipping them up,
+                // so read it now and cache it — the next scanLocalTracks() then recognizes
+                // these tracks straight from the cache instead of reopening files we just
+                // wrote. Keeps this concern in one place for every unzip call site.
+                cacheSubboxIdsForNewFiles(newFilePaths);
+                resolve();
+            })
             .on('error', reject);
     });
 }
@@ -843,7 +884,8 @@ ipcMain.handle(
         const localZipPath = path.join(appPath, zipFileName);
         await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
 
-        // Step 3: Unzip and merge into app directory (zip contains music/ prefix)
+        // Step 3: Unzip and merge into app directory (zip contains music/ prefix).
+        // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
         await unzipAndMerge(localZipPath, appPath);
 
         // Clean up the zip
@@ -952,6 +994,12 @@ const SUBBOX_ID_FIELD = 'SUBBOX_ID';
 // SUBBOX_ID written by either side is readable by the other.
 const APPLE_ITUNES_MEAN = 'com.apple.iTunes';
 
+interface SubboxIdCacheEntry {
+    mtimeMs: number;
+    size: number;
+    subboxId: string;
+}
+
 function getAudioFiles(dirPath: string): string[] {
     if (!fs.existsSync(dirPath)) return [];
 
@@ -1009,6 +1057,12 @@ function getOrCreateSubboxId(filePath: string): null | string {
     return newId;
 }
 
+// ── SUBBOX_ID cache ──────────────────────────────────────────────────────────
+// Reading SUBBOX_ID means opening every file with TagLib — exactly the per-file
+// I/O the filename-parsing fast path in scanLocalTracks otherwise avoids. Cache
+// each file's id keyed by (path, mtimeMs, size) so a later scan only reopens
+// files that are new or have changed since they were last read.
+
 /**
  * Read the SUBBOX_ID custom tag from any audio file via node-taglib-sharp.
  * Tries each tag type present on the file in priority order:
@@ -1065,6 +1119,79 @@ function readSubboxId(filePath: string): null | string {
     } finally {
         file?.dispose();
     }
+}
+
+const isDevelopment = process.env.NODE_ENV === 'development';
+const subboxIdCacheStorePath = isDevelopment
+    ? path.normalize(`${app.getPath('userData')}-dev`)
+    : path.normalize(app.getPath('userData'));
+
+const subboxIdCacheStore = new Store<{ entries: Record<string, SubboxIdCacheEntry> }>({
+    cwd: subboxIdCacheStorePath,
+    defaults: { entries: {} },
+    name: 'subbox-id-cache',
+});
+
+/**
+ * Record SUBBOX_IDs for files just written to disk, e.g. after a download unzips
+ * new tracks. pymix always tags a track before zipping it up, so the id is already
+ * sitting in the file we just wrote — reading it now means scanLocalTracks doesn't
+ * need to reopen these files again on the next preview/download.
+ */
+function cacheSubboxIdsForNewFiles(filePaths: string[]): void {
+    const audioFiles = filePaths.filter((p) => AUDIO_EXTENSIONS.has(path.extname(p).toLowerCase()));
+    if (audioFiles.length === 0) return;
+
+    const cache = loadSubboxIdCache();
+    let changed = false;
+    for (const filePath of audioFiles) {
+        try {
+            const stat = fs.statSync(filePath);
+            const result = resolveSubboxId(filePath, stat, cache);
+            if (result.changed) changed = true;
+        } catch {
+            // File vanished or unreadable — the next scan will handle it normally.
+        }
+    }
+    if (changed) saveSubboxIdCache(cache);
+}
+
+function loadSubboxIdCache(): Record<string, SubboxIdCacheEntry> {
+    return subboxIdCacheStore.get('entries');
+}
+
+/**
+ * Resolve a file's SUBBOX_ID, reusing `cache` when the file's mtime/size match what
+ * was cached last time, and falling back to a real TagLib read otherwise. Mutates
+ * `cache` in place; callers batch entries and persist once via saveSubboxIdCache
+ * after processing a whole directory/list, rather than writing to disk per file.
+ */
+function resolveSubboxId(
+    filePath: string,
+    stat: fs.Stats,
+    cache: Record<string, SubboxIdCacheEntry>,
+): { changed: boolean; subboxId: null | string } {
+    const cached = cache[filePath];
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+        return { changed: false, subboxId: cached.subboxId };
+    }
+
+    const subboxId = readSubboxId(filePath);
+    if (subboxId) {
+        cache[filePath] = { mtimeMs: stat.mtimeMs, size: stat.size, subboxId };
+        return { changed: true, subboxId };
+    }
+
+    // No tag present now, but a stale entry from before the file changed exists.
+    if (cached) {
+        delete cache[filePath];
+        return { changed: true, subboxId: null };
+    }
+    return { changed: false, subboxId: null };
+}
+
+function saveSubboxIdCache(entries: Record<string, SubboxIdCacheEntry>): void {
+    subboxIdCacheStore.set('entries', entries);
 }
 
 /**
@@ -1523,7 +1650,8 @@ ipcMain.handle(
         const localZipPath = path.join(appPath, zipFileName);
         await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
 
-        // Step 3: Unzip and merge into app directory
+        // Step 3: Unzip and merge into app directory.
+        // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
         await unzipAndMerge(localZipPath, appPath);
 
         // Clean up the zip
