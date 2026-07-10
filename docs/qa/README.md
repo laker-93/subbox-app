@@ -82,7 +82,8 @@ the transition between screens, not within one screen.
 
 - [ ] Login / servers (`/login`, `/servers`)
 - [ ] Home / explore (`/`, `/explore`)
-- [ ] Library — albums (`/library/albums`, detail)
+- [x] Library — albums (`/library/albums`, detail) — grid → detail → play →
+      Now Playing journey: `features/albums-browse-and-play.md`
 - [ ] Library — artists (`/library/artists`, detail incl. discography/top songs)
 - [ ] Library — album artists (`/library/album-artists`, detail)
 - [ ] Library — songs (`/library/songs`)
@@ -91,7 +92,10 @@ the transition between screens, not within one screen.
 - [ ] Favorites (`/favorites`)
 - [x] Playlists (`/playlists`, `/playlists/:id/songs`) — add-to-playlist +
       sync-download journey: `features/playlist-add-and-download.md`
-- [ ] Now playing / playing queue (`/now-playing`, `/playing`)
+- [x] Now playing queue (`/now-playing`) — verified as the tail of the albums
+      journey (`features/albums-browse-and-play.md`). NB: `/playing` is a **dead
+      route** (orphaned `AppRoute.PLAYING` enum value, wired to nothing, zero UI
+      usages) — deep-linking it hits the catch-all error page; not a bug.
 - [ ] Radio (`/radio`)
 - [ ] Search (`/search/:itemType`)
 - [ ] Wishlist (`/wishlist`) — pymix wishlist API integration

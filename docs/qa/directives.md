@@ -30,26 +30,6 @@ when it looks plausible from reading code.
      Notes: <breakdown into sub-steps, if any>
 -->
 
-### Soulseek acquisition of a wishlist row (split out from the phone/Discord directive)
-Added: 2026-07-10
-Request: Exercise the *acquisition* half the phone/Discord journey never
-verified — `download_wishlist.py` actually pulling a seeded wishlist row down
-via Soulseek into the watch dir, then the wishlist row flipping
-`resolved`→`downloaded`/`available`. The rest of that journey (import →
-playlist → download-to-local) is DONE; this is the one remaining piece.
-Notes: The seeded **Aphex Twin - Xtal** wishlist row
-(`wishlist_id=91ce2e1072bd4122b1c2b887e902a01b`, status `resolved`,
-`linked_subbox_id=None`) is still in place for this. The `/etc/hosts` blocker
-(Python `getaddrinfo` couldn't resolve `navidrome<user>.docker.localhost`) was
-resolved 2026-07-09 by adding `127.0.0.1  navidrometest260526.docker.localhost`
-to `/etc/hosts`, so `download_wishlist.py`'s owned-check should now reach
-Navidrome. Resume: dry-run first, then a real `--max-downloads 1` run via the
-`wishlist-import-dev` skill; watch slskd pull the file into the watch dir and
-the wishlist row transition. This depends on real Soulseek availability
-(external, can be flaky) — if it won't drive, log blocked and back off rather
-than hot-looping. See the retained root-cause analysis in the DONE phone entry
-below.
-
 ### yt-dlp cookie auth (split out from the SUBBOX_ID sync directive)
 Added: 2026-07-09
 Request: Validate the yt-dlp cookie-auth path bundled into pymix #21 (the
@@ -69,9 +49,52 @@ to the phone directive.
 <!-- Move here once a cycle starts on it. Keep notes updated each cycle with
      what step it's on, so a fresh-context cycle can resume correctly. -->
 
-_(none currently in progress.)_
+_(none)_
 
 ## DONE
+
+### Soulseek acquisition of a wishlist row (split out from the phone/Discord directive)  [DONE 2026-07-10]
+Added: 2026-07-10. Started + completed 2026-07-10 (single cycle — Soulseek was
+logged in and cooperative, so all three sub-steps landed in one pass).
+Request: Exercise the *acquisition* half the phone/Discord journey never
+verified — `download_wishlist.py` actually pulling a seeded wishlist row down
+via Soulseek into the watch dir, then the wishlist row flipping
+`resolved`→`downloaded`/`available`.
+
+**Verified end to end** — full writeup:
+`../pymix-qa/docs/qa/features/wishlist-download-acquisition.md`.
+
+1. [DONE] **Preflight + wiring.** /etc/hosts vhost resolves; slskd up **and
+   logged into the Soulseek network** (`server` state `Connected, LoggedIn` —
+   the flaky bit). Dry-run `--max-downloads 3` (the cap slices `missing[:N]`
+   *before* searching, so 3 is the minimum to reach the Aphex row at index 2):
+   Text Chunk + Blood of Aza → no Soulseek match; **Aphex Twin – Xtal → 82
+   candidate sources**.
+2. [DONE] **Real capped run.** Dropped `--dry-run`; script queued + pulled
+   `Aphex Twin - Xtal.flac` from peer **Slapper** (real transfer, slskd
+   `Completed, Succeeded`), then `PATCH`ed the row `wishlist → downloaded`
+   (linked still None). Acquisition half — the piece that had never been driven
+   — is now proven.
+3. [DONE] **Round trip to `available`.** Bridged the file into the watch dir
+   (`docker cp … filebrowser:/data/users/test260526/watch/`, a local-dev-only
+   step — host slskd can't write the `user-updownloads` volume). pymix watcher
+   debounced → beet-imported to
+   `/music/Aphex Twin/Selected Ambient Works 85–92/01 - Aphex Twin - Xtal.flac`
+   (beet_id 666) → physically wrote `SUBBOX_ID=09d4a6f0-…` (confirmed with
+   metaflac). Navidrome scan 77→78, track searchable. Reconcile then flipped the
+   row `downloaded → available` with `linked_subbox_id=09d4a6f0-…` — identical to
+   the stamped id.
+
+**No bug found — flow works as designed; no code change.** Gotcha for future
+cycles (documented in the feature doc): reconcile can fire in the gap between
+import and Navidrome's scan, log a benign `failed to find match on <title>`, and
+not promote — that's not a failure, the next reconcile (post-scan) promotes.
+Left-behind state: the test library now owns a genuine Aphex Twin – Xtal track
+(not qa-scratch; realistic terminal state, left in place); the seeded wishlist
+row is `available`/linked (correct end state, nothing to clean up).
+
+**With this done, the entire phone/Discord journey — wishlist import →
+acquisition → tag → playlist → download-to-local — is fully verified.**
 
 <!-- Move here once fully verified end-to-end. Link to the features/*.md
      doc(s) and any bugs.md/ux-notes.md entries produced along the way. -->
