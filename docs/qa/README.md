@@ -89,7 +89,8 @@ the transition between screens, not within one screen.
 - [ ] Library — genres (`/library/genres`, detail)
 - [ ] Library — folders (`/library/folders`)
 - [ ] Favorites (`/favorites`)
-- [ ] Playlists (`/playlists`, `/playlists/:id/songs`)
+- [x] Playlists (`/playlists`, `/playlists/:id/songs`) — add-to-playlist +
+      sync-download journey: `features/playlist-add-and-download.md`
 - [ ] Now playing / playing queue (`/now-playing`, `/playing`)
 - [ ] Radio (`/radio`)
 - [ ] Search (`/search/:itemType`)

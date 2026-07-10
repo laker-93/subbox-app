@@ -30,8 +30,25 @@ when it looks plausible from reading code.
      Notes: <breakdown into sub-steps, if any>
 -->
 
-_(none currently pending — the phone/Discord wishlist-import directive was
-promoted to IN PROGRESS below.)_
+### Soulseek acquisition of a wishlist row (split out from the phone/Discord directive)
+Added: 2026-07-10
+Request: Exercise the *acquisition* half the phone/Discord journey never
+verified — `download_wishlist.py` actually pulling a seeded wishlist row down
+via Soulseek into the watch dir, then the wishlist row flipping
+`resolved`→`downloaded`/`available`. The rest of that journey (import →
+playlist → download-to-local) is DONE; this is the one remaining piece.
+Notes: The seeded **Aphex Twin - Xtal** wishlist row
+(`wishlist_id=91ce2e1072bd4122b1c2b887e902a01b`, status `resolved`,
+`linked_subbox_id=None`) is still in place for this. The `/etc/hosts` blocker
+(Python `getaddrinfo` couldn't resolve `navidrome<user>.docker.localhost`) was
+resolved 2026-07-09 by adding `127.0.0.1  navidrometest260526.docker.localhost`
+to `/etc/hosts`, so `download_wishlist.py`'s owned-check should now reach
+Navidrome. Resume: dry-run first, then a real `--max-downloads 1` run via the
+`wishlist-import-dev` skill; watch slskd pull the file into the watch dir and
+the wishlist row transition. This depends on real Soulseek availability
+(external, can be flaky) — if it won't drive, log blocked and back off rather
+than hot-looping. See the retained root-cause analysis in the DONE phone entry
+below.
 
 ### yt-dlp cookie auth (split out from the SUBBOX_ID sync directive)
 Added: 2026-07-09
@@ -52,7 +69,14 @@ to the phone directive.
 <!-- Move here once a cycle starts on it. Keep notes updated each cycle with
      what step it's on, so a fresh-context cycle can resume correctly. -->
 
-### From phone (Discord) — wishlist import → playlist → download journey
+_(none currently in progress.)_
+
+## DONE
+
+<!-- Move here once fully verified end-to-end. Link to the features/*.md
+     doc(s) and any bugs.md/ux-notes.md entries produced along the way. -->
+
+### From phone (Discord) — wishlist import → playlist → download journey  [DONE 2026-07-10]
 Added: 2026-07-09. Started: 2026-07-09 (21:30 cycle).
 Request: Use wishlist import skill to import new music and test the user flow
 of importing new music and then sorting it in to playlists and downloading and
@@ -68,8 +92,8 @@ Origin: submitted via Discord by lakerluke_55259.
    confirmed up (200 on :5030). **Leave this row in place** — sub-steps 2-5
    depend on it; a later cycle should clean it up (it's marked qa-scratch)
    only once the journey is done or abandoned.
-2. [BLOCKED 21:30 — see blocker below; BYPASSED via import-half shortcut for
-   sub-steps 3+] **Download via Soulseek.** Run
+2. [UNBLOCKED 2026-07-09 — /etc/hosts fix applied (see blocker note below),
+   ready to retry] **Download via Soulseek.** Run
    `download_wishlist.py` dry-run first,
    then a real capped run (`--max-downloads 1`). Watch slskd pull the file
    into the watch dir (local-dev caveat: may need the filebrowser/`docker cp`
@@ -84,17 +108,24 @@ Origin: submitted via Discord by lakerluke_55259.
    half, still blocked below. The seeded Aphex Twin - Xtal wishlist row is
    untouched and still `resolved`; the imported track is a separate scratch
    track, see below.)
-4. [ ] **Sort into a playlist.** In the client (Electron), find the newly
-   imported track and add it to a playlist (new or existing). Verify it
-   persists server-side. **Ready to start** — use the scratch track imported
-   in sub-step 3 (see identity below); no rebuild needed unless you want the
-   latest client. Search the library for `Import Probe 2026-07-09` /
-   `QA UX Loop`.
-5. [ ] **Download missing tracks to local music dir.** Drive the sync
-   "Preview Download" → "Download & Extract" for that playlist; confirm the
-   newly-imported track (and any other missing playlist tracks) land in the
-   isolated `subbox-dev/music` local directory, shared `subbox/music`
-   untouched.
+4. [DONE 2026-07-10] **Sort into a playlist.** Scratch track
+   (`tOJShpEmjhKArc2yCEafOz`) was added to a new playlist **"QA Import
+   Playlist 0709"** (`TLmCrimKHRNhAfS6FJYUnB`, created 2026-07-09T20:57Z) — by
+   a prior unlogged cycle via `scripts/qa/add-to-playlist-smoke.mjs`.
+   Verified this cycle: (a) server-side via Subsonic `getPlaylist` — playlist
+   holds exactly that one track; (b) client-side — the Sync→Download plan for
+   this playlist reads it as its single member. Persisted correctly.
+5. [DONE 2026-07-10] **Download missing tracks to local music dir.** Drove the
+   client Sync → "Preview Download" → "Download & Extract" for "QA Import
+   Playlist 0709". Preview correctly flagged the track as Missing (1) / 1 to
+   download / 3.6 MB. Download & Extract → "Download Complete, 1 track
+   exported": the file landed at `subbox-dev/music/QA UX Loop/qa-scratch/00 -
+   QA UX Loop - Import Probe 2026-07-09.mp3` (dev folder 7→8 audio files),
+   byte-exact (3806839 B), SUBBOX_ID preserved
+   (`1e5002e2-9050-4067-8192-b317278d1cf0`). Isolation held: shared
+   `subbox/music` untouched at exactly 808 files. A follow-up preview flipped
+   the track missing→already-present (0 to download), confirming the round
+   trip. Writeup: `features/playlist-add-and-download.md`.
 
 **Scratch track imported in sub-step 3 (needed for 4 & 5 — leave in place):**
 - Library path: `/music/test260526/QA UX Loop/qa-scratch/00 - QA UX Loop -
@@ -107,6 +138,17 @@ Origin: submitted via Discord by lakerluke_55259.
   (`Scanner.PurgeMissing = "always"`). Scratch source at `/tmp/qa-import-scratch/`.
 
 **Progress notes:**
+- Cycle 2026-07-10 (this cycle) — completed sub-steps 4 & 5 end to end (see
+  their DONE notes above + `features/playlist-add-and-download.md`). The
+  user's actual Discord request — import new music → sort into playlist →
+  download missing tracks to the local music dir — is now **fully verified**
+  (import = sub-step 3, playlist = sub-step 4, download = sub-step 5). No bugs
+  found; the flow works as designed, so no code change. **Directive moved to
+  DONE.** The only remaining item, sub-step 2 (Soulseek *acquisition* of a
+  wishlist row via `download_wishlist.py`), was the loop's own add-on rather
+  than part of the verbatim request; it's been split into its own PENDING
+  directive below so this journey can close cleanly. The seeded Aphex Twin -
+  Xtal wishlist row is left in place for that split directive.
 - Cycle 21:30 — preflight done: stack up, pymix idle (only periodic
   wishlist-reconcile/sheet-sync jobs), slskd reachable (200 on :5030).
   Wishlist had 2 pre-existing resolved rows ("Text Chunk - High Time",
@@ -121,11 +163,23 @@ Origin: submitted via Discord by lakerluke_55259.
   observation found along the way (`orphaned-downloads-beets-entries` in
   `../pymix-qa/docs/qa/bugs.md`). No code changes / no fix committed this
   cycle — the import path worked correctly as-is. Next cycle: sub-step 4.
+- 2026-07-09 (manual, from interactive session) — sub-step 2 blocker RESOLVED
+  via fix (a): added `127.0.0.1  navidrometest260526.docker.localhost` to
+  `/etc/hosts`; Python `getaddrinfo` now resolves the vhost. **Next cycle:
+  retry sub-step 2** — `download_wishlist.py` dry-run, then a real
+  `--max-downloads 1` run; watch slskd pull the seeded Aphex Twin - Xtal into
+  the watch dir, then continue the journey. Sub-steps 4 & 5 remain ready via
+  the already-imported scratch track if Soulseek still misbehaves.
 
-**BLOCKER on sub-step 2 (download_wishlist.py) — needs user/host action, not
-a QA-loop fix:**
+**BLOCKER on sub-step 2 (download_wishlist.py) — RESOLVED 2026-07-09 via fix
+(a): user added `127.0.0.1  navidrometest260526.docker.localhost` to
+`/etc/hosts`. Python `getaddrinfo` now resolves the per-user Navidrome vhost,
+so `download_wishlist.py`'s owned-check can reach Navidrome. Retry sub-step 2
+(dry-run, then a real `--max-downloads 1` run). Original root-cause analysis
+retained below for context; a durable code/doc fix (b)/(c) is still worth
+doing so the next fresh machine doesn't hit this.**
 
-The `wishlist-import-dev` skill's documented downloader run fails immediately:
+The `wishlist-import-dev` skill's documented downloader run failed immediately:
 
 ```
 error: could not reach Navidrome at https://navidrometest260526.docker.localhost:
@@ -169,11 +223,6 @@ acquisition — but that needs a genuinely new real audio file (the skill says
 use real files for the import flow, not fabricated silence). NB: there's a
 pile of prior real Soulseek downloads in `~/Downloads/test-watch`, but those
 are the user's own files and none is the seeded Aphex Twin - Xtal.
-
-## DONE
-
-<!-- Move here once fully verified end-to-end. Link to the features/*.md
-     doc(s) and any bugs.md/ux-notes.md entries produced along the way. -->
 
 ### Validate SUBBOX_ID-based sync matching (subbox-app #14 + pymix #21)
 
