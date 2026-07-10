@@ -30,20 +30,6 @@ when it looks plausible from reading code.
      Notes: <breakdown into sub-steps, if any>
 -->
 
-### yt-dlp cookie auth (split out from the SUBBOX_ID sync directive)
-Added: 2026-07-09
-Request: Validate the yt-dlp cookie-auth path bundled into pymix #21 (the
-`ytdlp_support.py` change). Unrelated to sync matching; split out of the sync
-directive so it can be validated on its own.
-Notes: In local dev there's no cookies file mounted — confirmed it degrades
-gracefully (startup warning logged, no crash), but the actual authenticated
-download path needs prod-like conditions (a real cookies file) to exercise.
-Likely needs the user to supply/point at a cookies file, or to be validated in
-a prod-like environment rather than the local dev stack. Low priority relative
-to the phone directive.
-
-
-
 ## IN PROGRESS
 
 <!-- Move here once a cycle starts on it. Keep notes updated each cycle with
@@ -52,6 +38,34 @@ to the phone directive.
 _(none)_
 
 ## DONE
+
+### yt-dlp cookie auth (split out from the SUBBOX_ID sync directive)  [DONE 2026-07-10 — local scope; prod piece handed to user]
+Added: 2026-07-09. Validated 2026-07-10.
+Request: Validate the yt-dlp cookie-auth path bundled into pymix #21 (the
+`ytdlp_support.py` change). Unrelated to sync matching; split out of the sync
+directive so it can be validated on its own.
+
+**Validated to the limit of local dev — no bug, no code change.** Full writeup:
+`../pymix-qa/docs/qa/features/ytdlp-cookie-auth.md`.
+
+- [DONE, prior cycle] **Graceful degradation.** No cookies file mounted in dev
+  → `resolve_cookiefile(None)` returns None (anonymous); a configured-but-missing
+  path warns once and still returns None. No crash.
+- [DONE 2026-07-10, this cycle] **Opts wiring (live).** Ran
+  `resolve_cookiefile` + both consuming services (`YoutubeMatchService._search`,
+  `LinkParseService._extract_info`) through a `YoutubeDL` stub that captures the
+  opts dict (no network, no prod). Confirmed: a **present** cookies file reaches
+  yt-dlp as `opts["cookiefile"]` in both services; with **no** file, neither adds
+  the key (anonymous path byte-identical to pre-#21). So the wiring is live, not
+  dead — a real mounted cookies file would genuinely be used.
+- [OUT OF LOCAL-DEV SCOPE → user] **Authenticated-download outcome.** Whether
+  YouTube actually *accepts* the cookies and lets an otherwise bot-gated
+  datacenter request through can't be exercised locally (needs a real cookies
+  file AND a datacenter IP that YouTube challenges — i.e. prod; a local/residential
+  host isn't gated in the first place). **Handed to the user:** drop a valid
+  `ytdlp-cookies.txt` at `/subbox/secrets/ytdlp-cookies.txt` on prod and confirm a
+  previously-gated wishlist YouTube resolve/match starts succeeding. Not something
+  the loop can close.
 
 ### Soulseek acquisition of a wishlist row (split out from the phone/Discord directive)  [DONE 2026-07-10]
 Added: 2026-07-10. Started + completed 2026-07-10 (single cycle — Soulseek was
