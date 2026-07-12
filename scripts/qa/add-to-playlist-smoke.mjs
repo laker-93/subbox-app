@@ -6,7 +6,7 @@ import {
     hashUrl,
     isLoggedOut,
     performLogin,
-    ROOT,
+    resolveAppEntry,
     SNAPSHOT_DIR,
     waitForRouteSettled,
 } from '../ui-snapshot-shared.mjs';
@@ -25,7 +25,7 @@ import fs from 'fs';
 //
 // Usage: QA_NEW_PLAYLIST="QA Import Playlist 0709" node scripts/qa/add-to-playlist-smoke.mjs
 
-const MAIN_ENTRY = path.join(ROOT, 'out', 'main', 'index.js');
+const MAIN_ENTRY = resolveAppEntry();
 const credentials = getCredentials();
 
 const ALBUM_ID = process.env.QA_ALBUM_ID || '6cqmCIDIfFhcZMpwnoKYVp';

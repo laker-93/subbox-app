@@ -1,7 +1,6 @@
-import path from 'path';
 import { _electron as electron } from 'playwright';
 
-import { ROOT } from '../ui-snapshot-shared.mjs';
+import { resolveAppEntry, ROOT } from '../ui-snapshot-shared.mjs';
 
 // Diagnostic: prints app.getName()/app.getPath('userData') for a bare
 // Electron launch of out/main/index.js.
@@ -16,7 +15,7 @@ import { ROOT } from '../ui-snapshot-shared.mjs';
 // real `pnpm dev` session first (see docs/qa/features/sync.md, "Investigated,
 // turned out to be a false lead" — this exact mistake already happened once).
 
-const MAIN_ENTRY = path.join(ROOT, 'out', 'main', 'index.js');
+const MAIN_ENTRY = resolveAppEntry();
 
 async function main() {
     const electronApp = await electron.launch({

@@ -24,6 +24,20 @@ function loadEnvFile(file) {
 
 loadEnvFile(ENV_FILE);
 
+// Resolve the built Electron main entry a QA driver should launch. Defaults to
+// THIS worktree's build (feishin-qa/out/main/index.js); override with QA_APP_ENTRY
+// to drive a build from a different checkout — e.g. an uncommitted fix in the main
+// dev checkout while working on a feature:
+//   QA_APP_ENTRY=../feishin/out/main/index.js node scripts/qa/<driver>.mjs
+// Every driver launches via this helper so "test the latest code" works uniformly
+// across all of them, not just one. Build the target first (dev mode):
+//   pnpm exec electron-vite build --mode development
+export function resolveAppEntry() {
+    return process.env.QA_APP_ENTRY
+        ? path.resolve(process.env.QA_APP_ENTRY)
+        : path.join(ROOT, 'out', 'main', 'index.js');
+}
+
 export function getCredentials() {
     const username = process.env.UI_SNAPSHOT_USERNAME;
     const password = process.env.UI_SNAPSHOT_PASSWORD;

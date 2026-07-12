@@ -5,7 +5,7 @@ import {
     getCredentials,
     isLoggedOut,
     performLogin,
-    ROOT,
+    resolveAppEntry,
     SNAPSHOT_DIR,
 } from '../ui-snapshot-shared.mjs';
 import fs from 'fs';
@@ -17,7 +17,7 @@ import fs from 'fs';
 //
 // Usage: node scripts/qa/sync-smoke.mjs
 
-const MAIN_ENTRY = path.join(ROOT, 'out', 'main', 'index.js');
+const MAIN_ENTRY = resolveAppEntry();
 const credentials = getCredentials();
 
 async function main() {

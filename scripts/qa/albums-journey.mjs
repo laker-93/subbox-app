@@ -6,6 +6,7 @@ import {
     getCredentials,
     isLoggedOut,
     performLogin,
+    resolveAppEntry,
     ROOT,
     waitForRouteSettled,
 } from '../ui-snapshot-shared.mjs';
@@ -19,7 +20,7 @@ import {
 // Requires a development-mode Electron build (out/main/index.js) pointing at the
 // local stack. Usage: node scripts/qa/albums-journey.mjs
 
-const MAIN_ENTRY = path.join(ROOT, 'out', 'main', 'index.js');
+const MAIN_ENTRY = resolveAppEntry();
 
 const log = (...a) => console.log('[albums-journey]', ...a);
 
