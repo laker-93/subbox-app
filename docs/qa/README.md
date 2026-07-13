@@ -71,6 +71,30 @@ Don't build browser automation from scratch — extend what's already here:
 - Add new driver scripts under `scripts/qa/` (create if missing) rather than
   bloating the snapshot scripts — reuse the shared helpers by importing from
   `../ui-snapshot-shared.mjs`.
+- **Driving a long/async flow (download, upload, import) to a terminal state.**
+  These flows can *hang* (a main-process error that never gets forwarded to the
+  renderer leaves the UI spinning forever) — that's a real bug class, so a driver
+  must be able to tell "completed", "surfaced an error", and "hung" apart. Race
+  the success UI against the error UI with a bounded timeout, and treat timeout
+  as a **hang failure**, not a slow pass:
+
+  ```js
+  const outcome = await Promise.race([
+      page.getByText(/Download Complete/i).waitFor({ timeout: 180_000 }).then(() => 'done'),
+      page.locator('text=/Download failed/i').first().waitFor({ timeout: 180_000 }).then(() => 'error'),
+  ]).catch(() => 'hang');            // timeout ⇒ the flow hung
+  process.exit(outcome === 'done' ? 0 : outcome === 'error' ? 1 : 3);
+  ```
+
+  Also mirror the Electron **main** process stdout so you can see the
+  `[Subbox]` server-side logs and any thrown error the renderer never showed:
+  `electronApp.process().stdout.on('data', d => process.stdout.write('[main] '+d))`.
+  `scripts/qa/download-all.mjs` is the worked reference (Sync → Download →
+  Select all → Preview → Download & Extract → assert done-or-error). Note the sync
+  UI is reached via the **mode toggle** (`appMode`), not a route — click the
+  "Sync" segment, then the "Download" tab. Force a fresh login first
+  (`forceFreshLogin`) so a session persisted against a *different* backend from an
+  earlier build doesn't get reused against the dev stack.
 
 ## Feature coverage checklist
 
@@ -86,12 +110,23 @@ the transition between screens, not within one screen.
       Now Playing journey: `features/albums-browse-and-play.md`
 - [ ] Library — artists (`/library/artists`, detail incl. discography/top songs)
 - [ ] Library — album artists (`/library/album-artists`, detail)
-- [ ] Library — songs (`/library/songs`)
+- [x] Library — songs (`/library/songs`, "Tracks") — list render (78 tracks,
+      sortable columns, pagination) + play-from-list verified:
+      `features/songs-browse-and-play.md`. Surfaced an OPEN anomaly (player-bar
+      favorite button appears inert for the now-playing song — see `bugs.md`).
 - [ ] Library — genres (`/library/genres`, detail)
 - [ ] Library — folders (`/library/folders`)
-- [ ] Favorites (`/favorites`)
+- [ ] Favorites (`/favorites`) — list *rendering* verified as the tail of the
+      songs journey (`features/songs-browse-and-play.md`); the favorite
+      add/remove *toggle* is unverified (blocked on the OPEN player-bar
+      favorite-button anomaly in `bugs.md`).
 - [x] Playlists (`/playlists`, `/playlists/:id/songs`) — add-to-playlist +
       sync-download journey: `features/playlist-add-and-download.md`
+- [ ] Delete a track (song context menu → "Delete song" → confirm) — supported
+      in-app; drives `DELETE {pymix}/track` by `subbox_id`. How-to documented in
+      `features/playlist-add-and-download.md` ("Deleting a track"); not yet driven
+      end-to-end. Do **not** hand-roll `beet remove` — that's only the fallback
+      for a track with no `subboxid` tag.
 - [x] Now playing queue (`/now-playing`) — verified as the tail of the albums
       journey (`features/albums-browse-and-play.md`). NB: `/playing` is a **dead
       route** (orphaned `AppRoute.PLAYING` enum value, wired to nothing, zero UI
@@ -102,6 +137,11 @@ the transition between screens, not within one screen.
 - [ ] Settings (`/settings`)
 - [ ] Action required / no-network states (`/action-required`, `/no-network`)
 - [ ] Sync flows (subbox-app side of pymix `/sync/*` — see pymix-qa journal)
+- [x] Sync — watch vs. download concurrency — a download stays clean while the
+      watch-dir uploader is active (watcher deferred for the whole download, then
+      resumes; no hang). `features/watch-download-concurrency.md`, driver
+      `scripts/qa/watch-download-concurrency.mjs`, skill
+      `test-watch-download-concurrency`
 - [ ] Rekordbox/Serato import-export UI (subbox-app side of pymix
       `/rekordbox/*`, `/serato/*` — see pymix-qa journal)
 - [ ] Sharing
@@ -109,6 +149,15 @@ the transition between screens, not within one screen.
 
 This list isn't exhaustive — add rows as you discover sub-flows worth tracking
 separately (e.g. drag-and-drop reorder within playlists, context menus, theming).
+
+**When every row is checked, the loop does not run out of work** — it switches to
+self-directed discovery (skill Step 1, tier 5): re-drive the feature whose
+`features/*.md` is oldest to catch regressions (refresh its verified date), probe
+the unhappy edges of a covered happy path (empty/invalid/oversized input, network
+failure mid-flow, slow libraries, rapid/concurrent actions), and add new rows here
+for any sub-flow that surfaces. Same conservative bar — find and fix/log, never add
+features. Skim the last ~10 `log.md` lines and pick the least-recently-touched
+area so cycles don't repeat.
 
 ## Hard rules (do not relax these)
 
@@ -127,6 +176,16 @@ separately (e.g. drag-and-drop reorder within playlists, context menus, theming)
   Record the PR URL in this `bugs.md` `FIXED` entry. **Never merge, never
   force-push a shared branch.** The user merges on GitHub; the next daily run
   rebases this branch onto the updated `development` to pull the merged code in.
+- **Every bug gets a GitHub issue, and a closed issue means it's fixed.** When you
+  log a bug OPEN in `bugs.md`, file a tracking issue with
+  `../subbox-workspace/qa-runner/open-issue.sh <this worktree> "<title>" "<body>"`
+  (label `qa-bug`) and record its URL as an `Issue:` line in the entry — never
+  re-file one that already has the link. A fix commit/PR carries `Closes #<n>`, so
+  merging it closes the issue; the issue's closed state is the signal the bug is
+  fixed in `development`, which the loop reconciles back into `bugs.md` each cycle
+  (skill Step 1½). A cross-repo bug gets an issue on each affected repo,
+  cross-linked. (This is for `bugs.md` correctness bugs — `ux-notes.md` friction
+  doesn't get an issue.)
 - **Never touch staging or prod.** Only the local dev stack
   (`../traefik/docker-compose.yml`) and the local Electron/dev builds.
 - **Cross-repo fixes are allowed, but only as a coordinated, end-to-end-verified

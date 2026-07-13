@@ -65,10 +65,46 @@ Verified behavior:
   download still completed as one track exported. Not investigated further — the
   file landed correct and byte-exact.
 
+## Deleting a track (supported in-app — do NOT hand-roll `beet remove`)
+
+Deleting a track **is a first-class app action** — you do not need to reach into
+beets/the server to remove one. The client exposes it through the song
+context menu and it drives pymix's delete endpoint, which handles the
+server-side removal correctly.
+
+Flow (verify against `src/renderer/features/context-menu/actions/delete-song-action.tsx`
+if it drifts):
+
+1. Right-click a song (anywhere a song row appears — album detail, playlist
+   detail, `/library/songs`, etc.; the item comes from `song-context-menu.tsx`).
+2. Choose **"Delete song"** (the `remove` icon) — multi-select is supported, the
+   action deletes every selected row.
+3. Confirm the **"Are you sure?"** modal.
+
+What happens under the hood:
+
+- Each selected song's **`subboxid`** (`song.tags.subboxid[0]` /
+  `song.tags.subbox_id[0]`) is collected — deletion is keyed by `subbox_id`, not
+  the Subsonic song id. A track with **no `subboxid` tag cannot be deleted this
+  way**: the action aborts with a "No subboxid found" toast (so an un-tagged
+  import is the one case where you'd still fall back to a server-side removal).
+- The client calls **`DELETE {pymix}/track`** with body `{ ids: [<subbox_id>, …] }`
+  (`PymixController.deleteSong` → pymix `deleteSong` route). A non-200 surfaces as
+  an error toast; 200 shows the `form.deleteSong.success` toast.
+- On success the songs/albums query caches are invalidated so the row disappears
+  from the UI. (Playlist membership follows from the track being gone.)
+
+> Not yet driven end-to-end in a cycle — see the checklist row in `README.md`.
+> When first verifying, confirm the file is gone from the server + Navidrome and
+> that the local `subbox-dev/music` copy (if downloaded) is handled as expected.
+
 ## Cleanup (when the phone directive fixtures are no longer needed)
 
 Scratch track + playlist are shared fixtures for the (now DONE) phone journey.
-To remove: delete the server file + its beets entry (`beet remove` in
-`beetstest260526`, let Navidrome purge), delete the local copy under
-`subbox-dev/music/QA UX Loop/`, and delete the "QA Import Playlist 0709"
-playlist. Left in place for now in case a follow-up cycle wants the fixture.
+Preferred removal is the **in-app "Delete song" flow above** (it drives
+`DELETE /track` by `subbox_id` and lets Navidrome purge) plus deleting the
+"QA Import Playlist 0709" playlist from the UI. Only fall back to a server-side
+`beet remove` in `beetstest260526` if the track is missing its `subboxid` tag
+(app delete can't key it). Also delete the local copy under
+`subbox-dev/music/QA UX Loop/` if it was downloaded. Left in place for now in
+case a follow-up cycle wants the fixture.
