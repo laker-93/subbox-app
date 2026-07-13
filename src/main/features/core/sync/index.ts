@@ -7,9 +7,11 @@ import * as https from 'https';
 import { parseFile } from 'music-metadata';
 import * as TagLib from 'node-taglib-sharp';
 import * as path from 'path';
+import { pipeline } from 'stream/promises';
 import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
 
+import { appConfig } from '/@/main/config/app-config';
 import { getStoredPassword } from '/@/main/features/core/settings';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 import {
@@ -590,23 +592,35 @@ async function downloadFileFromFilebrowser(
         }
     }
 
+    // Use stream.pipeline (not a hand-rolled .pipe): it propagates errors from
+    // BOTH the source (response.data) and the destination (writer) and destroys
+    // both streams on failure. A plain `.pipe()` only surfaces writer errors, so
+    // a mid-download source error (socket reset / EPIPE, common when the watch
+    // uploader is hammering the same host concurrently) would leave the returned
+    // Promise permanently unsettled — the renderer's await never returns and the
+    // whole download UI hangs. pipeline turns that into a proper rejection.
     const writer = fs.createWriteStream(destPath);
-    response.data.pipe(writer);
-
-    return new Promise<void>((resolve, reject) => {
-        writer.on('finish', resolve);
-        writer.on('error', reject);
-    });
+    try {
+        await pipeline(response.data, writer);
+    } catch (err) {
+        // Don't leave a truncated zip behind for unzipAndMerge to choke on.
+        try {
+            fs.unlinkSync(destPath);
+        } catch {
+            // ignore cleanup errors
+        }
+        throw err;
+    }
 }
 
 function getAppPath(): string {
     const userPath = app.getPath('userData');
-    const base = path.join(path.dirname(userPath), 'subbox');
-    // In development, isolate the local library under `subbox-dev` so a dev
-    // build can't read from or write into a staging/production `subbox`
-    // collection running on the same machine. Mirrors the same `-dev` suffix
-    // the settings store and the subbox-id cache already apply.
-    return process.env.NODE_ENV === 'development' ? `${base}-dev` : base;
+    // The library directory name comes from the build config (`.env.*`): the
+    // `development` config uses `subbox-dev` to isolate the local library from a
+    // staging/production `subbox` collection on the same machine, while both
+    // `staging` and `production` use the plain `subbox` path. See
+    // `src/main/config/app-config.ts`.
+    return path.join(path.dirname(userPath), appConfig.subboxDir);
 }
 
 function getMusicPath(): string {
@@ -639,8 +653,11 @@ function parseFilename(nameWithoutExt: string): null | { artist: string; title: 
 }
 
 /**
- * Scan the local music directory and return track metadata parsed from the
- * directory structure: music/<artist>/<album>/<title>.<ext>
+ * Recursively scan the local music directory for audio files at any nesting depth.
+ * Files already tagged with SUBBOX_ID match the server exactly regardless of where
+ * they sit; untagged files fall back to fuzzy title/artist matching using metadata
+ * parsed from tags, the filename, or (as a last resort) the file's nearest ancestor
+ * folder names.
  */
 async function scanLocalTracks(): Promise<LocalTrack[]> {
     const musicDir = getMusicPath();
@@ -653,113 +670,117 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
     // visit is a deleted/moved file, pruned below so the cache can't grow unbounded.
     const seenPaths = new Set<string>();
 
-    let artistDirs: string[];
-    try {
-        artistDirs = fs.readdirSync(musicDir);
-    } catch {
-        return [];
-    }
-
-    for (const artistName of artistDirs) {
-        const artistPath = path.join(musicDir, artistName);
+    // Shared per-file handling for both the music/<artist>/<album>/<title> and
+    // music/<artist>/<title> (no album folder) layouts — resolves SUBBOX_ID and
+    // artist/title/album metadata the same way either way, differing only in what
+    // album name (if any) is available to fall back on.
+    const processAudioFile = async (
+        filePath: string,
+        fileName: string,
+        fallbackArtist: string,
+        fallbackAlbum: string | undefined,
+    ): Promise<void> => {
+        let fileStat: fs.Stats;
         try {
-            if (!fs.statSync(artistPath).isDirectory()) continue;
+            fileStat = fs.statSync(filePath);
+            if (fileStat.isDirectory()) return;
         } catch {
-            continue;
+            return;
         }
 
-        let albumDirs: string[];
-        try {
-            albumDirs = fs.readdirSync(artistPath);
-        } catch {
-            continue;
+        const ext = path.extname(fileName);
+        if (
+            !['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.wma'].includes(
+                ext.toLowerCase(),
+            )
+        )
+            return;
+
+        // SUBBOX_ID survives independently of how title/artist get resolved
+        // below (filename vs tag), so resolve it once regardless of which path
+        // is taken — when present, the server can match this track exactly
+        // instead of falling back to fuzzy title/artist matching. Cached by
+        // (path, mtime, size) so unchanged files skip the TagLib open entirely.
+        seenPaths.add(filePath);
+        const subboxIdResult = resolveSubboxId(filePath, fileStat, subboxIdCache);
+        if (subboxIdResult.changed) subboxIdCacheChanged = true;
+        const subboxId = subboxIdResult.subboxId ?? undefined;
+
+        // Fast path: parse artist/title directly from the filename
+        const nameWithoutExt = path.basename(fileName, ext);
+        const fromFilename = parseFilename(nameWithoutExt);
+        if (fromFilename) {
+            tracks.push({
+                album: fallbackAlbum,
+                artist: fromFilename.artist,
+                fromTag: false,
+                subboxId,
+                title: fromFilename.title,
+            });
+            return;
         }
 
-        for (const albumName of albumDirs) {
-            const albumPath = path.join(artistPath, albumName);
-            try {
-                if (!fs.statSync(albumPath).isDirectory()) continue;
-            } catch {
+        // Slow path: open file and read tags
+        let tagArtist: string | undefined;
+        let tagAlbum: string | undefined;
+        let tagTitle: string | undefined;
+        try {
+            const meta = await parseFile(filePath, {
+                duration: false,
+                skipCovers: true,
+                skipPostHeaders: true,
+            });
+            tagArtist = meta.common.artist;
+            tagAlbum = meta.common.album;
+            tagTitle = meta.common.title;
+        } catch {
+            // tag read failed — fall back to path-derived values
+        }
+
+        const fromTag = !!(tagArtist && tagTitle);
+        tracks.push({
+            album: (fromTag ? tagAlbum : fallbackAlbum) ?? fallbackAlbum,
+            artist: fromTag ? tagArtist! : fallbackArtist,
+            fromTag,
+            subboxId,
+            title: fromTag ? tagTitle! : nameWithoutExt,
+        });
+    };
+
+    const walk = async (dirPath: string): Promise<void> => {
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(dirPath, { withFileTypes: true });
+        } catch {
+            return;
+        }
+
+        for (const entry of entries) {
+            const entryPath = path.join(dirPath, entry.name);
+            if (entry.isDirectory()) {
+                await walk(entryPath);
                 continue;
             }
+            if (!entry.isFile()) continue;
 
-            let files: string[];
-            try {
-                files = fs.readdirSync(albumPath);
-            } catch {
-                continue;
-            }
+            // Best-guess artist/album come from the file's two nearest ancestor
+            // folders relative to the music root — used only as a fallback when
+            // SUBBOX_ID is absent and the filename itself doesn't parse. This matches
+            // music/<artist>/<album>/<title> when present, and still works for
+            // music/<artist>/<title> (no album folder) or any other nesting depth,
+            // without assuming a fixed directory depth.
+            const relParts = path.relative(musicDir, dirPath).split(path.sep).filter(Boolean);
+            if (relParts.length === 0) continue; // loose file directly in the music root
 
-            for (const fileName of files) {
-                const filePath = path.join(albumPath, fileName);
-                let fileStat: fs.Stats;
-                try {
-                    fileStat = fs.statSync(filePath);
-                    if (fileStat.isDirectory()) continue;
-                } catch {
-                    continue;
-                }
+            const fallbackAlbum = relParts.length >= 2 ? relParts[relParts.length - 1] : undefined;
+            const fallbackArtist =
+                relParts.length >= 2 ? relParts[relParts.length - 2] : relParts[0];
 
-                const ext = path.extname(fileName);
-                if (
-                    !['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.wma'].includes(
-                        ext.toLowerCase(),
-                    )
-                )
-                    continue;
-
-                // SUBBOX_ID survives independently of how title/artist get resolved
-                // below (filename vs tag), so resolve it once regardless of which path
-                // is taken — when present, the server can match this track exactly
-                // instead of falling back to fuzzy title/artist matching. Cached by
-                // (path, mtime, size) so unchanged files skip the TagLib open entirely.
-                seenPaths.add(filePath);
-                const subboxIdResult = resolveSubboxId(filePath, fileStat, subboxIdCache);
-                if (subboxIdResult.changed) subboxIdCacheChanged = true;
-                const subboxId = subboxIdResult.subboxId ?? undefined;
-
-                // Fast path: parse artist/title directly from the filename
-                const nameWithoutExt = path.basename(fileName, ext);
-                const fromFilename = parseFilename(nameWithoutExt);
-                if (fromFilename) {
-                    tracks.push({
-                        album: albumName,
-                        artist: fromFilename.artist,
-                        fromTag: false,
-                        subboxId,
-                        title: fromFilename.title,
-                    });
-                    continue;
-                }
-
-                // Slow path: open file and read tags
-                let tagArtist: string | undefined;
-                let tagAlbum: string | undefined;
-                let tagTitle: string | undefined;
-                try {
-                    const meta = await parseFile(filePath, {
-                        duration: false,
-                        skipCovers: true,
-                        skipPostHeaders: true,
-                    });
-                    tagArtist = meta.common.artist;
-                    tagAlbum = meta.common.album;
-                    tagTitle = meta.common.title;
-                } catch {
-                    // tag read failed — fall back to path-derived values
-                }
-
-                const fromTag = !!(tagArtist && tagTitle);
-                tracks.push({
-                    album: (fromTag ? tagAlbum : albumName) ?? albumName,
-                    artist: fromTag ? tagArtist! : artistName,
-                    fromTag,
-                    subboxId,
-                    title: fromTag ? tagTitle! : nameWithoutExt,
-                });
-            }
+            await processAudioFile(entryPath, entry.name, fallbackArtist, fallbackAlbum);
         }
-    }
+    };
+
+    await walk(musicDir);
 
     // Prune entries for files that no longer exist (deleted or moved since a prior scan),
     // so the on-disk cache tracks the current library rather than growing forever.
@@ -846,91 +867,105 @@ ipcMain.handle(
         } = args;
         const pymixCookies = await getCookiesForUrl(pymixUrl);
 
-        // Filebrowser auth that self-heals on a 401 by re-logging in with the
-        // stored password — the token (~2h) can lapse before a long download.
-        const fbAuth = createFbAuth({
-            event,
-            filebrowserUrl,
-            initialToken: filebrowserToken,
-            serverId,
-            username,
-        });
-
-        // Scan local music directory for existing tracks
-        const localTracks = await scanLocalTracks();
-
-        // Step 1: Call syncPlaylists to prepare the zip on the server
-        const syncResponse = await axios.post(
-            `${pymixUrl}/sync/playlists`,
-            {
-                direction: 'download',
-                localTracks,
-                options: {
-                    fuzzyMatch: true,
-                    includeMetadata: true,
-                },
-                playlists: playlistIds.map((id) => ({ id, source: 'subbox' })),
-            },
-            { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
-        );
-
-        if (!syncResponse.data.success) {
-            throw new Error(`Sync failed: ${syncResponse.data.reason}`);
+        // Pause the watch-dir uploader for the duration of this download: its
+        // concurrent uploads to the same host contend with the download stream
+        // and can drop it mid-transfer. Wait for any already-in-flight poll to
+        // finish before we start so the two don't overlap. The flag is always
+        // cleared in the finally so a failed download can't wedge the poller off.
+        watchPaused = true;
+        if (inFlightPoll) {
+            // Poll errors are handled inside pollAndUpload; ignore them here.
+            await inFlightPoll.catch(() => {});
         }
-
-        const { nTracksExported, zipPath } = syncResponse.data;
-        const zipFileName = `${path.basename(zipPath)}.zip`;
-
-        // Step 2: Download the zip from filebrowser
-        const appPath = getAppPath();
-        if (!fs.existsSync(appPath)) {
-            fs.mkdirSync(appPath, { recursive: true });
-        }
-        const localZipPath = path.join(appPath, zipFileName);
-        await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
-
-        // Step 3: Unzip and merge into app directory (zip contains music/ prefix).
-        // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
-        await unzipAndMerge(localZipPath, appPath);
-
-        // Clean up the zip
         try {
-            fs.unlinkSync(localZipPath);
-        } catch {
-            // ignore cleanup errors
-        }
+            // Filebrowser auth that self-heals on a 401 by re-logging in with the
+            // stored password — the token (~2h) can lapse before a long download.
+            const fbAuth = createFbAuth({
+                event,
+                filebrowserUrl,
+                initialToken: filebrowserToken,
+                serverId,
+                username,
+            });
 
-        // Step 4: Optionally export and download Rekordbox XML
-        let xmlPath: string | undefined;
-        if (includeRekordboxXml) {
-            const musicPath = getMusicPath();
+            // Scan local music directory for existing tracks
+            const localTracks = await scanLocalTracks();
 
-            // Call pymix to prepare the Rekordbox XML on the server
-            console.log('[Subbox] Exporting Rekordbox XML with playlistIds:', playlistIds);
-            await axios.post(
-                `${pymixUrl}/rekordbox/export`,
-                { playlistIds, user_root: musicPath },
+            // Step 1: Call syncPlaylists to prepare the zip on the server
+            const syncResponse = await axios.post(
+                `${pymixUrl}/sync/playlists`,
+                {
+                    direction: 'download',
+                    localTracks,
+                    options: {
+                        fuzzyMatch: true,
+                        includeMetadata: true,
+                    },
+                    playlists: playlistIds.map((id) => ({ id, source: 'subbox' })),
+                },
                 { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
             );
 
-            // Download the XML from filebrowser into the user-configured directory,
-            // falling back to the app directory when none has been set.
-            const xmlDir =
-                rekordboxXmlDir && rekordboxXmlDir.length > 0 ? rekordboxXmlDir : appPath;
-            if (!fs.existsSync(xmlDir)) {
-                fs.mkdirSync(xmlDir, { recursive: true });
+            if (!syncResponse.data.success) {
+                throw new Error(`Sync failed: ${syncResponse.data.reason}`);
             }
-            const xmlDestPath = path.join(xmlDir, 'subbox_rb_export.xml');
-            await downloadFileFromFilebrowser(
-                filebrowserUrl,
-                fbAuth,
-                'subbox_rb_export.xml',
-                xmlDestPath,
-            );
-            xmlPath = xmlDestPath;
-        }
 
-        return { musicPath: getMusicPath(), tracksExported: nTracksExported, xmlPath };
+            const { nTracksExported, zipPath } = syncResponse.data;
+            const zipFileName = `${path.basename(zipPath)}.zip`;
+
+            // Step 2: Download the zip from filebrowser
+            const appPath = getAppPath();
+            if (!fs.existsSync(appPath)) {
+                fs.mkdirSync(appPath, { recursive: true });
+            }
+            const localZipPath = path.join(appPath, zipFileName);
+            await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
+
+            // Step 3: Unzip and merge into app directory (zip contains music/ prefix).
+            // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
+            await unzipAndMerge(localZipPath, appPath);
+
+            // Clean up the zip
+            try {
+                fs.unlinkSync(localZipPath);
+            } catch {
+                // ignore cleanup errors
+            }
+
+            // Step 4: Optionally export and download Rekordbox XML
+            let xmlPath: string | undefined;
+            if (includeRekordboxXml) {
+                const musicPath = getMusicPath();
+
+                // Call pymix to prepare the Rekordbox XML on the server
+                console.log('[Subbox] Exporting Rekordbox XML with playlistIds:', playlistIds);
+                await axios.post(
+                    `${pymixUrl}/rekordbox/export`,
+                    { playlistIds, user_root: musicPath },
+                    { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
+                );
+
+                // Download the XML from filebrowser into the user-configured directory,
+                // falling back to the app directory when none has been set.
+                const xmlDir =
+                    rekordboxXmlDir && rekordboxXmlDir.length > 0 ? rekordboxXmlDir : appPath;
+                if (!fs.existsSync(xmlDir)) {
+                    fs.mkdirSync(xmlDir, { recursive: true });
+                }
+                const xmlDestPath = path.join(xmlDir, 'subbox_rb_export.xml');
+                await downloadFileFromFilebrowser(
+                    filebrowserUrl,
+                    fbAuth,
+                    'subbox_rb_export.xml',
+                    xmlDestPath,
+                );
+                xmlPath = xmlDestPath;
+            }
+
+            return { musicPath: getMusicPath(), tracksExported: nTracksExported, xmlPath };
+        } finally {
+            watchPaused = false;
+        }
     },
 );
 
@@ -988,6 +1023,18 @@ export interface WatchProgress {
 let watchInterval: null | ReturnType<typeof setInterval> = null;
 /** SUBBOX_IDs confirmed present on the server — avoids redundant presence checks. */
 const knownPresentIds = new Set<string>();
+
+// True while a bulk download (download-playlists) is streaming from the same
+// host the watch poller uploads to. The poller checks this and skips its cycle,
+// because concurrent uploads contend with the download stream and can drop it
+// mid-transfer (the socket reset that previously hung the download).
+let watchPaused = false;
+/**
+ * The currently-running poll cycle, if any. A download awaits this before it
+ * starts streaming so an already-in-flight upload finishes first rather than
+ * overlapping the download.
+ */
+let inFlightPoll: null | Promise<void> = null;
 
 // ── SUBBOX_ID tag helpers ──────────────────────────────────────────────────
 
@@ -1095,6 +1142,7 @@ function readSubboxId(filePath: string): null | string {
                 const frame = TagLib.Id3v2UserTextInformationFrame.findUserTextInformationFrame(
                     frames,
                     SUBBOX_ID_FIELD,
+                    false,
                 );
                 if (frame?.text[0]) return frame.text[0];
             }
@@ -1119,7 +1167,14 @@ function readSubboxId(filePath: string): null | string {
         }
 
         return null;
-    } catch {
+    } catch (err) {
+        // A file whose SUBBOX_ID tag is genuinely present (readable by other tools
+        // like ffprobe) can still fail to parse here if TagLib's ID3v2 reader is
+        // stricter about the surrounding tag than the writer was — logging this is
+        // the only way to distinguish "no tag" from "tag present but unreadable",
+        // since both otherwise looked identical (null) and caused the file to be
+        // silently treated as untagged on every scan.
+        console.error(`[subbox-id] Failed to read SUBBOX_ID tag from ${filePath}:`, err);
         return null;
     } finally {
         file?.dispose();
@@ -1221,6 +1276,7 @@ function writeSubboxId(filePath: string, id: string): void {
             const existing = TagLib.Id3v2UserTextInformationFrame.findUserTextInformationFrame(
                 frames,
                 SUBBOX_ID_FIELD,
+                false,
             );
             if (existing) {
                 existing.text = [id];
@@ -1349,6 +1405,10 @@ ipcMain.handle(
         };
 
         const pollAndUpload = async () => {
+            // Skip while a bulk download is in progress — concurrent uploads to
+            // the same host contend with the download stream and can drop it
+            // mid-transfer. The next tick resumes once the download clears the flag.
+            if (watchPaused) return;
             try {
                 sendProgress({ currentFile: '', phase: 'scanning', total: 0, uploaded: 0 });
 
@@ -1472,12 +1532,21 @@ ipcMain.handle(
             }
         };
 
+        // Run a poll cycle, tracking it as the in-flight poll so a concurrent
+        // download can await it before streaming.
+        const runPoll = (): Promise<void> => {
+            inFlightPoll = pollAndUpload().finally(() => {
+                inFlightPoll = null;
+            });
+            return inFlightPoll;
+        };
+
         // Run immediately on start
-        await pollAndUpload();
+        await runPoll();
 
         // Then poll at interval
         watchInterval = setInterval(() => {
-            pollAndUpload().catch(console.error);
+            runPoll().catch(console.error);
         }, pollIntervalMs);
     },
 );
