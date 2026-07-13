@@ -1,9 +1,19 @@
 # Feature: Library → Artists browse → artist (album-artist) detail
 
-**Verified 2026-07-10** by driving the built Electron app (development build,
-pointing at the local stack) with `scripts/qa/artists-journey.mjs`, plus direct
-calls to Navidrome's native (`/api/…`) and Subsonic (`/rest/…`) APIs to explain
-what the UI shows. Client-only journey; no backend change. Account `test260526`.
+**Verified 2026-07-10; re-verified 2026-07-13** by driving the built Electron app
+(development build, pointing at the local stack) with
+`scripts/qa/artists-journey.mjs`, plus direct calls to Navidrome's native
+(`/api/…`) and Subsonic (`/rest/…`) APIs to explain what the UI shows.
+Client-only journey; no backend change. Account `test260526`.
+
+> **Re-verify note (2026-07-13).** Journey re-driven end to end, all behavior
+> below still holds (artist cards → album-artist detail, discography/top-songs
+> sub-routes render, Play starts a real stream). The library has grown since July
+> via upload testing, so the raw counts below are larger now (album-artist index
+> 61→**228**, native artist list 85→**≥400**), but the qualitative album-artist
+> vs. native split — and the role-only-artist friction — are unchanged and were
+> re-confirmed live this cycle. Numbers in the sections below are kept as of the
+> 2026-07-10 verification for reference.
 
 ## What was driven, and what happened
 

@@ -108,7 +108,10 @@ the transition between screens, not within one screen.
 - [ ] Home / explore (`/`, `/explore`)
 - [x] Library — albums (`/library/albums`, detail) — grid → detail → play →
       Now Playing journey: `features/albums-browse-and-play.md`
-- [ ] Library — artists (`/library/artists`, detail incl. discography/top songs)
+- [x] Library — artists (`/library/artists`, detail incl. discography/top songs)
+      — grid → album-artist detail → discography/top-songs → play journey:
+      `features/artists-browse.md` (`scripts/qa/artists-journey.mjs`).
+      Re-verified 2026-07-13; role-only-artist friction re-confirmed (ux-notes).
 - [ ] Library — album artists (`/library/album-artists`, detail)
 - [x] Library — songs (`/library/songs`, "Tracks") — list render (78 tracks,
       sortable columns, pagination) + play-from-list verified:

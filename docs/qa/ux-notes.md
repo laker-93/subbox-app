@@ -11,6 +11,40 @@ when friction is worth actually fixing vs. just logging.
      find confusing/awkward and why, evidence (screenshot path), and whether
      you think it's a safe small fix or needs a design call. -->
 
+### Artists list shows role-only artists whose detail page is empty (0 albums / 0 tracks)
+
+Added: 2026-07-10. **Restored + re-confirmed live 2026-07-13** (the original
+entry was lost in a rebase; `features/artists-browse.md` cross-references it, so
+it's restored here to repair the dangling reference). Route `/library/artists` →
+`/library/album-artists/:id`. Driver `scripts/qa/artists-journey.mjs` +
+direct Navidrome native/Subsonic API calls. Account `test260526`.
+
+**What a user sees.** The "Artists" nav list is served by Navidrome's **native**
+`/api/artist`, which counts **every** credited role (album-artist, artist,
+**composer**, …). So it includes artists credited *only* via a non-album-artist
+role. Clicking such an artist card routes to the **album-artist** detail page
+(`getArtist` in Subsonic terms), which is album-artist-centric and therefore
+shows **"0 albums • 0 tracks"** — an empty page with a Play button that queues
+nothing. A real user can't tell this apart from a broken/blank detail page.
+
+**Live evidence (re-confirmed 2026-07-13).** Composer **"Marco Masis"**:
+- native `/api/artist` row → `albumCount: 1, songCount: 1` (shows in the grid
+  with a count, looks like a normal artist),
+- Subsonic `getArtist` (id `08pZgYqxcev4joduux7dpf`, the detail-page source) →
+  `albumCount: 0, albums: 0` (empty detail).
+
+The two lists diverge by exactly the role-only artists: album-artist index
+(`getArtists`) = 228, native artist list (`/api/artist`) ≥ 400 at last check
+(library has grown since the July numbers via upload testing; the qualitative
+split is unchanged).
+
+**Why not fixed.** Needs a design call, not a conservative patch: the "correct"
+behavior is ambiguous (hide role-only artists from the list? show a role-scoped
+detail? surface an empty-state message?) and any change touches how the two
+Navidrome artist lists map to the shared album-artist detail — cross-cutting and
+inherited from the upstream Feishin routing (`getItemNavigationPath` maps
+`ARTIST` → `LIBRARY_ALBUM_ARTISTS_DETAIL`). Logged, not fixed.
+
 ### Full-page Search shows no "no results" empty state on a zero-match query
 
 Added: 2026-07-13. Route `/search/song` (also albums/artists tabs). Driver
