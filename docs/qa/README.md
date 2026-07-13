@@ -1,0 +1,205 @@
+# Continuous UX loop journal (subbox-app / client)
+
+This directory is the persistent memory for the autonomous continuous-UX loop
+(driven by the `continuous-ux` skill in `subbox-workspace/.claude/skills/`).
+Each loop cycle is a fresh context — **this journal is the only thing that
+carries state between cycles.** Read it before doing anything else.
+
+The loop's job is broader than QA: **emulate a real user's end-to-end
+experience** of the app — not isolated feature pokes, but realistic journeys
+(e.g. "new user connects a server, imports a Rekordbox library, browses it,
+builds a playlist, syncs it back") — and continuously improve that experience.
+That means noticing and fixing two different things as it goes:
+
+1. **Bugs** — behavior that's outright wrong (errors, crashes, data loss,
+   broken flows).
+2. **UX friction** — behavior that "works" but is confusing, inconsistent,
+   slow, or awkward for a real user (unclear empty states, silent failures,
+   inconsistent interaction patterns vs. the rest of the app, missing
+   feedback on long operations, etc.).
+
+Write down how things actually work (verified by driving the app, not by
+reading code alone), and fix what it can verify — conservatively. It does not
+add net-new features or do large redesigns; it sands down rough edges and
+fixes bugs in what already exists.
+
+## How to read this directory
+
+- `directives.md` — **check this first, every cycle.** User-steered focus
+  always takes priority over the loop's own rotation logic. See that file for
+  how to add one.
+- `bugs.md` — correctness bug log. OPEN entries are unverified, ambiguous,
+  cross-repo, or otherwise judged too risky to auto-fix; FIXED entries link to
+  the commit that resolved them. Check OPEN entries for "is this still
+  reproducible" before picking new ground to explore.
+- `ux-notes.md` — UX friction log, for things that aren't wrong so much as
+  rough. Judgment calls (does this actually need fixing, is this intentional)
+  default to logging, not fixing — only act on friction with an obvious, small,
+  low-risk improvement (e.g. a missing loading indicator, a confusing but
+  easily-clarified label), the same conservative bar as `bugs.md`.
+- `features/*.md` — one file per feature area or user journey, written once
+  it's been driven and verified. Treat an existing file as ground truth for
+  "expected behavior" on subsequent cycles — if real behavior no longer
+  matches, that's a regression, not necessarily a doc error.
+- `log.md` — one line per cycle: timestamp, what was done, outcome. Skim the
+  last ~10 entries to avoid repeating the same cycle back-to-back.
+
+## Automation
+
+Don't build browser automation from scratch — extend what's already here:
+
+- `scripts/ui-snapshot-electron.mjs` + `scripts/ui-snapshot-shared.mjs` —
+  Playwright `_electron` launch of the built app (`out/main/index.js`), login
+  flow (`performLogin`/`getCredentials`), session-expiry handling
+  (`forceFreshLogin`), route-settle detection (`waitForRouteSettled`).
+  Credentials come from `.env.ui-snapshot.local` (gitignored — see
+  `.env.ui-snapshot.local.example`; must exist locally already or the loop
+  needs it created once with a local dev test account).
+- Requires an Electron build reflecting the latest source before a run
+  actually exercises it. **Use `pnpm exec electron-vite build --mode
+  development`, not plain `pnpm run build:electron`** — the latter defaults
+  to Vite's production mode and bakes in the real prod pymix URL
+  (`pymix.sub-box.net`) instead of the local stack
+  (`pymix.docker.localhost`). Rebuild whenever you've made a fix you want to
+  re-verify.
+- Known local dev test account (already in `.env.ui-snapshot.local`, which
+  is gitignored — recorded here so it isn't lost): `test260526` /
+  `1234test260526`. Matches the running `navidrometest260526` /
+  `beetstest260526` per-user containers and has a real populated library
+  (774 local tracks, 13 playlists at last check) — useful for realistic
+  journeys, not just empty-state smoke tests.
+- Add new driver scripts under `scripts/qa/` (create if missing) rather than
+  bloating the snapshot scripts — reuse the shared helpers by importing from
+  `../ui-snapshot-shared.mjs`.
+- **Driving a long/async flow (download, upload, import) to a terminal state.**
+  These flows can *hang* (a main-process error that never gets forwarded to the
+  renderer leaves the UI spinning forever) — that's a real bug class, so a driver
+  must be able to tell "completed", "surfaced an error", and "hung" apart. Race
+  the success UI against the error UI with a bounded timeout, and treat timeout
+  as a **hang failure**, not a slow pass:
+
+  ```js
+  const outcome = await Promise.race([
+      page.getByText(/Download Complete/i).waitFor({ timeout: 180_000 }).then(() => 'done'),
+      page.locator('text=/Download failed/i').first().waitFor({ timeout: 180_000 }).then(() => 'error'),
+  ]).catch(() => 'hang');            // timeout ⇒ the flow hung
+  process.exit(outcome === 'done' ? 0 : outcome === 'error' ? 1 : 3);
+  ```
+
+  Also mirror the Electron **main** process stdout so you can see the
+  `[Subbox]` server-side logs and any thrown error the renderer never showed:
+  `electronApp.process().stdout.on('data', d => process.stdout.write('[main] '+d))`.
+  `scripts/qa/download-all.mjs` is the worked reference (Sync → Download →
+  Select all → Preview → Download & Extract → assert done-or-error). Note the sync
+  UI is reached via the **mode toggle** (`appMode`), not a route — click the
+  "Sync" segment, then the "Download" tab. Force a fresh login first
+  (`forceFreshLogin`) so a session persisted against a *different* backend from an
+  earlier build doesn't get reused against the dev stack.
+
+## Feature coverage checklist
+
+Routes below come from `src/renderer/router/routes.ts` (`AppRoute`). Check one
+off (link to its `features/*.md`) once it's been driven and documented, not
+just read in source. Prefer exercising these as part of a realistic multi-step
+journey rather than one route in isolation — real friction often shows up in
+the transition between screens, not within one screen.
+
+- [ ] Login / servers (`/login`, `/servers`)
+- [ ] Home / explore (`/`, `/explore`)
+- [x] Library — albums (`/library/albums`, detail) — grid → detail → play →
+      Now Playing journey: `features/albums-browse-and-play.md`
+- [ ] Library — artists (`/library/artists`, detail incl. discography/top songs)
+- [ ] Library — album artists (`/library/album-artists`, detail)
+- [x] Library — songs (`/library/songs`, "Tracks") — list render (78 tracks,
+      sortable columns, pagination) + play-from-list verified:
+      `features/songs-browse-and-play.md`. Surfaced an OPEN anomaly (player-bar
+      favorite button appears inert for the now-playing song — see `bugs.md`).
+- [ ] Library — genres (`/library/genres`, detail)
+- [ ] Library — folders (`/library/folders`)
+- [ ] Favorites (`/favorites`) — list *rendering* verified as the tail of the
+      songs journey (`features/songs-browse-and-play.md`); the favorite
+      add/remove *toggle* is unverified (blocked on the OPEN player-bar
+      favorite-button anomaly in `bugs.md`).
+- [x] Playlists (`/playlists`, `/playlists/:id/songs`) — add-to-playlist +
+      sync-download journey: `features/playlist-add-and-download.md`
+- [ ] Delete a track (song context menu → "Delete song" → confirm) — supported
+      in-app; drives `DELETE {pymix}/track` by `subbox_id`. How-to documented in
+      `features/playlist-add-and-download.md` ("Deleting a track"); not yet driven
+      end-to-end. Do **not** hand-roll `beet remove` — that's only the fallback
+      for a track with no `subboxid` tag.
+- [x] Now playing queue (`/now-playing`) — verified as the tail of the albums
+      journey (`features/albums-browse-and-play.md`). NB: `/playing` is a **dead
+      route** (orphaned `AppRoute.PLAYING` enum value, wired to nothing, zero UI
+      usages) — deep-linking it hits the catch-all error page; not a bug.
+- [ ] Radio (`/radio`)
+- [ ] Search (`/search/:itemType`)
+- [ ] Wishlist (`/wishlist`) — pymix wishlist API integration
+- [ ] Settings (`/settings`)
+- [ ] Action required / no-network states (`/action-required`, `/no-network`)
+- [ ] Sync flows (subbox-app side of pymix `/sync/*` — see pymix-qa journal)
+- [x] Sync — watch vs. download concurrency — a download stays clean while the
+      watch-dir uploader is active (watcher deferred for the whole download, then
+      resumes; no hang). `features/watch-download-concurrency.md`, driver
+      `scripts/qa/watch-download-concurrency.mjs`, skill
+      `test-watch-download-concurrency`
+- [ ] Rekordbox/Serato import-export UI (subbox-app side of pymix
+      `/rekordbox/*`, `/serato/*` — see pymix-qa journal)
+- [ ] Sharing
+- [ ] Filebrowser integration
+
+This list isn't exhaustive — add rows as you discover sub-flows worth tracking
+separately (e.g. drag-and-drop reorder within playlists, context menus, theming).
+
+**When every row is checked, the loop does not run out of work** — it switches to
+self-directed discovery (skill Step 1, tier 5): re-drive the feature whose
+`features/*.md` is oldest to catch regressions (refresh its verified date), probe
+the unhappy edges of a covered happy path (empty/invalid/oversized input, network
+failure mid-flow, slow libraries, rapid/concurrent actions), and add new rows here
+for any sub-flow that surfaces. Same conservative bar — find and fix/log, never add
+features. Skim the last ~10 `log.md` lines and pick the least-recently-touched
+area so cycles don't repeat.
+
+## Hard rules (do not relax these)
+
+- **Bug fixes and small UX improvements only.** No new features, no
+  refactors, no redesigns, no "while I'm here" cleanup.
+- **Conservative fixes only.** Only commit a fix once you've re-run the exact
+  flow that exposed the issue and confirmed it now behaves correctly. Anything
+  you can't fully verify, or that's a subjective/design judgment call, goes in
+  `bugs.md` or `ux-notes.md` as OPEN, not into a commit.
+- **One fix commit per repo per cycle**, on the `claude/continuous-ux` branch
+  only. A cross-repo fix may commit once here *and* once in `../pymix-qa`.
+- **Open a PR per verified fix; never merge.** After committing a verified fix to
+  `claude/continuous-ux`, run `../subbox-workspace/qa-runner/open-pr.sh <this
+  worktree>` — it cuts a clean branch off `development` (cherry-pick into a
+  throwaway worktree), pushes, and opens **one PR per fix** labelled `qa-auto`.
+  Record the PR URL in this `bugs.md` `FIXED` entry. **Never merge, never
+  force-push a shared branch.** The user merges on GitHub; the next daily run
+  rebases this branch onto the updated `development` to pull the merged code in.
+- **Every bug gets a GitHub issue, and a closed issue means it's fixed.** When you
+  log a bug OPEN in `bugs.md`, file a tracking issue with
+  `../subbox-workspace/qa-runner/open-issue.sh <this worktree> "<title>" "<body>"`
+  (label `qa-bug`) and record its URL as an `Issue:` line in the entry — never
+  re-file one that already has the link. A fix commit/PR carries `Closes #<n>`, so
+  merging it closes the issue; the issue's closed state is the signal the bug is
+  fixed in `development`, which the loop reconciles back into `bugs.md` each cycle
+  (skill Step 1½). A cross-repo bug gets an issue on each affected repo,
+  cross-linked. (This is for `bugs.md` correctness bugs — `ux-notes.md` friction
+  doesn't get an issue.)
+- **Never touch staging or prod.** Only the local dev stack
+  (`../traefik/docker-compose.yml`) and the local Electron/dev builds.
+- **Cross-repo fixes are allowed, but only as a coordinated, end-to-end-verified
+  pair — never one-sided.** If the root cause is in `pymix` (or fixing the
+  subbox-app side requires a matching pymix change), you may implement both sides:
+  the client change here, the server change in `../pymix-qa`, one commit per repo
+  on each `claude/continuous-ux` branch. Commit **only** after you've driven the
+  full flow with *both* changes live — rebuild the pymix image to
+  `laker93/pymix:qa-local` and swap the running container (per the pymix journal's
+  rules), rebuild this Electron client, then reproduce the original symptom and
+  confirm it's resolved. Cross-reference both commit SHAs in this `bugs.md` and in
+  `../pymix-qa/docs/qa/bugs.md`. If you can't verify both sides in this cycle (the
+  shared `pymix` container is busy, or the flow won't drive), do **not** ship a
+  one-sided fix: log both `bugs.md` files as OPEN with which side needs what, and
+  stop there.
+- Kill any Electron process you launch before ending the cycle — don't leave
+  orphaned windows/processes across cycles.
