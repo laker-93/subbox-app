@@ -114,7 +114,10 @@ the transition between screens, not within one screen.
       sortable columns, pagination) + play-from-list verified:
       `features/songs-browse-and-play.md`. Surfaced an OPEN anomaly (player-bar
       favorite button appears inert for the now-playing song — see `bugs.md`).
-- [ ] Library — genres (`/library/genres`, detail)
+- [x] Library — genres (`/library/genres`, detail) — grid → detail →
+      album/track target toggle → play journey: `features/genres-browse.md`
+      (`scripts/qa/genres-journey.mjs`). Badge counts match live API (Electronic
+      146 songs / 60 albums); no bug found.
 - [ ] Library — folders (`/library/folders`)
 - [ ] Favorites (`/favorites`) — list *rendering* verified as the tail of the
       songs journey (`features/songs-browse-and-play.md`); the favorite
