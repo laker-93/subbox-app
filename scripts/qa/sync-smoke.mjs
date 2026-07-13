@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { _electron as electron } from 'playwright';
 
@@ -8,7 +9,6 @@ import {
     resolveAppEntry,
     SNAPSHOT_DIR,
 } from '../ui-snapshot-shared.mjs';
-import fs from 'fs';
 
 // One-off QA driver for the SUBBOX_ID sync-matching change (subbox-app #14 +
 // pymix #21). Launches the built Electron app, logs in, switches to Sync
@@ -78,7 +78,10 @@ async function main() {
         await playlistRow.click();
         await page.waitForTimeout(500);
     }
-    console.log(`selected playlist "${targetPlaylist}":`, await playlistRow.isVisible().catch(() => false));
+    console.log(
+        `selected playlist "${targetPlaylist}":`,
+        await playlistRow.isVisible().catch(() => false),
+    );
 
     const previewButton = page.getByRole('button', { name: /^preview download$/i });
     const previewEnabled = await previewButton.isEnabled().catch(() => false);
@@ -117,7 +120,10 @@ async function main() {
 
     // Dump whatever text is on screen so we can see what state sync mode is in
     // (server picker? playlist list? empty state?) without guessing from source.
-    const bodyText = await page.locator('body').innerText().catch(() => '(failed to read body text)');
+    const bodyText = await page
+        .locator('body')
+        .innerText()
+        .catch(() => '(failed to read body text)');
     console.log('--- visible text (sync mode) ---');
     console.log(bodyText.slice(0, 2000));
     console.log('--- end visible text ---');

@@ -13,12 +13,15 @@ const log = (...a) => console.log('[probe]', ...a);
 
 const dump = async (page, tag) => {
     const info = await page.evaluate(() => ({
-        hash: location.hash,
-        rows: document.querySelectorAll('[role="row"]').length,
+        active:
+            document
+                .querySelector('a[aria-current="page"], [class*="active" i] a')
+                ?.textContent?.trim() || null,
         agRows: document.querySelectorAll('.ag-row').length,
         gridPresent: !!document.querySelector('[class*="ag-root"], [class*="VirtualTable"]'),
-        active: document.querySelector('a[aria-current="page"], [class*="active" i] a')?.textContent?.trim() || null,
+        hash: location.hash,
         main: (document.querySelector('main')?.innerText || document.body.innerText).slice(0, 200),
+        rows: document.querySelectorAll('[role="row"]').length,
     }));
     log(tag, JSON.stringify(info));
 };
@@ -31,7 +34,9 @@ async function main() {
     });
     const page = await app.firstWindow();
     await page.waitForLoadState('networkidle');
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
+    await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900),
+    );
     if (await isLoggedOut(page)) await performLogin(page, credentials);
 
     // Force library mode + collapse right sidebar, then reload (mirrors songs script).
@@ -69,11 +74,16 @@ async function main() {
 
     // Approach C: in-page location.hash assignment (fires a real hashchange) —
     // navigate to /favorites this way to see if it routes reliably.
-    await page.evaluate(() => { window.location.hash = '#/favorites'; });
+    await page.evaluate(() => {
+        window.location.hash = '#/favorites';
+    });
     await waitForRouteSettled(page);
     await page.waitForTimeout(500);
     await dump(page, 'after-inpage-hash-favorites');
 
     await app.close();
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+});

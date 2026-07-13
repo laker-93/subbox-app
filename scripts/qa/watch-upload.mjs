@@ -93,38 +93,18 @@ function gatherAudioFiles(dir, out = []) {
     return out;
 }
 
-// Copy up to UPLOAD_LIMIT audio files from SOURCE_DIR into a throwaway staging
-// dir, preserving each file's path relative to the source root. Returns the
-// staging dir and how many files were copied. Originals are never modified.
-function stageWatchDir() {
-    if (!SOURCE_DIR) throw new Error('QA_SOURCE_DIR is required');
-    const resolvedSource = path.resolve(SOURCE_DIR);
-    if (!fs.existsSync(resolvedSource) || !fs.statSync(resolvedSource).isDirectory())
-        throw new Error(`QA_SOURCE_DIR is not a directory: ${resolvedSource}`);
-
-    const all = gatherAudioFiles(resolvedSource).sort();
-    if (all.length === 0) throw new Error(`No audio files found under ${resolvedSource}`);
-    const chosen = all.slice(0, UPLOAD_LIMIT);
-
-    const watchDir =
-        process.env.QA_WATCH_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'subbox-upload-'));
-    fs.mkdirSync(watchDir, { recursive: true });
-
-    for (const src of chosen) {
-        const rel = path.relative(resolvedSource, src);
-        const dest = path.join(watchDir, rel);
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.copyFileSync(src, dest); // copy, never move — leave originals pristine
-    }
-    return { copied: chosen.length, found: all.length, source: resolvedSource, watchDir };
-}
-
 async function main() {
     const { copied, found, source, watchDir } = stageWatchDir();
     console.log('app entry:  ', MAIN_ENTRY);
     console.log('source dir: ', source, `(${found} audio files found)`);
-    console.log('staging dir:', watchDir, `(${copied} copied${UPLOAD_LIMIT !== Infinity ? `, limit ${UPLOAD_LIMIT}` : ''})`);
-    console.log(`config: poll=${POLL_INTERVAL_MS}ms timeout=${(UPLOAD_TIMEOUT_MS / 1000).toFixed(0)}s`);
+    console.log(
+        'staging dir:',
+        watchDir,
+        `(${copied} copied${UPLOAD_LIMIT !== Infinity ? `, limit ${UPLOAD_LIMIT}` : ''})`,
+    );
+    console.log(
+        `config: poll=${POLL_INTERVAL_MS}ms timeout=${(UPLOAD_TIMEOUT_MS / 1000).toFixed(0)}s`,
+    );
 
     const electronApp = await electron.launch({
         args: [MAIN_ENTRY],
@@ -177,7 +157,9 @@ async function main() {
     await watchTab.click();
     await page.waitForTimeout(500);
 
-    const selectBtn = page.getByRole('button', { name: /select directory|change directory/i }).first();
+    const selectBtn = page
+        .getByRole('button', { name: /select directory|change directory/i })
+        .first();
     await selectBtn.click();
     // The stubbed dialog resolves immediately; the chosen path renders as text.
     await page.getByText(watchDir, { exact: false }).first().waitFor({ timeout: 10_000 });
@@ -262,8 +244,10 @@ async function main() {
     await electronApp.close();
     if (!KEEP_WATCH_DIR) {
         try {
-            fs.rmSync(watchDir, { recursive: true, force: true });
-        } catch {}
+            fs.rmSync(watchDir, { force: true, recursive: true });
+        } catch {
+            /* best-effort cleanup */
+        }
     } else {
         console.log('  staging dir kept:', watchDir);
     }
@@ -273,6 +257,32 @@ async function main() {
     const ok = !timedOut;
     console.log(`\nOVERALL: ${ok ? 'DONE' : 'TIMED OUT'}`);
     process.exit(ok ? 0 : 1);
+}
+
+// Copy up to UPLOAD_LIMIT audio files from SOURCE_DIR into a throwaway staging
+// dir, preserving each file's path relative to the source root. Returns the
+// staging dir and how many files were copied. Originals are never modified.
+function stageWatchDir() {
+    if (!SOURCE_DIR) throw new Error('QA_SOURCE_DIR is required');
+    const resolvedSource = path.resolve(SOURCE_DIR);
+    if (!fs.existsSync(resolvedSource) || !fs.statSync(resolvedSource).isDirectory())
+        throw new Error(`QA_SOURCE_DIR is not a directory: ${resolvedSource}`);
+
+    const all = gatherAudioFiles(resolvedSource).sort();
+    if (all.length === 0) throw new Error(`No audio files found under ${resolvedSource}`);
+    const chosen = all.slice(0, UPLOAD_LIMIT);
+
+    const watchDir =
+        process.env.QA_WATCH_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'subbox-upload-'));
+    fs.mkdirSync(watchDir, { recursive: true });
+
+    for (const src of chosen) {
+        const rel = path.relative(resolvedSource, src);
+        const dest = path.join(watchDir, rel);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(src, dest); // copy, never move — leave originals pristine
+    }
+    return { copied: chosen.length, found: all.length, source: resolvedSource, watchDir };
 }
 
 main().catch((err) => {

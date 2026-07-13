@@ -118,13 +118,13 @@ async function main() {
         const bodyText = document.body.innerText || '';
         const emptyHint = /no results|nothing|empty|no artists/i.test(bodyText.slice(0, 800));
         return {
-            artistLinks: artistAnchors.slice(0, 3),
-            artistLinkCount: artistAnchors.length,
-            albumArtistLinks: albumArtistAnchors.slice(0, 3),
             albumArtistLinkCount: albumArtistAnchors.length,
+            albumArtistLinks: albumArtistAnchors.slice(0, 3),
+            artistLinkCount: artistAnchors.length,
+            artistLinks: artistAnchors.slice(0, 3),
+            emptyHint,
             gridCards,
             spinner,
-            emptyHint,
         };
     });
     log('grid:', JSON.stringify(gridInfo));
@@ -163,7 +163,8 @@ async function main() {
     log('routed to album-artist detail?', routedToAlbumArtist);
 
     const detailInfo = await page.evaluate(() => {
-        const heading = document.querySelector('h1, [class*="title" i]')?.textContent?.trim() || null;
+        const heading =
+            document.querySelector('h1, [class*="title" i]')?.textContent?.trim() || null;
         const rows = document.querySelectorAll('[role="row"]');
         // album cards in the discography carousel
         const albumAnchors = document.querySelectorAll('a[href*="/library/albums/"]');
@@ -177,12 +178,12 @@ async function main() {
             .slice(0, 8);
         const bodyLen = document.body.innerText.length;
         return {
-            heading,
-            trackRows: rows.length,
+            bodyLen,
             discographyAlbumLinks: albumAnchors.length,
             hasPlayButton: !!playBtn,
+            heading,
             sections,
-            bodyLen,
+            trackRows: rows.length,
         };
     });
     log('detail:', JSON.stringify(detailInfo));
@@ -200,7 +201,7 @@ async function main() {
         const rows = document.querySelectorAll('[role="row"]');
         const errorPage = /unable to route request/i.test(document.body.innerText);
         const empty = /no .*songs|nothing|empty/i.test(document.body.innerText.slice(0, 400));
-        return { rows: rows.length, errorPage, emptyHint: empty };
+        return { emptyHint: empty, errorPage, rows: rows.length };
     });
     log('top-songs:', JSON.stringify(topSongs), 'stuck?', stuck);
     await page.screenshot({ path: path.join(SNAP, `qa-artist-topsongs-${Date.now()}.png`) });
@@ -236,10 +237,10 @@ async function main() {
         const bar = document.querySelector('[class*="playerbar" i], [class*="PlayerBar" i]');
         const audio = document.querySelector('audio');
         return {
-            barText: bar?.textContent?.trim()?.slice(0, 200) || null,
-            audioSrc: audio?.currentSrc ? audio.currentSrc.slice(0, 80) : null,
-            audioPaused: audio ? audio.paused : null,
             audioCurrentTime: audio ? Number(audio.currentTime.toFixed(1)) : null,
+            audioPaused: audio ? audio.paused : null,
+            audioSrc: audio?.currentSrc ? audio.currentSrc.slice(0, 80) : null,
+            barText: bar?.textContent?.trim()?.slice(0, 200) || null,
         };
     });
     log('after play:', JSON.stringify(afterPlay));

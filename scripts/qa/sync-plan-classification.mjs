@@ -88,7 +88,9 @@ async function main() {
 
     // Playlist name -> id (in-page Subsonic fetch trusts the dev cert).
     const playlists = await page.evaluate(async ({ credential, url }) => {
-        const res = await fetch(`${url}/rest/getPlaylists.view?${credential}&v=1.16.1&c=subbox&f=json`);
+        const res = await fetch(
+            `${url}/rest/getPlaylists.view?${credential}&v=1.16.1&c=subbox&f=json`,
+        );
         const j = await res.json();
         return (j['subsonic-response']?.playlists?.playlist ?? []).map((p) => ({
             id: p.id,
@@ -192,7 +194,7 @@ async function main() {
 
     // ts-rest wraps the payload; the renderer reads res.body.data. Tolerate both shapes.
     const data = plan.json.data ?? plan.json;
-    const { metadata, summary, tracks } = data;
+    const { summary, tracks } = data;
 
     fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
     const shotPath = path.join(SNAPSHOT_DIR, `qa-sync-plan-${Date.now()}.png`);

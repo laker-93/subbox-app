@@ -81,18 +81,13 @@ const SEED_TRACK = path.join(
 
 const credentials = getCredentials();
 
-function setupWatchDir() {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'subbox-watch-'));
-    if (fs.existsSync(SEED_TRACK)) fs.copyFileSync(SEED_TRACK, path.join(dir, 'watch-oleo.mp3'));
-    else console.warn('seed track missing, watch dir empty:', SEED_TRACK);
-    return dir;
-}
-
 async function main() {
     const watchDir = setupWatchDir();
     console.log('app entry:', MAIN_ENTRY);
     console.log('watch dir:', watchDir, '->', fs.readdirSync(watchDir));
-    console.log(`config: poll=${POLL_INTERVAL_MS}ms rbXml=${INCLUDE_RB_XML} playlists="${process.env.QA_PLAYLIST || 'Kodzo'}"`);
+    console.log(
+        `config: poll=${POLL_INTERVAL_MS}ms rbXml=${INCLUDE_RB_XML} playlists="${process.env.QA_PLAYLIST || 'Kodzo'}"`,
+    );
 
     const electronApp = await electron.launch({
         args: [MAIN_ENTRY],
@@ -117,13 +112,21 @@ async function main() {
 
     const server = await page.evaluate(() => {
         const s = JSON.parse(localStorage.getItem('store_authentication')).state.currentServer;
-        return { credential: s.credential, fbToken: s.fbToken ?? '', id: s.id, url: s.url, username: s.username };
+        return {
+            credential: s.credential,
+            fbToken: s.fbToken ?? '',
+            id: s.id,
+            url: s.url,
+            username: s.username,
+        };
     });
     console.log('server:', server.username, server.id);
 
     // Playlist name->id map via Subsonic (in-page fetch trusts the dev cert).
     const playlists = await page.evaluate(async ({ credential, url }) => {
-        const res = await fetch(`${url}/rest/getPlaylists.view?${credential}&v=1.16.1&c=subbox&f=json`);
+        const res = await fetch(
+            `${url}/rest/getPlaylists.view?${credential}&v=1.16.1&c=subbox&f=json`,
+        );
         const j = await res.json();
         return (j['subsonic-response']?.playlists?.playlist ?? []).map((p) => ({
             id: p.id,
@@ -136,7 +139,12 @@ async function main() {
     const chosen =
         sel === '__ALL__'
             ? playlists.filter((p) => p.songCount > 0)
-            : playlists.filter((p) => sel.split(',').map((s) => s.trim()).includes(p.name));
+            : playlists.filter((p) =>
+                  sel
+                      .split(',')
+                      .map((s) => s.trim())
+                      .includes(p.name),
+              );
     const playlistIds = chosen.map((p) => p.id);
     console.log('downloading:', chosen.map((p) => `${p.name}(${p.songCount})`).join(', '));
     if (playlistIds.length === 0) {
@@ -169,15 +177,26 @@ async function main() {
     // once through the UI. Without it, POST /sync/playlists has no session and
     // pymix rejects ("Must have a username or session ID to identify user").
     const syncToggle = page.getByText('Sync', { exact: true }).first();
-    if (await syncToggle.isVisible().catch(() => false)) { await syncToggle.click(); await page.waitForTimeout(800); }
+    if (await syncToggle.isVisible().catch(() => false)) {
+        await syncToggle.click();
+        await page.waitForTimeout(800);
+    }
     const downloadTab = page.getByText('Download', { exact: true }).first();
-    if (await downloadTab.isVisible().catch(() => false)) { await downloadTab.click(); await page.waitForTimeout(800); }
+    if (await downloadTab.isVisible().catch(() => false)) {
+        await downloadTab.click();
+        await page.waitForTimeout(800);
+    }
     const firstRow = page.getByText(chosen[0].name, { exact: true }).first();
-    if (await firstRow.isVisible().catch(() => false)) { await firstRow.click(); await page.waitForTimeout(300); }
+    if (await firstRow.isVisible().catch(() => false)) {
+        await firstRow.click();
+        await page.waitForTimeout(300);
+    }
     const previewButton = page.getByRole('button', { name: /^preview download$/i });
     if (await previewButton.isEnabled().catch(() => false)) {
         await previewButton.click();
-        await page.getByText('Generating sync plan', { exact: false }).first()
+        await page
+            .getByText('Generating sync plan', { exact: false })
+            .first()
             .waitFor({ state: 'hidden', timeout: 60_000 })
             .catch((e) => console.log('still generating after 60s:', e.message));
         console.log('preview complete — pymix session established');
@@ -188,7 +207,11 @@ async function main() {
     // Warm up so we can confirm the watcher is alive and ticking before download.
     await page.waitForTimeout(POLL_INTERVAL_MS * 3);
     const pre = await page.evaluate(() => window.__watchEvents.slice());
-    console.log('watch ticks before download:', pre.length, `[${pre.map((e) => e.phase).join(',')}]`);
+    console.log(
+        'watch ticks before download:',
+        pre.length,
+        `[${pre.map((e) => e.phase).join(',')}]`,
+    );
 
     // Fire the download via IPC and time the exact promise lifetime.
     const downloadStart = Date.now();
@@ -214,7 +237,9 @@ async function main() {
     const downloadEnd = Date.now();
     const downloadOk = dl.ok === true;
     const tracksExported = dl.result?.tracksExported;
-    console.log(`download IPC window: ${((downloadEnd - downloadStart) / 1000).toFixed(1)}s ok=${downloadOk} tracksExported=${tracksExported}${dl.err ? ' err=' + dl.err : ''}`);
+    console.log(
+        `download IPC window: ${((downloadEnd - downloadStart) / 1000).toFixed(1)}s ok=${downloadOk} tracksExported=${tracksExported}${dl.err ? ' err=' + dl.err : ''}`,
+    );
 
     // Let the watcher resume for a couple ticks post-download.
     await page.waitForTimeout(POLL_INTERVAL_MS * 3);
@@ -222,7 +247,9 @@ async function main() {
     await page.evaluate(() => window.api.ipc.invoke('sync:stop-watch')).catch(() => {});
 
     const active = (e) => e.phase === 'scanning' || e.phase === 'uploading';
-    const duringDownload = allEvents.filter((e) => e.t >= downloadStart && e.t <= downloadEnd && active(e));
+    const duringDownload = allEvents.filter(
+        (e) => e.t >= downloadStart && e.t <= downloadEnd && active(e),
+    );
     const afterDownload = allEvents.filter((e) => e.t > downloadEnd);
     const windowTicksExpected = Math.floor((downloadEnd - downloadStart) / POLL_INTERVAL_MS);
 
@@ -239,9 +266,15 @@ async function main() {
     const passResumed = afterDownload.length > 0;
 
     console.log('RESULT:');
-    console.log(`  [${passClean ? 'PASS' : 'FAIL'}] download completed cleanly (resolved, tracksExported=${tracksExported})`);
-    console.log(`  [${passPaused ? 'PASS' : 'FAIL'}] watcher did NO scan/upload work during download (${duringDownload.length} active ticks; ~${windowTicksExpected} poll(s) would normally fire in this window)`);
-    console.log(`  [${passResumed ? 'PASS' : 'FAIL'}] watcher resumed after download (${afterDownload.length} ticks after)`);
+    console.log(
+        `  [${passClean ? 'PASS' : 'FAIL'}] download completed cleanly (resolved, tracksExported=${tracksExported})`,
+    );
+    console.log(
+        `  [${passPaused ? 'PASS' : 'FAIL'}] watcher did NO scan/upload work during download (${duringDownload.length} active ticks; ~${windowTicksExpected} poll(s) would normally fire in this window)`,
+    );
+    console.log(
+        `  [${passResumed ? 'PASS' : 'FAIL'}] watcher resumed after download (${afterDownload.length} ticks after)`,
+    );
 
     fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
     const shot = path.join(SNAPSHOT_DIR, `watch-download-concurrency-${Date.now()}.png`);
@@ -249,14 +282,33 @@ async function main() {
     console.log('screenshot:', shot);
 
     console.log('\n--- main [Subbox]/error lines ---');
-    console.log(mainLogs.filter((l) => /subbox|EPIPE|ECONNRESET|reject|unhandled|hang|watch poll/i.test(l) && !/Autofill|GPUCache|WebGPU/i.test(l)).join('\n') || '(none)');
+    console.log(
+        mainLogs
+            .filter(
+                (l) =>
+                    /subbox|EPIPE|ECONNRESET|reject|unhandled|hang|watch poll/i.test(l) &&
+                    !/Autofill|GPUCache|WebGPU/i.test(l),
+            )
+            .join('\n') || '(none)',
+    );
 
     await electronApp.close();
-    try { fs.rmSync(watchDir, { recursive: true, force: true }); } catch {}
+    try {
+        fs.rmSync(watchDir, { force: true, recursive: true });
+    } catch {
+        /* best-effort cleanup */
+    }
 
     const allPass = passClean && passPaused && passResumed;
     console.log(`\nOVERALL: ${allPass ? 'PASS' : 'FAIL'}`);
     process.exit(allPass ? 0 : 1);
+}
+
+function setupWatchDir() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'subbox-watch-'));
+    if (fs.existsSync(SEED_TRACK)) fs.copyFileSync(SEED_TRACK, path.join(dir, 'watch-oleo.mp3'));
+    else console.warn('seed track missing, watch dir empty:', SEED_TRACK);
+    return dir;
 }
 
 main().catch((err) => {

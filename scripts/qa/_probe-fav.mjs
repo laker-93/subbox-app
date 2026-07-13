@@ -17,13 +17,6 @@ import {
 const MAIN_ENTRY = resolveAppEntry();
 const log = (...a) => console.log('[probe-fav]', ...a);
 
-async function goto(page, route) {
-    await page.evaluate((r) => {
-        window.location.hash = `#${r}`;
-    }, route);
-    return waitForRouteSettled(page);
-}
-
 // The player FavoriteButton is only identifiable via its portalled hover
 // tooltip ("Favorite"/"Unfavorite") — same finder the journey uses. Returns the
 // live button handle + tooltip text (favorited === tooltip "Unfavorite").
@@ -38,12 +31,23 @@ async function findFavButton(page) {
         if (!box || box.y < vh - 140) continue;
         await btn.hover({ timeout: 1500 }).catch(() => {});
         await page.waitForTimeout(150);
-        const tip = await page.getByRole('tooltip').first().textContent().catch(() => null);
+        const tip = await page
+            .getByRole('tooltip')
+            .first()
+            .textContent()
+            .catch(() => null);
         if (tip && /^(un)?favorite$/i.test(tip.trim())) {
-            return { handle: btn, tooltip: tip.trim(), box };
+            return { box, handle: btn, tooltip: tip.trim() };
         }
     }
     return null;
+}
+
+async function goto(page, route) {
+    await page.evaluate((r) => {
+        window.location.hash = `#${r}`;
+    }, route);
+    return waitForRouteSettled(page);
 }
 
 async function main() {
@@ -64,7 +68,9 @@ async function main() {
     });
 
     await page.waitForLoadState('networkidle');
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
+    await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900),
+    );
     if (await isLoggedOut(page)) await performLogin(page, credentials);
 
     await page.evaluate(() => {
@@ -102,15 +108,18 @@ async function main() {
         const a = document.querySelector('audio');
         const bar = document.querySelector('[class*="playerbar" i], [class*="PlayerBar" i]');
         return {
+            bar: bar?.textContent?.trim()?.slice(0, 100) || null,
             paused: a?.paused ?? null,
             t: a ? Number(a.currentTime.toFixed(1)) : null,
-            bar: bar?.textContent?.trim()?.slice(0, 100) || null,
         };
     });
     log('playing?', JSON.stringify(playing));
 
     const before = await findFavButton(page);
-    log('fav button before click:', before ? JSON.stringify({ tooltip: before.tooltip }) : 'NOT FOUND');
+    log(
+        'fav button before click:',
+        before ? JSON.stringify({ tooltip: before.tooltip }) : 'NOT FOUND',
+    );
     if (!before) {
         log('no fav button found — abort');
         await app.close();
@@ -122,7 +131,10 @@ async function main() {
     await before.handle.click({ timeout: 3000 });
     await page.waitForTimeout(2500);
     const after = await findFavButton(page);
-    log('fav button after click:', after ? JSON.stringify({ tooltip: after.tooltip }) : 'NOT FOUND');
+    log(
+        'fav button after click:',
+        after ? JSON.stringify({ tooltip: after.tooltip }) : 'NOT FOUND',
+    );
     log(`star/unstar requests fired by this click: ${netLog.length - netBefore}`);
 
     // Toggle back only if the click actually fired a request (kept state honest).

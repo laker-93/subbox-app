@@ -79,7 +79,8 @@ async function main() {
                 if (!src) return { error: `source playlist "${sourcePlaylist}" not found` };
                 const full = await call('getPlaylist.view', `id=${encodeURIComponent(src.id)}`);
                 const entries = full['subsonic-response']?.playlist?.entry ?? [];
-                if (!entries.length) return { error: `source playlist "${sourcePlaylist}" is empty` };
+                if (!entries.length)
+                    return { error: `source playlist "${sourcePlaylist}" is empty` };
                 songId = entries[0].id;
                 songLabel = `${entries[0].artist} — ${entries[0].title}`;
             }

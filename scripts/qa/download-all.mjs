@@ -40,7 +40,9 @@ async function main() {
     proc.stderr.on('data', (d) => process.stderr.write(`[main:err] ${d}`));
 
     electronApp.on('close', () => console.error('[driver] electronApp CLOSED'));
-    proc.on('exit', (code, sig) => console.error(`[driver] main process EXIT code=${code} sig=${sig}`));
+    proc.on('exit', (code, sig) =>
+        console.error(`[driver] main process EXIT code=${code} sig=${sig}`),
+    );
 
     const page = await electronApp.firstWindow();
     page.on('close', () => console.error('[driver] page CLOSED'));
@@ -72,12 +74,21 @@ async function main() {
     }
 
     // Enter Sync mode, then the Download tab.
-    await page.getByText(/^Sync$/).first().click();
+    await page
+        .getByText(/^Sync$/)
+        .first()
+        .click();
     await page.getByRole('button', { name: /^Download$/ }).click();
 
     // Select step: grab the playlist count, select all, preview.
-    await page.getByText(/playlists?$/).first().waitFor({ timeout: 15_000 });
-    const countText = await page.getByText(/\d+ playlists?/).first().innerText();
+    await page
+        .getByText(/playlists?$/)
+        .first()
+        .waitFor({ timeout: 15_000 });
+    const countText = await page
+        .getByText(/\d+ playlists?/)
+        .first()
+        .innerText();
     console.log(`[driver] playlist badge: "${countText}"`);
 
     await page.getByRole('button', { name: /^Select all$/ }).click();
@@ -115,12 +126,19 @@ async function main() {
     await page.screenshot({ path: shot(`03-${outcome}`) });
 
     if (outcome === 'done') {
-        const summary = await page.getByText(/exported\.?$/i).innerText().catch(() => '');
+        const summary = await page
+            .getByText(/exported\.?$/i)
+            .innerText()
+            .catch(() => '');
         console.log(`[driver] ✅ download completed in ${secs}s — "${summary}"`);
     } else if (outcome === 'error') {
-        console.error(`[driver] ⚠️ download surfaced an ERROR after ${secs}s (no hang — error was forwarded to the client).`);
+        console.error(
+            `[driver] ⚠️ download surfaced an ERROR after ${secs}s (no hang — error was forwarded to the client).`,
+        );
     } else {
-        console.error(`[driver] ❌ HANG: no done/error state after ${secs}s — the client is stuck.`);
+        console.error(
+            `[driver] ❌ HANG: no done/error state after ${secs}s — the client is stuck.`,
+        );
     }
 
     await electronApp.close();

@@ -83,17 +83,30 @@ async function main() {
         const ids = [
             ...new Set(
                 anchors
-                    .map((a) => (a.getAttribute('href') || '').match(/\/library\/albums\/([^/?#]+)/)?.[1])
+                    .map(
+                        (a) =>
+                            (a.getAttribute('href') || '').match(
+                                /\/library\/albums\/([^/?#]+)/,
+                            )?.[1],
+                    )
                     .filter(Boolean),
             ),
         ];
         // header/title text on the page
-        const title = document.querySelector('[class*="PageHeader"], header')?.textContent?.trim() || null;
-        return { anchorCount: anchors.length, uniqueAlbumIds: ids.slice(0, 5), totalUnique: ids.length, title };
+        const title =
+            document.querySelector('[class*="PageHeader"], header')?.textContent?.trim() || null;
+        return {
+            anchorCount: anchors.length,
+            title,
+            totalUnique: ids.length,
+            uniqueAlbumIds: ids.slice(0, 5),
+        };
     });
     log('grid:', JSON.stringify(gridInfo));
 
-    await page.screenshot({ path: path.join(ROOT, '.ui-snapshots', `qa-albums-grid-${Date.now()}.png`) });
+    await page.screenshot({
+        path: path.join(ROOT, '.ui-snapshots', `qa-albums-grid-${Date.now()}.png`),
+    });
 
     if (gridInfo.totalUnique === 0) {
         log('NO album cards found — cannot continue detail/play steps. Dumping body text sample.');
@@ -113,11 +126,14 @@ async function main() {
         const playBtn = Array.from(document.querySelectorAll('button')).find((b) =>
             /play/i.test(b.getAttribute('aria-label') || b.textContent || ''),
         );
-        const heading = document.querySelector('h1, [class*="title" i]')?.textContent?.trim() || null;
-        return { rowCount: rows.length, hasPlayButton: !!playBtn, heading };
+        const heading =
+            document.querySelector('h1, [class*="title" i]')?.textContent?.trim() || null;
+        return { hasPlayButton: !!playBtn, heading, rowCount: rows.length };
     });
     log('detail:', JSON.stringify(detailInfo));
-    await page.screenshot({ path: path.join(ROOT, '.ui-snapshots', `qa-album-detail-${Date.now()}.png`) });
+    await page.screenshot({
+        path: path.join(ROOT, '.ui-snapshots', `qa-album-detail-${Date.now()}.png`),
+    });
 
     // --- Play a track: double-click first track row, then inspect the player bar ---
     const beforeBar = await page.evaluate(() => {
@@ -139,14 +155,16 @@ async function main() {
         const bar = document.querySelector('[class*="playerbar" i], [class*="PlayerBar" i]');
         const audio = document.querySelector('audio');
         return {
-            barText: bar?.textContent?.trim()?.slice(0, 200) || null,
-            audioSrc: audio?.currentSrc ? audio.currentSrc.slice(0, 80) : null,
-            audioPaused: audio ? audio.paused : null,
             audioCurrentTime: audio ? Number(audio.currentTime.toFixed(1)) : null,
+            audioPaused: audio ? audio.paused : null,
+            audioSrc: audio?.currentSrc ? audio.currentSrc.slice(0, 80) : null,
+            barText: bar?.textContent?.trim()?.slice(0, 200) || null,
         };
     });
     log('after play:', JSON.stringify(afterPlay));
-    await page.screenshot({ path: path.join(ROOT, '.ui-snapshots', `qa-album-playing-${Date.now()}.png`) });
+    await page.screenshot({
+        path: path.join(ROOT, '.ui-snapshots', `qa-album-playing-${Date.now()}.png`),
+    });
 
     // --- Now-playing / queue route (real route is /now-playing; /playing is a
     //     dead enum value nothing navigates to) ---
@@ -155,10 +173,12 @@ async function main() {
         const rows = document.querySelectorAll('[role="row"]');
         const bodyText = document.body.innerText;
         const errorPage = /unable to route request/i.test(bodyText);
-        return { rowCount: rows.length, errorPage };
+        return { errorPage, rowCount: rows.length };
     });
     log('/now-playing queue rows:', JSON.stringify(queueInfo), 'stuck?', stuck);
-    await page.screenshot({ path: path.join(ROOT, '.ui-snapshots', `qa-nowplaying-queue-${Date.now()}.png`) });
+    await page.screenshot({
+        path: path.join(ROOT, '.ui-snapshots', `qa-nowplaying-queue-${Date.now()}.png`),
+    });
 
     await electronApp.close();
     log('done');

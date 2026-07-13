@@ -46,7 +46,16 @@ const UPLOAD_TIMEOUT_MS = Number(process.env.QA_UPLOAD_TIMEOUT_MS) || 900_000;
 const PYMIX_URL = 'https://pymix.docker.localhost';
 const FILEBROWSER_URL = 'https://browser.docker.localhost/browser';
 
-const AUDIO_EXTENSIONS = new Set(['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.wma']);
+const AUDIO_EXTENSIONS = new Set([
+    '.aac',
+    '.flac',
+    '.m4a',
+    '.mp3',
+    '.ogg',
+    '.opus',
+    '.wav',
+    '.wma',
+]);
 const credentials = getCredentials();
 
 function gatherAudioFiles(dir, out = []) {
@@ -89,7 +98,9 @@ async function main() {
     console.log('app entry:  ', MAIN_ENTRY);
     console.log('source dir: ', source, `(${found} audio files found)`);
     console.log('staging dir:', watchDir, `(${copied} staged, limit ${UPLOAD_LIMIT})`);
-    console.log(`config: poll=${POLL_INTERVAL_MS}ms fireAfter=${FIRE_AFTER} playlists="${process.env.QA_PLAYLIST || '__ALL__'}"`);
+    console.log(
+        `config: poll=${POLL_INTERVAL_MS}ms fireAfter=${FIRE_AFTER} playlists="${process.env.QA_PLAYLIST || '__ALL__'}"`,
+    );
 
     const electronApp = await electron.launch({
         args: [MAIN_ENTRY],
@@ -112,13 +123,21 @@ async function main() {
 
     const server = await page.evaluate(() => {
         const s = JSON.parse(localStorage.getItem('store_authentication')).state.currentServer;
-        return { credential: s.credential, fbToken: s.fbToken ?? '', id: s.id, url: s.url, username: s.username };
+        return {
+            credential: s.credential,
+            fbToken: s.fbToken ?? '',
+            id: s.id,
+            url: s.url,
+            username: s.username,
+        };
     });
     console.log('server:     ', server.username, server.id);
 
     // Playlist name->id map (in-page fetch trusts the dev cert).
     const playlists = await page.evaluate(async ({ credential, url }) => {
-        const res = await fetch(`${url}/rest/getPlaylists.view?${credential}&v=1.16.1&c=subbox&f=json`);
+        const res = await fetch(
+            `${url}/rest/getPlaylists.view?${credential}&v=1.16.1&c=subbox&f=json`,
+        );
         const j = await res.json();
         return (j['subsonic-response']?.playlists?.playlist ?? []).map((p) => ({
             id: p.id,
@@ -131,10 +150,19 @@ async function main() {
     const chosen =
         sel === '__ALL__'
             ? playlists.filter((p) => p.songCount > 0)
-            : playlists.filter((p) => sel.split(',').map((s) => s.trim()).includes(p.name));
+            : playlists.filter((p) =>
+                  sel
+                      .split(',')
+                      .map((s) => s.trim())
+                      .includes(p.name),
+              );
     const playlistIds = chosen.map((p) => p.id);
     const totalPlaylistTracks = chosen.reduce((n, p) => n + (p.songCount || 0), 0);
-    console.log('download target:', chosen.map((p) => `${p.name}(${p.songCount})`).join(', '), `= ${totalPlaylistTracks} track-slots`);
+    console.log(
+        'download target:',
+        chosen.map((p) => `${p.name}(${p.songCount})`).join(', '),
+        `= ${totalPlaylistTracks} track-slots`,
+    );
     if (playlistIds.length === 0) {
         console.log('no playlists chosen; aborting');
         await electronApp.close();
@@ -146,15 +174,26 @@ async function main() {
     // BEFORE starting the watcher so the (fast) upload does not drain during the
     // bootstrap — we want the download fired while the upload is still in flight.
     const syncToggle = page.getByText('Sync', { exact: true }).first();
-    if (await syncToggle.isVisible().catch(() => false)) { await syncToggle.click(); await page.waitForTimeout(800); }
+    if (await syncToggle.isVisible().catch(() => false)) {
+        await syncToggle.click();
+        await page.waitForTimeout(800);
+    }
     const downloadTab = page.getByText('Download', { exact: true }).first();
-    if (await downloadTab.isVisible().catch(() => false)) { await downloadTab.click(); await page.waitForTimeout(800); }
+    if (await downloadTab.isVisible().catch(() => false)) {
+        await downloadTab.click();
+        await page.waitForTimeout(800);
+    }
     const firstRow = page.getByText(chosen[0].name, { exact: true }).first();
-    if (await firstRow.isVisible().catch(() => false)) { await firstRow.click(); await page.waitForTimeout(300); }
+    if (await firstRow.isVisible().catch(() => false)) {
+        await firstRow.click();
+        await page.waitForTimeout(300);
+    }
     const previewButton = page.getByRole('button', { name: /^preview download$/i });
     if (await previewButton.isEnabled().catch(() => false)) {
         await previewButton.click();
-        await page.getByText('Generating sync plan', { exact: false }).first()
+        await page
+            .getByText('Generating sync plan', { exact: false })
+            .first()
             .waitFor({ state: 'hidden', timeout: 120_000 })
             .catch((e) => console.log('still generating after 120s:', e.message));
         console.log('preview complete — pymix session established');
@@ -198,11 +237,11 @@ async function main() {
             const evs = window.__watchEvents;
             const latest = evs[evs.length - 1] || {};
             return {
+                idle: latest.phase === 'idle',
+                maxUploaded: Math.max(0, ...evs.map((e) => e.uploaded || 0)),
+                n: evs.length,
                 phase: latest.phase,
                 total: latest.total || 0,
-                maxUploaded: Math.max(0, ...evs.map((e) => e.uploaded || 0)),
-                idle: latest.phase === 'idle',
-                n: evs.length,
             };
         });
         uploadedAtFire = st.maxUploaded;
@@ -215,7 +254,9 @@ async function main() {
         }
         await sleep(400);
     }
-    console.log(`upload in flight: ${uploadedAtFire}/${uploadTotal} uploaded — firing download now`);
+    console.log(
+        `upload in flight: ${uploadedAtFire}/${uploadTotal} uploaded — firing download now`,
+    );
 
     // Fire the LARGE download concurrently and time its promise lifetime.
     const downloadStart = Date.now();
@@ -259,11 +300,11 @@ async function main() {
             const evs = window.__watchEvents;
             const latest = evs[evs.length - 1] || {};
             return {
-                phase: latest.phase,
-                total: latest.total || 0,
                 maxUploaded: Math.max(0, ...evs.map((e) => e.uploaded || 0)),
-                sawUploading: evs.some((e) => e.phase === 'uploading'),
+                phase: latest.phase,
                 sawError: evs.some((e) => e.phase === 'error'),
+                sawUploading: evs.some((e) => e.phase === 'uploading'),
+                total: latest.total || 0,
             };
         });
         sawUploading = sawUploading || st.sawUploading;
@@ -288,7 +329,9 @@ async function main() {
 
     // Timeline around the download window.
     const active = (e) => e.phase === 'scanning' || e.phase === 'uploading';
-    const duringDownload = allEvents.filter((e) => e.t >= downloadStart && e.t <= downloadEnd && active(e));
+    const duringDownload = allEvents.filter(
+        (e) => e.t >= downloadStart && e.t <= downloadEnd && active(e),
+    );
     const afterDownload = allEvents.filter((e) => e.t > downloadEnd && active(e));
 
     fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
@@ -296,31 +339,48 @@ async function main() {
     await page.screenshot({ path: shot }).catch(() => {});
 
     console.log('\n--- watch-progress summary ---');
-    console.log(`  events: ${allEvents.length}, uploaded ${finalUploaded}/${finalTotal}, error phase: ${sawError}`);
+    console.log(
+        `  events: ${allEvents.length}, uploaded ${finalUploaded}/${finalTotal}, error phase: ${sawError}`,
+    );
     console.log(`  active watch ticks inside download window: ${duringDownload.length}`);
     console.log(`  active watch ticks after download window:  ${afterDownload.length}`);
 
     console.log('\n--- main [Subbox]/error lines ---');
     const badLines = mainLogs.filter(
-        (l) => /EPIPE|ECONNRESET|unhandled|Watch poll error|Failed to upload|hang/i.test(l) && !/Autofill|GPUCache|WebGPU/i.test(l),
+        (l) =>
+            /EPIPE|ECONNRESET|unhandled|Watch poll error|Failed to upload|hang/i.test(l) &&
+            !/Autofill|GPUCache|WebGPU/i.test(l),
     );
     console.log(badLines.slice(-30).join('\n') || '(no upload/download stream errors)');
 
     // Assertions
     const passDownload = downloadOk && typeof tracksExported === 'number';
-    const passUploadDrained = drained && (finalUploaded === finalTotal) && finalUploaded > 0 && !sawError;
+    const passUploadDrained =
+        drained && finalUploaded === finalTotal && finalUploaded > 0 && !sawError;
     const passOverlap = uploadedAtFire > 0 && uploadedAtFire < finalTotal; // download fired mid-upload
     const passNoStreamErr = badLines.length === 0;
 
     console.log('\nRESULT:');
-    console.log(`  [${passUploadDrained ? 'PASS' : 'FAIL'}] upload drained fully (${finalUploaded}/${finalTotal} uploaded, reached idle, no error phase)`);
-    console.log(`  [${passDownload ? 'PASS' : 'FAIL'}] large download completed cleanly (resolved, tracksExported=${tracksExported})`);
-    console.log(`  [${passOverlap ? 'PASS' : 'FAIL'}] download was fired mid-upload (upload at ${uploadedAtFire}/${finalTotal} when download started)`);
-    console.log(`  [${passNoStreamErr ? 'PASS' : 'FAIL'}] no EPIPE/ECONNRESET/unhandled/upload-fail in main logs`);
+    console.log(
+        `  [${passUploadDrained ? 'PASS' : 'FAIL'}] upload drained fully (${finalUploaded}/${finalTotal} uploaded, reached idle, no error phase)`,
+    );
+    console.log(
+        `  [${passDownload ? 'PASS' : 'FAIL'}] large download completed cleanly (resolved, tracksExported=${tracksExported})`,
+    );
+    console.log(
+        `  [${passOverlap ? 'PASS' : 'FAIL'}] download was fired mid-upload (upload at ${uploadedAtFire}/${finalTotal} when download started)`,
+    );
+    console.log(
+        `  [${passNoStreamErr ? 'PASS' : 'FAIL'}] no EPIPE/ECONNRESET/unhandled/upload-fail in main logs`,
+    );
     console.log(`  screenshot: ${shot}`);
 
     await electronApp.close();
-    try { fs.rmSync(watchDir, { recursive: true, force: true }); } catch {}
+    try {
+        fs.rmSync(watchDir, { force: true, recursive: true });
+    } catch {
+        /* best-effort cleanup */
+    }
 
     const allPass = passUploadDrained && passDownload && passOverlap && passNoStreamErr;
     console.log(`\nOVERALL: ${allPass ? 'PASS' : 'FAIL'}`);

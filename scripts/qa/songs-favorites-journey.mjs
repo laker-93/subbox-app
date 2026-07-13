@@ -29,24 +29,27 @@ const log = (...a) => console.log('[songs-favorites]', ...a);
 const shot = (page, name) =>
     page.screenshot({ path: path.join(ROOT, '.ui-snapshots', `qa-${name}-${Date.now()}.png`) });
 
-// Navigate by assigning location.hash *in-page* (a real hashchange the app's
-// HashRouter handles) rather than page.goto(base#route): after a mid-run
-// page.reload(), Playwright treats a same-document hash-only goto as "no
-// navigation" and returns without routing, so the app stays on home and the
-// target route never renders (0 rows). In-page hash assignment routes reliably.
-async function goto(page, route) {
-    await page.evaluate((r) => {
-        window.location.hash = `#${r}`;
-    }, route);
-    return waitForRouteSettled(page);
-}
-
 // Dismiss any open tooltip/popover so a leftover portal can't sit over the player
 // bar and confuse the next hover-based discovery.
 async function clearOverlays(page) {
     await page.keyboard.press('Escape').catch(() => {});
     await page.mouse.move(5, 5).catch(() => {});
     await page.waitForTimeout(200);
+}
+
+async function clickFavorite(page) {
+    const fav = await findFavoriteButton(page);
+    if (!fav) throw new Error('favorite button not found in player bar');
+    await fav.handle.click({ timeout: 3000 });
+    await page.waitForTimeout(1800); // let the star/unstar request settle
+}
+
+async function currentFavoriteState(page) {
+    const fav = await findFavoriteButton(page);
+    if (!fav) return { found: false };
+    // tooltip is "Unfavorite" when the current song is already a favorite,
+    // "Favorite" when it isn't.
+    return { found: true, isFavorite: /^unfavorite$/i.test(fav.tooltip), tooltip: fav.tooltip };
 }
 
 // Locate the player FavoriteButton by hovering bottom-region buttons and reading
@@ -78,34 +81,16 @@ async function findFavoriteButton(page, attempts = 3) {
     return null;
 }
 
-async function currentFavoriteState(page) {
-    const fav = await findFavoriteButton(page);
-    if (!fav) return { found: false };
-    // tooltip is "Unfavorite" when the current song is already a favorite,
-    // "Favorite" when it isn't.
-    return { found: true, isFavorite: /^unfavorite$/i.test(fav.tooltip), tooltip: fav.tooltip };
-}
-
-async function clickFavorite(page) {
-    const fav = await findFavoriteButton(page);
-    if (!fav) throw new Error('favorite button not found in player bar');
-    await fav.handle.click({ timeout: 3000 });
-    await page.waitForTimeout(1800); // let the star/unstar request settle
-}
-
-// Read the song titles currently rendered in a list/table view.
-async function readSongTitles(page) {
-    return page.evaluate(() => {
-        const rows = Array.from(document.querySelectorAll('[role="row"]'));
-        const titles = [];
-        for (const r of rows) {
-            // Title cell text — prefer an explicit title-ish cell, fall back to row text.
-            const cell = r.querySelector('[class*="title" i]') || r;
-            const t = cell.textContent?.trim();
-            if (t) titles.push(t.slice(0, 80));
-        }
-        return titles;
-    });
+// Navigate by assigning location.hash *in-page* (a real hashchange the app's
+// HashRouter handles) rather than page.goto(base#route): after a mid-run
+// page.reload(), Playwright treats a same-document hash-only goto as "no
+// navigation" and returns without routing, so the app stays on home and the
+// target route never renders (0 rows). In-page hash assignment routes reliably.
+async function goto(page, route) {
+    await page.evaluate((r) => {
+        window.location.hash = `#${r}`;
+    }, route);
+    return waitForRouteSettled(page);
 }
 
 async function main() {
@@ -123,7 +108,9 @@ async function main() {
         const url = res.url();
         if (/star\.view|unstar\.view/.test(url)) {
             const kind = /unstar\.view/.test(url) ? 'unstar' : 'star';
-            log(`NET ${kind} -> ${res.status()} ${url.replace(/([?&])(u|p|s|t)=[^&]*/g, '$1$2=***')}`);
+            log(
+                `NET ${kind} -> ${res.status()} ${url.replace(/([?&])(u|p|s|t)=[^&]*/g, '$1$2=***')}`,
+            );
         }
     });
 
@@ -174,8 +161,7 @@ async function main() {
     // The grid can mount empty for a beat after a reload/relogin (route renders
     // before the songs fetch resolves). Wait for data rows, re-navigating a
     // couple of times if it's still empty, before deciding there's nothing here.
-    const countRows = () =>
-        page.evaluate(() => document.querySelectorAll('[role="row"]').length);
+    const countRows = () => page.evaluate(() => document.querySelectorAll('[role="row"]').length);
     for (let i = 0; i < 4 && (await countRows()) <= 1; i++) {
         log(`songs grid empty (attempt ${i + 1}) — waiting/re-navigating`);
         await page.waitForTimeout(1200);
@@ -184,8 +170,9 @@ async function main() {
 
     const listInfo = await page.evaluate(() => {
         const rows = document.querySelectorAll('[role="row"]');
-        const header = document.querySelector('[class*="PageHeader"], header')?.textContent?.trim() || null;
-        return { rowCount: rows.length, header: header?.slice(0, 120) ?? null };
+        const header =
+            document.querySelector('[class*="PageHeader"], header')?.textContent?.trim() || null;
+        return { header: header?.slice(0, 120) ?? null, rowCount: rows.length };
     });
     log('songs list:', JSON.stringify(listInfo));
     await shot(page, 'songs-list');
@@ -233,8 +220,8 @@ async function main() {
         const audio = document.querySelector('audio');
         const bar = document.querySelector('[class*="playerbar" i], [class*="PlayerBar" i]');
         return {
-            audioPaused: audio ? audio.paused : null,
             audioCurrentTime: audio ? Number(audio.currentTime.toFixed(1)) : null,
+            audioPaused: audio ? audio.paused : null,
             barText: bar?.textContent?.trim()?.slice(0, 160) || null,
         };
     });
@@ -266,7 +253,9 @@ async function main() {
     const nowPlayingTitle = await page.evaluate(() => {
         const bar = document.querySelector('[class*="playerbar" i], [class*="PlayerBar" i]');
         // The line-1 title link in the player bar.
-        const link = bar?.querySelector('a[href*="/albums/"], a[href*="/songs"], [class*="title" i]');
+        const link = bar?.querySelector(
+            'a[href*="/albums/"], a[href*="/songs"], [class*="title" i]',
+        );
         return (link?.textContent || bar?.textContent || '').trim().slice(0, 80) || null;
     });
     log('now-playing title:', JSON.stringify(nowPlayingTitle));
@@ -277,8 +266,9 @@ async function main() {
     const favTitles = await readSongTitles(page);
     const favInfo = await page.evaluate(() => {
         const rows = document.querySelectorAll('[role="row"]');
-        const header = document.querySelector('[class*="PageHeader"], header')?.textContent?.trim() || null;
-        return { rowCount: rows.length, header: header?.slice(0, 120) ?? null };
+        const header =
+            document.querySelector('[class*="PageHeader"], header')?.textContent?.trim() || null;
+        return { header: header?.slice(0, 120) ?? null, rowCount: rows.length };
     });
     log('favorites view:', JSON.stringify(favInfo));
     log('favorites titles (first 8):', JSON.stringify(favTitles.slice(0, 8)));
@@ -306,7 +296,9 @@ async function main() {
     await page.waitForTimeout(600);
     const favTitlesAfterRemove = await readSongTitles(page);
     const stillThere = nowPlayingTitle
-        ? favTitlesAfterRemove.some((t) => t.includes(nowPlayingTitle) || nowPlayingTitle.includes(t))
+        ? favTitlesAfterRemove.some(
+              (t) => t.includes(nowPlayingTitle) || nowPlayingTitle.includes(t),
+          )
         : null;
     log('favorites row count after remove:', favTitlesAfterRemove.length);
     log('now-playing track still in favorites after remove?', stillThere);
@@ -314,6 +306,21 @@ async function main() {
 
     await electronApp.close();
     log('done');
+}
+
+// Read the song titles currently rendered in a list/table view.
+async function readSongTitles(page) {
+    return page.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('[role="row"]'));
+        const titles = [];
+        for (const r of rows) {
+            // Title cell text — prefer an explicit title-ish cell, fall back to row text.
+            const cell = r.querySelector('[class*="title" i]') || r;
+            const t = cell.textContent?.trim();
+            if (t) titles.push(t.slice(0, 80));
+        }
+        return titles;
+    });
 }
 
 main().catch((err) => {

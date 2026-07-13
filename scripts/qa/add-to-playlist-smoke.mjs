@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { _electron as electron } from 'playwright';
 
@@ -10,7 +11,6 @@ import {
     SNAPSHOT_DIR,
     waitForRouteSettled,
 } from '../ui-snapshot-shared.mjs';
-import fs from 'fs';
 
 // QA driver for the phone/Discord wishlist-import directive, sub-step 4:
 // "sort the newly-imported track into a playlist". Launches the built Electron
@@ -71,16 +71,22 @@ async function main() {
 
     // Navigate to the imported track's album detail (HashRouter).
     const appUrl = page.url().split('#')[0].replace(/\/$/, '');
-    await page.evaluate((u) => {
-        window.location.hash = u.split('#')[1];
-    }, hashUrl(appUrl, `/library/albums/${ALBUM_ID}`));
+    await page.evaluate(
+        (u) => {
+            window.location.hash = u.split('#')[1];
+        },
+        hashUrl(appUrl, `/library/albums/${ALBUM_ID}`),
+    );
     if (await waitForRouteSettled(page)) {
         console.log('route stuck — likely expired session; not handled in this smoke');
     }
     await page.waitForTimeout(1000);
     await shot(page, '1-album');
 
-    const bodyBefore = await page.locator('body').innerText().catch(() => '');
+    const bodyBefore = await page
+        .locator('body')
+        .innerText()
+        .catch(() => '');
     console.log('album route shows track title:', bodyBefore.includes(TRACK_TITLE));
 
     // Locate the track row cell and right-click it to open the context menu.
@@ -108,7 +114,9 @@ async function main() {
     await dialog.waitFor({ state: 'visible', timeout: 5000 });
 
     if (!NEW_PLAYLIST) {
-        console.log('QA_NEW_PLAYLIST not set — opened modal only, not adding. Set it to run for real.');
+        console.log(
+            'QA_NEW_PLAYLIST not set — opened modal only, not adding. Set it to run for real.',
+        );
         console.log('modal text:', (await dialog.innerText()).slice(0, 800));
         await electronApp.close();
         return;
