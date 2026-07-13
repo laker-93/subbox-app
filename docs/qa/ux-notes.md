@@ -11,7 +11,45 @@ when friction is worth actually fixing vs. just logging.
      find confusing/awkward and why, evidence (screenshot path), and whether
      you think it's a safe small fix or needs a design call. -->
 
-_(none open — see RESOLVED below)_
+### Full-page Search shows no "no results" empty state on a zero-match query
+
+Added: 2026-07-13. Route `/search/song` (also albums/artists tabs). Driver
+`scripts/qa/search-journey.mjs`, account `test260526`.
+
+**What a user sees.** Searching a term with no matches (drove
+`?query=zzqqxnomatchzz`) leaves the results area as bare column headers and a
+blank grid — no "No results found" / "Nothing matched" message. A real user
+can't tell "there are genuinely no results" apart from "still loading" or
+"something silently failed". Evidence:
+`.ui-snapshots/qa-search-no-match-empty-*.png` (Tracks tab, headers only, 0
+data rows, no message; `crashed=false` so it's not an error, just empty).
+
+**Why not fixed this cycle.** Subjective and likely inherited from upstream
+Feishin's shared `SongListView`/`AlbumListView` empty rendering (the same list
+components back the library pages), so any change is cross-cutting and better
+made as a deliberate design call on the shared list empty-state rather than a
+search-only patch. Needs a design call; logged, not fixed.
+
+### Full-page Search box text goes stale vs. the actual results when the query changes via navigation
+
+Added: 2026-07-13. Route `/search/:itemType`. Driver
+`scripts/qa/search-journey.mjs`.
+
+**Symptom.** The header `SearchInput` is uncontrolled
+(`defaultValue={searchParams.get('query')}` in `search-header.tsx`), read only
+at mount. When the active query changes without the input remounting — e.g.
+navigating `/search/song?query=Hamdi` → `/search/song?query=zzqqxnomatchzz`, or
+arriving via a "Go to Search" command — the results update to the new query but
+the **box keeps showing the previous text**. Evidence:
+`.ui-snapshots/qa-search-no-match-empty-*.png` shows the box reading "Hamdi"
+while the (correctly empty) results are for `zzqqxnomatchzz`. Initial deep-link
+load *does* populate correctly (`qa-search-albums-match-*.png`: box "Hamdi",
+Hamdi albums) — the staleness is only on a subsequent query change.
+
+**Why not fixed this cycle.** Low severity — the primary path (user typing)
+never triggers it, since typing drives the box directly. A fix means making the
+input controlled by `searchParams`, which risks the 200ms debounce UX and
+touches an upstream Feishin pattern. Needs a design call; logged, not fixed.
 
 ## RESOLVED (not a bug — keep this so it isn't re-investigated)
 

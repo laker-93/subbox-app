@@ -132,7 +132,9 @@ the transition between screens, not within one screen.
       route** (orphaned `AppRoute.PLAYING` enum value, wired to nothing, zero UI
       usages) — deep-linking it hits the catch-all error page; not a bug.
 - [ ] Radio (`/radio`)
-- [ ] Search (`/search/:itemType`)
+- [x] Search (`/search/:itemType`) — Tracks/Albums/Artists tabs (real results),
+      no-match empty + empty-query edges, no crash. `features/search.md`
+      (`scripts/qa/search-journey.mjs`). 2 UX notes logged.
 - [ ] Wishlist (`/wishlist`) — pymix wishlist API integration
 - [ ] Settings (`/settings`)
 - [ ] Action required / no-network states (`/action-required`, `/no-network`)
