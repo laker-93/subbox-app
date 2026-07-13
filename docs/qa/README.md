@@ -104,59 +104,79 @@ just read in source. Prefer exercising these as part of a realistic multi-step
 journey rather than one route in isolation — real friction often shows up in
 the transition between screens, not within one screen.
 
-- [ ] Login / servers (`/login`, `/servers`)
-- [ ] Home / explore (`/`, `/explore`)
-- [x] Library — albums (`/library/albums`, detail) — grid → detail → play →
+**Priority — subbox-only rows first.** subbox-app is a fork of the mature,
+heavily-tested Feishin player, so the bugs are overwhelmingly in the custom
+functionality bolted on top (uploading, deleting, local download, sync, wishlist,
+import-export, sharing, filebrowser — anything touching pymix), **not** in the
+inherited upstream browse/search/playback surface. Each row is tagged
+`[subbox]` (custom — high yield, drive these first), `[upstream]` (inherited from
+Feishin — low yield, a cheap regression check at most), or `[mixed]` (a subbox flow
+riding on an upstream screen — the subbox part is what matters). When picking an
+unchecked row, **an unchecked `[subbox]`/`[mixed]` row beats an unchecked
+`[upstream]` one even if the upstream one is listed higher.** Only spend a cycle on
+an `[upstream]`-tagged area as light regression coverage or when a realistic journey
+naturally passes through it.
+
+- [ ] `[upstream]` Login / servers (`/login`, `/servers`)
+- [ ] `[upstream]` Home / explore (`/`, `/explore`)
+- [x] `[upstream]` Library — albums (`/library/albums`, detail) — grid → detail → play →
       Now Playing journey: `features/albums-browse-and-play.md`
-- [x] Library — artists (`/library/artists`, detail incl. discography/top songs)
+- [x] `[upstream]` Library — artists (`/library/artists`, detail incl. discography/top songs)
       — grid → album-artist detail → discography/top-songs → play journey:
       `features/artists-browse.md` (`scripts/qa/artists-journey.mjs`).
       Re-verified 2026-07-13; role-only-artist friction re-confirmed (ux-notes).
-- [ ] Library — album artists (`/library/album-artists`, detail)
-- [x] Library — songs (`/library/songs`, "Tracks") — list render (78 tracks,
+- [ ] `[upstream]` Library — album artists (`/library/album-artists`, detail)
+- [x] `[upstream]` Library — songs (`/library/songs`, "Tracks") — list render (78 tracks,
       sortable columns, pagination) + play-from-list verified:
       `features/songs-browse-and-play.md`. Surfaced an OPEN anomaly (player-bar
       favorite button appears inert for the now-playing song — see `bugs.md`).
-- [x] Library — genres (`/library/genres`, detail) — grid → detail →
+- [x] `[upstream]` Library — genres (`/library/genres`, detail) — grid → detail →
       album/track target toggle → play journey: `features/genres-browse.md`
       (`scripts/qa/genres-journey.mjs`). Badge counts match live API (Electronic
       146 songs / 60 albums); no bug found.
-- [ ] Library — folders (`/library/folders`)
-- [ ] Favorites (`/favorites`) — list *rendering* verified as the tail of the
+- [ ] `[upstream]` Library — folders (`/library/folders`)
+- [ ] `[upstream]` Favorites (`/favorites`) — list *rendering* verified as the tail of the
       songs journey (`features/songs-browse-and-play.md`); the favorite
       add/remove *toggle* is unverified (blocked on the OPEN player-bar
       favorite-button anomaly in `bugs.md`).
-- [x] Playlists (`/playlists`, `/playlists/:id/songs`) — add-to-playlist +
+- [x] `[mixed]` Playlists (`/playlists`, `/playlists/:id/songs`) — add-to-playlist +
       sync-download journey: `features/playlist-add-and-download.md`
-- [ ] Delete a track (song context menu → "Delete song" → confirm) — supported
+- [ ] `[subbox]` Delete a track (song context menu → "Delete song" → confirm) — supported
       in-app; drives `DELETE {pymix}/track` by `subbox_id`. How-to documented in
       `features/playlist-add-and-download.md` ("Deleting a track"); not yet driven
       end-to-end. Do **not** hand-roll `beet remove` — that's only the fallback
       for a track with no `subboxid` tag.
-- [x] Now playing queue (`/now-playing`) — verified as the tail of the albums
+- [x] `[upstream]` Now playing queue (`/now-playing`) — verified as the tail of the albums
       journey (`features/albums-browse-and-play.md`). NB: `/playing` is a **dead
       route** (orphaned `AppRoute.PLAYING` enum value, wired to nothing, zero UI
       usages) — deep-linking it hits the catch-all error page; not a bug.
-- [ ] Radio (`/radio`)
-- [x] Search (`/search/:itemType`) — Tracks/Albums/Artists tabs (real results),
+- [ ] `[upstream]` Radio (`/radio`)
+- [x] `[upstream]` Search (`/search/:itemType`) — Tracks/Albums/Artists tabs (real results),
       no-match empty + empty-query edges, no crash. `features/search.md`
       (`scripts/qa/search-journey.mjs`). 2 UX notes logged.
-- [ ] Wishlist (`/wishlist`) — pymix wishlist API integration
-- [ ] Settings (`/settings`)
-- [ ] Action required / no-network states (`/action-required`, `/no-network`)
-- [ ] Sync flows (subbox-app side of pymix `/sync/*` — see pymix-qa journal)
-- [x] Sync — watch vs. download concurrency — a download stays clean while the
+- [ ] `[subbox]` Wishlist (`/wishlist`) — pymix wishlist API integration
+- [ ] `[mixed]` Settings (`/settings`) — most panes are upstream; the
+      subbox-specific ones (sync/watch, pymix connection, sharing) are the ones to drive
+- [ ] `[mixed]` Action required / no-network states (`/action-required`, `/no-network`)
+- [ ] `[subbox]` Sync flows (subbox-app side of pymix `/sync/*` — see pymix-qa journal)
+- [x] `[subbox]` Sync — watch vs. download concurrency — a download stays clean while the
       watch-dir uploader is active (watcher deferred for the whole download, then
       resumes; no hang). `features/watch-download-concurrency.md`, driver
       `scripts/qa/watch-download-concurrency.mjs`, skill
       `test-watch-download-concurrency`
-- [ ] Rekordbox/Serato import-export UI (subbox-app side of pymix
+- [ ] `[subbox]` Upload music — watch-dir uploader (Sync → Watch): point it at a
+      source dir, confirm tracks land in the library, tagged with `SUBBOX_ID`. Skill
+      `upload-music-dev` drives this; the wishlist → Soulseek → watch-dir import path
+      (`wishlist-import-dev`) is the background variant.
+- [ ] `[subbox]` Rekordbox/Serato import-export UI (subbox-app side of pymix
       `/rekordbox/*`, `/serato/*` — see pymix-qa journal)
-- [ ] Sharing
-- [ ] Filebrowser integration
+- [ ] `[subbox]` Sharing
+- [ ] `[subbox]` Filebrowser integration
 
 This list isn't exhaustive — add rows as you discover sub-flows worth tracking
 separately (e.g. drag-and-drop reorder within playlists, context menus, theming).
+When you add a row, tag it `[subbox]` / `[upstream]` / `[mixed]` per the priority
+note above so the next cycle can weight it correctly.
 
 **When every row is checked, the loop does not run out of work** — it switches to
 self-directed discovery (skill Step 1, tier 5): re-drive the feature whose
@@ -165,7 +185,11 @@ the unhappy edges of a covered happy path (empty/invalid/oversized input, networ
 failure mid-flow, slow libraries, rapid/concurrent actions), and add new rows here
 for any sub-flow that surfaces. Same conservative bar — find and fix/log, never add
 features. Skim the last ~10 `log.md` lines and pick the least-recently-touched
-area so cycles don't repeat.
+area so cycles don't repeat. **Keep the subbox-over-upstream weighting even in
+discovery** — bias regression sweeps and edge-probing toward the `[subbox]`/`[mixed]`
+surface (upload, delete, local download, sync, wishlist, import-export, sharing,
+filebrowser), and re-drive an `[upstream]` browse/search path only as low-priority
+filler when the subbox areas were all exercised recently.
 
 ## Hard rules (do not relax these)
 
