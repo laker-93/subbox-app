@@ -143,7 +143,20 @@ export const PymixController = {
             throw new Error('Failed to delete song');
         }
 
-        return res.body.data;
+        // A failed delete still comes back 200 — pymix reports it as success:false in the
+        // body — so without this the caller would report a delete that never happened.
+        const result = res.body.data;
+        if (result?.success === false) {
+            const failed = result.results?.filter((r) => !r.success) ?? [];
+            console.error('[DeleteSong] pymix reported a failed delete:', {
+                reason: result.reason,
+                results: failed,
+            });
+            const count = failed.length || body.ids.length;
+            throw new Error(`Failed to delete ${count === 1 ? 'the track' : `${count} tracks`}`);
+        }
+
+        return null;
     },
 
     getLibrarySize: async (args: PymixClientArgs) => {

@@ -37,7 +37,22 @@ const deleteDuplicates = z.object({
     success: z.boolean(),
 });
 
-const deleteSong = z.null();
+// pymix signals a failed delete in the body, not the HTTP status: a delete that
+// failed still returns 200 with success:false and a per-id reason.
+const deleteSong = z.object({
+    reason: z.string().optional(),
+    results: z
+        .array(
+            z.object({
+                reason: z.string().optional(),
+                subbox_id: z.string(),
+                success: z.boolean(),
+            }),
+        )
+        .optional(),
+    success: z.boolean(),
+    username: z.string().optional(),
+});
 
 const importJob = z.object({
     job_id: z.string(),
