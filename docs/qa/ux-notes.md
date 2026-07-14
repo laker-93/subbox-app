@@ -11,6 +11,33 @@ when friction is worth actually fixing vs. just logging.
      find confusing/awkward and why, evidence (screenshot path), and whether
      you think it's a safe small fix or needs a design call. -->
 
+### The wishlist header's "+" (add item) button has no accessible name
+
+Added: 2026-07-14. Route `/wishlist` (`features/wishlist/components/wishlist-header.tsx`).
+Found while writing `scripts/qa/wishlist-journey.mjs`. See `features/wishlist.md`.
+
+**What's rough.** The only way to add a wishlist item is an icon-only `ActionIcon`
+(`icon="add"`) that carries a `tooltip` but **no `aria-label`**. Confirmed by DOM probe:
+the button exposes `aria-label: null` and no text content, so it has no accessible name at
+all. A screen-reader user hears an unlabelled button; a keyboard user gets no hint (the
+tooltip is hover/focus-delayed, `openDelay: 300`). The sibling control right next to it
+("Offline Wishlist") is a plain labelled `Button`, so the primary action on the page is the
+*less* discoverable of the two.
+
+The `WishlistContent` checkboxes right below it *do* set `aria-label`
+(`page.wishlist.selectAll` / `selectRow`), so this is inconsistent within the same feature,
+not a house style.
+
+**Likely a safe small fix** — add an `aria-label` (an `action.addToWishlist` = "add to
+wishlist" string already exists and is used as the modal title, so no new copy is needed).
+Not done this cycle: it's an a11y improvement rather than a bug, the icon-only-header
+pattern recurs app-wide (the same shape was noted for the genres/albums header Play
+control in `features/genres-browse.md`), and a considered fix probably wants to cover the
+pattern rather than this one button. Worth a design call on scope.
+
+**Knock-on for QA.** Drivers can't reach this button by role/name; `wishlist-journey.mjs`
+has to anchor to the "Offline Wishlist" button and take its next sibling.
+
 ### A deleted track stays visible in the list until you navigate away and back
 
 Added: 2026-07-14. Journey: song context menu → "Delete track" → confirm. Driver

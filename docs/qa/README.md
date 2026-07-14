@@ -157,7 +157,15 @@ naturally passes through it.
 - [x] `[upstream]` Search (`/search/:itemType`) — Tracks/Albums/Artists tabs (real results),
       no-match empty + empty-query edges, no crash. `features/search.md`
       (`scripts/qa/search-journey.mjs`). 2 UX notes logged.
-- [ ] `[subbox]` Wishlist (`/wishlist`) — pymix wishlist API integration
+- [x] `[subbox]` Wishlist (`/wishlist`) — pymix wishlist API integration. Full CRUD journey
+      driven 2026-07-14: `features/wishlist.md`, driver `scripts/qa/wishlist-journey.mjs`
+      (list vs. server → create → expand detail → status transition → edit → delete, all
+      passing). Client side is correct; the journey surfaced a **pymix** bug — the
+      background resolve loop silently rewrites hand-typed items to unrelated MusicBrainz
+      matches (pymix #31), because the `min_score` gate gets a *relative* score. Logged a
+      ux-note (the header "+" has no accessible name). Sub-flows still unchecked: bulk
+      actions, parse-link/collection create, inbox items, Google-Sheet sync,
+      match-youtube.
 - [ ] `[mixed]` Settings (`/settings`) — most panes are upstream; the
       subbox-specific ones (sync/watch, pymix connection, sharing) are the ones to drive
 - [ ] `[mixed]` Action required / no-network states (`/action-required`, `/no-network`)
