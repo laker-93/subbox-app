@@ -11,6 +11,39 @@ when friction is worth actually fixing vs. just logging.
      find confusing/awkward and why, evidence (screenshot path), and whether
      you think it's a safe small fix or needs a design call. -->
 
+### A deleted track stays visible in the list until you navigate away and back
+
+Added: 2026-07-14. Journey: song context menu → "Delete track" → confirm. Driver
+`scripts/qa/delete-track-journey.mjs`, account `test260526`.
+See `features/delete-track.md`.
+
+**What a user sees.** They delete a track, get the "Song deleted" success toast —
+and the track is **still sitting in the list**. Measured: the row was still there
+**50 s** after a fully successful delete (polled every 2 s), on
+`/library/albums/:id`, a route whose query key the mutation *does* invalidate. It
+only disappears once they navigate away and back. Playing it in the meantime
+would hit a file that no longer exists.
+
+**Root cause (a race, not a missing invalidation).** `delete-song-mutation.ts`
+invalidates `songs` / `albums` / infinite-loader keys in `onSuccess` — i.e.
+**immediately**. But the delete only reaches the client's data source
+asynchronously: pymix deletes the file synchronously, then **Navidrome** picks it
+up on its next scan (~5–10 s later, measured). So the invalidation's refetch
+fires while Navidrome still lists the track, returns it, and nothing ever
+refetches again. Verified both halves: Navidrome returned 0 rows for the title
+~10 s after the delete, and re-navigating (a fresh fetch) showed the row gone.
+
+Also worth noting for whoever picks this up: on the **search** route the list
+isn't invalidated at all — `queryKeys.search` (`[serverId,'search',…]`) isn't
+among the keys `delete-song-mutation.ts` invalidates. Same symptom, second cause.
+
+**Why not fixed.** Needs a design call rather than a conservative patch: "refetch
+later" needs a *how* — poll until the track disappears, retry the invalidation on
+a delay, or optimistically remove the row from the cache (fast and correct-looking,
+but lies if the delete actually failed — cf. the false-success bug in `bugs.md`).
+Picking one is a deliberate decision about how the client models Navidrome's
+async scan, which affects other post-mutation flows too. Logged, not fixed.
+
 ### Artists list shows role-only artists whose detail page is empty (0 albums / 0 tracks)
 
 Added: 2026-07-10. **Restored + re-confirmed live 2026-07-13** (the original

@@ -141,11 +141,14 @@ naturally passes through it.
       favorite-button anomaly in `bugs.md`).
 - [x] `[mixed]` Playlists (`/playlists`, `/playlists/:id/songs`) — add-to-playlist +
       sync-download journey: `features/playlist-add-and-download.md`
-- [ ] `[subbox]` Delete a track (song context menu → "Delete song" → confirm) — supported
-      in-app; drives `DELETE {pymix}/track` by `subbox_id`. How-to documented in
-      `features/playlist-add-and-download.md` ("Deleting a track"); not yet driven
-      end-to-end. Do **not** hand-roll `beet remove` — that's only the fallback
-      for a track with no `subboxid` tag.
+- [x] `[subbox]` Delete a track (song context menu → **"Delete track"** → confirm) — drives
+      `DELETE {pymix}/track` by `subbox_id`. Driven end-to-end 2026-07-14 on scratch tracks:
+      `features/delete-track.md`, driver `scripts/qa/delete-track-journey.mjs`. Happy path
+      correct (file + beets row + pymix rows all removed, precisely scoped). Found + fixed a
+      silent failure (success toast on a failed delete — bugs.md, issue #18, PR #19); logged
+      the stale-row-after-delete friction (ux-notes) and a pymix orphaning bug (pymix #30).
+      Do **not** hand-roll `beet remove` — that's only the fallback for a track with no
+      `subboxid` tag.
 - [x] `[upstream]` Now playing queue (`/now-playing`) — verified as the tail of the albums
       journey (`features/albums-browse-and-play.md`). NB: `/playing` is a **dead
       route** (orphaned `AppRoute.PLAYING` enum value, wired to nothing, zero UI
