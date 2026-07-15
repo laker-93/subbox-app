@@ -190,13 +190,20 @@ filler when the subbox areas were all exercised recently.
   rebases this branch onto the updated `development` to pull the merged code in.
 - **Every bug gets a GitHub issue, and a closed issue means it's fixed.** When you
   log a bug OPEN in `bugs.md`, file a tracking issue with
-  `../subbox-workspace/qa-runner/open-issue.sh <this worktree> "<title>" "<body>"`
-  (label `qa-bug`) and record its URL as an `Issue:` line in the entry — never
-  re-file one that already has the link. A fix commit/PR carries `Closes #<n>`, so
-  merging it closes the issue; the issue's closed state is the signal the bug is
-  fixed in `development`, which the loop reconciles back into `bugs.md` each cycle
-  (skill Step 1½). A cross-repo bug gets an issue on each affected repo,
-  cross-linked. (This is for `bugs.md` correctness bugs — `ux-notes.md` friction
+  `../subbox-workspace/qa-runner/open-issue.sh <this worktree> "<title>" "<body>"
+  "<dedup-key>"` (label `qa-bug`; `<dedup-key>` is a short stable string — endpoint
+  or function/file ref — used to search existing open `qa-bug` issues before
+  filing, so a duplicate discovery gets handed the existing URL instead of a new
+  issue) and record its URL as an `Issue:` line in the entry **immediately, as its
+  own commit** — never defer this to the cycle's final commit, since a cycle that
+  crashes/times out later would otherwise leave the issue orphaned on GitHub with
+  no journal record, and the next cycle would rediscover and re-file it (this is
+  how pymix#32/#33 happened). Never re-file an entry that already has the link.
+  A fix commit/PR carries `Closes #<n>`, so merging it closes the issue; the
+  issue's closed state is the signal the bug is fixed in `development`, which the
+  loop reconciles back into `bugs.md` each cycle (skill Step 1½). A cross-repo bug
+  gets an issue on each affected repo, cross-linked. (This is for `bugs.md`
+  correctness bugs — `ux-notes.md` friction
   doesn't get an issue.)
 - **Never touch staging or prod.** Only the local dev stack
   (`../traefik/docker-compose.yml`) and the local Electron/dev builds.
