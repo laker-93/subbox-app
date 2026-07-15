@@ -4,6 +4,13 @@ Correctness bugs only — things that are outright wrong. For rough-but-working
 UX friction, use `ux-notes.md` instead. See `README.md` for the conservative
 fix policy before touching either an OPEN entry or committing a FIXED one.
 
+**Archiving (do this when you close a bug):** this file is re-read on every turn
+of every cycle, so keep it to `OPEN` entries plus the compact **Closed** index at
+the bottom. When you move a bug to FIXED, put its **full text verbatim** in
+`bugs-archive.md` (which the loop never reads) and add **one line** to the Closed
+index here (date | title | verdict | issue/PR). The one-liner is enough to stop a
+future cycle re-investigating; the archive has the detail if ever needed.
+
 ## OPEN
 
 <!-- One entry per bug. Include: date found, journey/route it showed up on,
@@ -88,58 +95,9 @@ track?), not a code defect, and out of scope for the sync-matching
 directive. Flagging here so it isn't mistaken for a `subbox_id_divergence`
 false positive if seen again — it's a real, correctly-flagged case.
 
-## FIXED
+## Closed (full detail in `bugs-archive.md`)
 
-<!-- One entry per fix: date, one-line description, commit SHA on this
-     branch, and a note on how it was re-verified. -->
+<!-- One line per FIXED bug: date | title | verdict | issue/PR. Full text lives
+     in bugs-archive.md, which the loop never reads. -->
 
-### Delete track showed a success toast even when the delete failed
-
-Found + fixed: 2026-07-14. Journey: song context menu → "Delete track" → confirm
-(`scripts/qa/delete-track-journey.mjs`), account `test260526`.
-Issue: https://github.com/laker-93/subbox-app/issues/18
-
-**Bug.** pymix signals a failed delete **in the body, not the HTTP status**:
-`DELETE /track` returns **200** with
-`{"success": false, "results":[{"success": false, "reason": "…"}]}`. The client
-threw that body away — `pymix-types.ts` declared the response schema as
-`const deleteSong = z.null()` — and `PymixController.deleteSong` only checked
-`res.status !== 200`. So the mutation resolved, and `delete-song-action.tsx`
-fired the **success toast for a delete that never happened**. The user believes
-the track is gone; it's still on disk and still in the library.
-
-Reachable whenever pymix's beets state and the Navidrome library have drifted
-apart (also confirmed directly against the API for any unknown/stale
-`subbox_id`).
-
-**Repro (live).** Import a scratch track via the watch dir, then create a
-realistic desync by dropping its beets row only, leaving the file + Navidrome
-entry: `docker exec beetstest260526 beet rm -f "subbox_id::<id>"`. Delete it in
-the app. Before the fix: `DELETE /track` → 200 `success:false` (reason: a raw
-`DockerException` — `beet rm -df … 'error: No matching items found.'`), UI showed
-the **success** toast, file still at
-`/private-music/test260526/QA Desync Probe/qa-desync-scratch/00 - ….mp3`.
-
-**Fix.** `pymix-types.ts`: the `deleteSong` response schema now captures pymix's
-`{success, results, reason}` instead of `z.null()`. `pymix-controller.ts`:
-`deleteSong` throws when `success === false`, with the per-id reasons logged to
-the console and a concise message for the toast. `delete-song-action.tsx` already
-catches and shows an error toast, so nothing else changed.
-
-**Re-verified live** (rebuilt `electron-vite build --mode development`, re-drove
-the identical desync repro): the flow now shows **"Error / Failed to delete the
-track"** and the track correctly stays listed. **Happy-path regression checked**
-on a fresh scratch track: still exactly 1 request, success toast, and the file /
-beets row / pymix rows all actually deleted. `pnpm typecheck` clean;
-`pnpm lint-code` clean on the changed files (3 pre-existing errors remain in
-older `scripts/qa/` drivers, untouched).
-
-Noted, not a regression: a *failed* delete now fires 4 requests, because the
-app's standing `mutations.retry: 3` policy (`renderer/lib/react-query.ts:24`)
-only becomes reachable once the mutation actually rejects. Harmless (re-deleting
-a gone id fails identically) and consistent with every other mutation.
-
-Commit: see `claude/continuous-ux`. PR: https://github.com/laker-93/subbox-app/pull/19
-Writeup: `features/delete-track.md`. Single-repo (subbox-app). The pymix half of
-this story — a failed delete still commits pymix's DB-row deletion, orphaning the
-file — is logged separately as pymix issue #30, and is **not** fixed.
+- 2026-07-14 | Delete track showed a success toast even when the delete failed | FIXED (client captured pymix's 200+`success:false` body; throws on failure) | issue #18, PR #19

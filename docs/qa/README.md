@@ -29,20 +29,24 @@ fixes bugs in what already exists.
   always takes priority over the loop's own rotation logic. See that file for
   how to add one.
 - `bugs.md` — correctness bug log. OPEN entries are unverified, ambiguous,
-  cross-repo, or otherwise judged too risky to auto-fix; FIXED entries link to
-  the commit that resolved them. Check OPEN entries for "is this still
-  reproducible" before picking new ground to explore.
+  cross-repo, or otherwise judged too risky to auto-fix; the **Closed** index at
+  the bottom is one line per fixed bug (full text in `bugs-archive.md`, which the
+  loop never reads). Check OPEN entries for "is this still reproducible" before
+  picking new ground. **When you fix a bug, move its full text to
+  `bugs-archive.md` and leave one line in Closed** — keep this hot file small.
 - `ux-notes.md` — UX friction log, for things that aren't wrong so much as
-  rough. Judgment calls (does this actually need fixing, is this intentional)
-  default to logging, not fixing — only act on friction with an obvious, small,
-  low-risk improvement (e.g. a missing loading indicator, a confusing but
-  easily-clarified label), the same conservative bar as `bugs.md`.
+  rough. Judgment calls default to logging, not fixing — only act on friction
+  with an obvious, small, low-risk improvement, the same conservative bar as
+  `bugs.md`. Same archiving rule: RESOLVED/IMPROVED notes move to
+  `ux-notes-archive.md`, one line stays in the Closed index.
 - `features/*.md` — one file per feature area or user journey, written once
   it's been driven and verified. Treat an existing file as ground truth for
   "expected behavior" on subsequent cycles — if real behavior no longer
   matches, that's a regression, not necessarily a doc error.
 - `log.md` — one line per cycle: timestamp, what was done, outcome. Skim the
-  last ~10 entries to avoid repeating the same cycle back-to-back.
+  last ~10 entries to avoid repeating the same cycle back-to-back. **Rotate it**
+  when it passes ~15 entries: oldest block moves verbatim to `log-archive.md`
+  (loop never reads it). Same for the pymix journal.
 
 ## Automation
 
@@ -117,64 +121,29 @@ unchecked row, **an unchecked `[subbox]`/`[mixed]` row beats an unchecked
 an `[upstream]`-tagged area as light regression coverage or when a realistic journey
 naturally passes through it.
 
+<!-- Checked rows are compacted to one line — the detail lives in the linked
+     features/*.md (ground truth). Keep new [x] rows to a single line too. -->
+
 - [ ] `[upstream]` Login / servers (`/login`, `/servers`)
 - [ ] `[upstream]` Home / explore (`/`, `/explore`)
-- [x] `[upstream]` Library — albums (`/library/albums`, detail) — grid → detail → play →
-      Now Playing journey: `features/albums-browse-and-play.md`
-- [x] `[upstream]` Library — artists (`/library/artists`, detail incl. discography/top songs)
-      — grid → album-artist detail → discography/top-songs → play journey:
-      `features/artists-browse.md` (`scripts/qa/artists-journey.mjs`).
-      Re-verified 2026-07-13; role-only-artist friction re-confirmed (ux-notes).
+- [x] `[upstream]` Library — albums — grid → detail → play → Now Playing: `features/albums-browse-and-play.md`
+- [x] `[upstream]` Library — artists — grid → album-artist detail → discography/top-songs → play: `features/artists-browse.md` (role-only-artist friction in ux-notes)
 - [ ] `[upstream]` Library — album artists (`/library/album-artists`, detail)
-- [x] `[upstream]` Library — songs (`/library/songs`, "Tracks") — list render (78 tracks,
-      sortable columns, pagination) + play-from-list verified:
-      `features/songs-browse-and-play.md`. Surfaced an OPEN anomaly (player-bar
-      favorite button appears inert for the now-playing song — see `bugs.md`).
-- [x] `[upstream]` Library — genres (`/library/genres`, detail) — grid → detail →
-      album/track target toggle → play journey: `features/genres-browse.md`
-      (`scripts/qa/genres-journey.mjs`). Badge counts match live API (Electronic
-      146 songs / 60 albums); no bug found.
+- [x] `[upstream]` Library — songs — list render + play-from-list: `features/songs-browse-and-play.md` (OPEN: player-bar favorite button inert — bugs.md)
+- [x] `[upstream]` Library — genres — grid → detail → album/track toggle → play: `features/genres-browse.md`
 - [ ] `[upstream]` Library — folders (`/library/folders`)
-- [ ] `[upstream]` Favorites (`/favorites`) — list *rendering* verified as the tail of the
-      songs journey (`features/songs-browse-and-play.md`); the favorite
-      add/remove *toggle* is unverified (blocked on the OPEN player-bar
-      favorite-button anomaly in `bugs.md`).
-- [x] `[mixed]` Playlists (`/playlists`, `/playlists/:id/songs`) — add-to-playlist +
-      sync-download journey: `features/playlist-add-and-download.md`
-- [x] `[subbox]` Delete a track (song context menu → **"Delete track"** → confirm) — drives
-      `DELETE {pymix}/track` by `subbox_id`. Driven end-to-end 2026-07-14 on scratch tracks:
-      `features/delete-track.md`, driver `scripts/qa/delete-track-journey.mjs`. Happy path
-      correct (file + beets row + pymix rows all removed, precisely scoped). Found + fixed a
-      silent failure (success toast on a failed delete — bugs.md, issue #18, PR #19); logged
-      the stale-row-after-delete friction (ux-notes) and a pymix orphaning bug (pymix #30).
-      Do **not** hand-roll `beet remove` — that's only the fallback for a track with no
-      `subboxid` tag.
-- [x] `[upstream]` Now playing queue (`/now-playing`) — verified as the tail of the albums
-      journey (`features/albums-browse-and-play.md`). NB: `/playing` is a **dead
-      route** (orphaned `AppRoute.PLAYING` enum value, wired to nothing, zero UI
-      usages) — deep-linking it hits the catch-all error page; not a bug.
+- [ ] `[upstream]` Favorites (`/favorites`) — list *rendering* verified (tail of songs journey); the add/remove *toggle* is unverified (blocked on the OPEN player-bar favorite-button anomaly in `bugs.md`).
+- [x] `[mixed]` Playlists — add-to-playlist + sync-download: `features/playlist-add-and-download.md`
+- [x] `[subbox]` Delete a track — `DELETE {pymix}/track` by `subbox_id`: `features/delete-track.md` (fixed false-success toast #18/#19; do **not** hand-roll `beet remove` — that's the no-`subboxid` fallback only)
+- [x] `[upstream]` Now playing queue — tail of albums journey: `features/albums-browse-and-play.md` (NB `/playing` is a dead orphaned route, not a bug)
 - [ ] `[upstream]` Radio (`/radio`)
-- [x] `[upstream]` Search (`/search/:itemType`) — Tracks/Albums/Artists tabs (real results),
-      no-match empty + empty-query edges, no crash. `features/search.md`
-      (`scripts/qa/search-journey.mjs`). 2 UX notes logged.
-- [x] `[subbox]` Wishlist (`/wishlist`) — pymix wishlist API integration. Full CRUD journey
-      driven 2026-07-14: `features/wishlist.md`, driver `scripts/qa/wishlist-journey.mjs`
-      (list vs. server → create → expand detail → status transition → edit → delete, all
-      passing). Client side is correct; the journey surfaced a **pymix** bug — the
-      background resolve loop silently rewrites hand-typed items to unrelated MusicBrainz
-      matches (pymix #31), because the `min_score` gate gets a *relative* score. Logged a
-      ux-note (the header "+" has no accessible name). Sub-flows still unchecked: bulk
-      actions, parse-link/collection create, inbox items, Google-Sheet sync,
-      match-youtube.
+- [x] `[upstream]` Search — Tracks/Albums/Artists tabs + no-match/empty-query edges: `features/search.md` (2 ux-notes)
+- [x] `[subbox]` Wishlist — full CRUD journey: `features/wishlist.md` (client correct; surfaced pymix #31 resolve-overwrite). Sub-flows still unchecked: bulk actions, parse-link/collection create, inbox items, Google-Sheet sync, match-youtube.
 - [ ] `[mixed]` Settings (`/settings`) — most panes are upstream; the
       subbox-specific ones (sync/watch, pymix connection, sharing) are the ones to drive
 - [ ] `[mixed]` Action required / no-network states (`/action-required`, `/no-network`)
 - [ ] `[subbox]` Sync flows (subbox-app side of pymix `/sync/*` — see pymix-qa journal)
-- [x] `[subbox]` Sync — watch vs. download concurrency — a download stays clean while the
-      watch-dir uploader is active (watcher deferred for the whole download, then
-      resumes; no hang). `features/watch-download-concurrency.md`, driver
-      `scripts/qa/watch-download-concurrency.mjs`, skill
-      `test-watch-download-concurrency`
+- [x] `[subbox]` Sync — watch vs. download concurrency: `features/watch-download-concurrency.md`, skill `test-watch-download-concurrency`
 - [ ] `[subbox]` Upload music — watch-dir uploader (Sync → Watch): point it at a
       source dir, confirm tracks land in the library, tagged with `SUBBOX_ID`. Skill
       `upload-music-dev` drives this; the wishlist → Soulseek → watch-dir import path
