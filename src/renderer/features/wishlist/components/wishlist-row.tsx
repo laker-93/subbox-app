@@ -25,6 +25,15 @@ export const WishlistRow = ({ item, onToggleSelect, selected }: WishlistRowProps
     const isInbox = item.status === 'inbox';
     const unknown = t('common.unknown', { postProcess: 'sentenceCase' }) as string;
 
+    // An inbox item is one of two things: a raw note still to be triaged, or a half-typed
+    // artist/title the user has to complete (pymix keeps those here rather than guessing
+    // the missing field — see _derive_resolve_state). Only the note case collapses into a
+    // single cell; a partial pair renders in the normal columns, or the row would be blank
+    // and "needs info" would give no clue *what* needs it.
+    const isRawNote = isInbox && Boolean(item.raw_note);
+    const primaryText = isRawNote ? item.raw_note : item.title || unknown;
+    const secondaryText = isRawNote ? '' : item.artist || unknown;
+
     // An available item's track is in the library, so clicking the row jumps to it (via its
     // linked_subbox_id) instead of expanding the detail. Available items without a linked id
     // (reconcile couldn't read the tag) fall back to the normal expand behaviour.
@@ -58,12 +67,12 @@ export const WishlistRow = ({ item, onToggleSelect, selected }: WishlistRowProps
                 </Table.Td>
                 <Table.Td>
                     <Text fw={500} size="sm" truncate>
-                        {isInbox ? item.raw_note : item.title || unknown}
+                        {primaryText}
                     </Text>
                 </Table.Td>
                 <Table.Td>
                     <Text isMuted size="sm" truncate>
-                        {isInbox ? '' : item.artist || unknown}
+                        {secondaryText}
                     </Text>
                 </Table.Td>
                 <Table.Td>

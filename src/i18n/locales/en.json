@@ -390,7 +390,7 @@
         },
         "matchMetadata": {
             "applied": "applied match: {{artist}} — {{title}}",
-            "needsText": "enter an artist or title first",
+            "needsArtistAndTitle": "enter both an artist and a title first",
             "noMatch": "no confident match found"
         },
         "createPlaylist": {
