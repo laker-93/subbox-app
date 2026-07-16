@@ -95,9 +95,14 @@ const CreateWishlistForm = ({ onCancel }: { onCancel: () => void }) => {
         const artist = form.values.artist.trim();
         const title = form.values.title.trim();
 
-        if (!artist && !title) {
+        // Both fields are needed: pymix refuses a partial pair (match_fields) rather than
+        // inventing the missing one, so asking for the rest beats a request that can only
+        // fail.
+        if (!artist || !title) {
             toast.warn({
-                message: t('form.matchMetadata.needsText', { postProcess: 'sentenceCase' }),
+                message: t('form.matchMetadata.needsArtistAndTitle', {
+                    postProcess: 'sentenceCase',
+                }),
             });
             return;
         }
