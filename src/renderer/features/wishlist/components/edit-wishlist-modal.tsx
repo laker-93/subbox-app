@@ -51,9 +51,14 @@ const EditWishlistForm = ({ item, onCancel }: { item: WishlistItem; onCancel: ()
         const title = form.values.title.trim();
         const query = !artist && !title ? (item.raw_note ?? '').trim() : undefined;
 
-        if (!artist && !title && !query) {
+        // A raw note is a whole query to match on; half an artist/title pair is not an
+        // identity at all, and pymix refuses it (match_fields) rather than inventing the
+        // missing field. Ask for the rest instead of making a request that can only fail.
+        if (!query && !(artist && title)) {
             toast.warn({
-                message: t('form.matchMetadata.needsText', { postProcess: 'sentenceCase' }),
+                message: t('form.matchMetadata.needsArtistAndTitle', {
+                    postProcess: 'sentenceCase',
+                }),
             });
             return;
         }
