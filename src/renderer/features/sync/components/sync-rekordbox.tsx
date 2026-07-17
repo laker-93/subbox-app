@@ -205,6 +205,9 @@ export const SyncRekordbox = () => {
                         .filter((p) => selectedPlaylists.has(playlistKey(p)))
                         .map((p) => p.name),
                     pymixUrl: urlConfig.pymix,
+                    // serverId lets the main process re-login for a fresh pymix session
+                    // cookie if this upload outlives the current one.
+                    serverId: currentServer.id,
                     username: currentServer.username,
                     xmlPath,
                 });

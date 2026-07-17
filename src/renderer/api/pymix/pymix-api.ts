@@ -291,12 +291,11 @@ const parsePath = (fullPath: string) => {
     return { params: newParams, path };
 };
 
-// pymix authenticates via the httponly `session_id` cookie set by `/user/login`.
-// When that session lapses (or never made it onto a request), pymix rejects with
-// 400 "Must have a username or session ID to identify user" or 404 "User not found"
-// rather than 401. Mirror the navidrome/filebrowser reauth flow: on such an auth
-// failure, silently log back in to refresh the cookie and replay the request once.
-// Deduped so concurrent failures trigger a single login.
+// pymix authenticates via the httponly `session_id` cookie set by `/user/login`, and
+// 401s when that session lapses or never made it onto the request. Mirror the
+// navidrome/filebrowser reauth flow: on such an auth failure, silently log back in to
+// refresh the cookie and replay the request once. Deduped so concurrent failures
+// trigger a single login.
 let pymixReauthPromise: null | Promise<boolean> = null;
 
 const reauthenticatePymix = (): Promise<boolean> => {
@@ -331,6 +330,10 @@ const reauthenticatePymix = (): Promise<boolean> => {
     return pymixReauthPromise;
 };
 
+// pymix resolves every user-scoped endpoint through one dependency that 401s when the
+// session cookie is missing, unknown or expired, so 401 is the whole contract. The
+// 400/404 shapes below predate that and are kept only so a client running against an
+// older pymix still reauths instead of logging the user out.
 const isPymixAuthError = (status?: number, data?: unknown): boolean => {
     if (status === 401) return true;
     const detail =
