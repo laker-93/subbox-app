@@ -62,6 +62,16 @@ type LocalTrack = {
     title: string;
 };
 
+interface PymixAuth {
+    /** Cookie header for pymix requests; empty when nothing has logged in yet. */
+    getCookieHeader(): Promise<string>;
+    /**
+     * Re-login via the stored password and return the refreshed cookie header, or null
+     * when we can't (no serverId/username, or no stored password).
+     */
+    refresh(): Promise<null | string>;
+}
+
 /**
  * Build a filebrowser auth helper that can silently re-login when its short-lived
  * (~2h) token expires mid-operation. The token outlives by far less than a long
@@ -102,21 +112,6 @@ function createFbAuth(args: {
     };
 
     return { getToken: () => token, refresh };
-}
-
-async function getCookiesForUrl(url: string): Promise<string> {
-    const cookies = await session.defaultSession.cookies.get({ url });
-    return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-}
-
-interface PymixAuth {
-    /** Cookie header for pymix requests; empty when nothing has logged in yet. */
-    getCookieHeader(): Promise<string>;
-    /**
-     * Re-login via the stored password and return the refreshed cookie header, or null
-     * when we can't (no serverId/username, or no stored password).
-     */
-    refresh(): Promise<null | string>;
 }
 
 /**
@@ -180,6 +175,19 @@ function createPymixAuth(args: {
     return { getCookieHeader: () => getCookiesForUrl(args.pymixUrl), refresh };
 }
 
+async function getCookiesForUrl(url: string): Promise<string> {
+    const cookies = await session.defaultSession.cookies.get({ url });
+    return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+}
+
+/**
+ * Send a session-expired event to the renderer that triggered the IPC call.
+ * The renderer's global handler will log the user out automatically.
+ */
+function sendSessionExpired(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
+    event.sender.send('sync:session-expired');
+}
+
 /**
  * Run a pymix request with the session cookie, refreshing it once on a 401 (the only
  * auth failure pymix reports). `run` must build the request from the cookie header it
@@ -198,14 +206,6 @@ async function withPymixAuth<T>(
         if (refreshed === null) throw err;
         return run(refreshed);
     }
-}
-
-/**
- * Send a session-expired event to the renderer that triggered the IPC call.
- * The renderer's global handler will log the user out automatically.
- */
-function sendSessionExpired(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
-    event.sender.send('sync:session-expired');
 }
 
 // ── Parse XML → return playlist previews ───────────────────────────────────
