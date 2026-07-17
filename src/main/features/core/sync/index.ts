@@ -1,4 +1,4 @@
-import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
 import { randomUUID } from 'crypto';
 import { app, ipcMain, session, shell } from 'electron';
 import Store from 'electron-store';
@@ -62,6 +62,16 @@ type LocalTrack = {
     title: string;
 };
 
+interface PymixAuth {
+    /** Cookie header for pymix requests; empty when nothing has logged in yet. */
+    getCookieHeader(): Promise<string>;
+    /**
+     * Re-login via the stored password and return the refreshed cookie header, or null
+     * when we can't (no serverId/username, or no stored password).
+     */
+    refresh(): Promise<null | string>;
+}
+
 /**
  * Build a filebrowser auth helper that can silently re-login when its short-lived
  * (~2h) token expires mid-operation. The token outlives by far less than a long
@@ -104,6 +114,67 @@ function createFbAuth(args: {
     return { getToken: () => token, refresh };
 }
 
+/**
+ * Build a pymix auth helper for the main process.
+ *
+ * pymix identifies the caller solely by the httponly `session_id` cookie from
+ * `/user/login`, and 401s when it's missing, unknown or expired. Main reads that cookie
+ * out of Electron's jar, but it can legitimately be absent — the watch poller outlives
+ * any given renderer login, and nothing guarantees the renderer ever called pymix — and
+ * it can lapse mid-download. So mirror `createFbAuth` and the renderer's pymix
+ * interceptor: on a 401, log back in with the stored password, write the fresh cookie
+ * into the jar (which the renderer shares), and let the caller replay once. Refreshes
+ * are deduped so concurrent 401s trigger a single login.
+ */
+function createPymixAuth(args: {
+    pymixUrl: string;
+    serverId?: string;
+    username?: string;
+}): PymixAuth {
+    let inFlight: null | Promise<null | string> = null;
+
+    const refresh = (): Promise<null | string> => {
+        if (!inFlight) {
+            inFlight = (async () => {
+                if (!args.serverId || !args.username) return null;
+                const password = getStoredPassword(args.serverId);
+                if (!password) return null;
+
+                const res = await axios.post(
+                    `${args.pymixUrl}/user/login`,
+                    { password, username: args.username },
+                    { httpsAgent },
+                );
+
+                // axios goes through Node's http stack, which doesn't share Electron's
+                // cookie jar, so the refreshed session_id has to be written back by hand
+                // for getCookiesForUrl (and the renderer) to see it.
+                const setCookie: string[] = res.headers['set-cookie'] ?? [];
+                const value = setCookie
+                    .map((c) => /(?:^|;\s*)session_id=([^;]+)/.exec(c)?.[1])
+                    .find((v): v is string => Boolean(v));
+                if (!value) return null;
+
+                await session.defaultSession.cookies.set({
+                    httpOnly: true,
+                    name: 'session_id',
+                    sameSite: 'no_restriction',
+                    secure: true,
+                    url: args.pymixUrl,
+                    value,
+                });
+
+                return getCookiesForUrl(args.pymixUrl);
+            })().finally(() => {
+                inFlight = null;
+            });
+        }
+        return inFlight;
+    };
+
+    return { getCookieHeader: () => getCookiesForUrl(args.pymixUrl), refresh };
+}
+
 async function getCookiesForUrl(url: string): Promise<string> {
     const cookies = await session.defaultSession.cookies.get({ url });
     return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
@@ -115,6 +186,26 @@ async function getCookiesForUrl(url: string): Promise<string> {
  */
 function sendSessionExpired(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
     event.sender.send('sync:session-expired');
+}
+
+/**
+ * Run a pymix request with the session cookie, refreshing it once on a 401 (the only
+ * auth failure pymix reports). `run` must build the request from the cookie header it
+ * is handed rather than closing over a stale one.
+ */
+async function withPymixAuth<T>(
+    auth: PymixAuth,
+    run: (cookieHeader: string) => Promise<AxiosResponse<T>>,
+): Promise<AxiosResponse<T>> {
+    const cookie = await auth.getCookieHeader();
+    try {
+        return await run(cookie);
+    } catch (err) {
+        if (!isAxiosError(err) || err.response?.status !== 401) throw err;
+        const refreshed = await auth.refresh();
+        if (refreshed === null) throw err;
+        return run(refreshed);
+    }
 }
 
 // ── Parse XML → return playlist previews ───────────────────────────────────
@@ -229,13 +320,21 @@ ipcMain.handle(
             filebrowserUrl: string;
             playlistNames: string[];
             pymixUrl: string;
+            serverId?: string;
             username: string;
             xmlPath: string;
         },
     ): Promise<UploadResult> => {
-        const { filebrowserToken, filebrowserUrl, playlistNames, pymixUrl, username, xmlPath } =
-            args;
-        const pymixCookies = await getCookiesForUrl(pymixUrl);
+        const {
+            filebrowserToken,
+            filebrowserUrl,
+            playlistNames,
+            pymixUrl,
+            serverId,
+            username,
+            xmlPath,
+        } = args;
+        const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
         const result = extractPlaylists(xmlPath);
         const selectedNames = new Set(playlistNames);
         const selectedPlaylists = collectPlaylistsByName(result, selectedNames);
@@ -292,10 +391,14 @@ ipcMain.handle(
             title: t.cleanName,
         }));
 
-        const matchResponse = await axios.post(
-            `${pymixUrl}/sync/match_tracks`,
-            { tracks: clientTracks },
-            { headers: { Cookie: pymixCookies }, httpsAgent, params: { username } },
+        const matchResponse = await withPymixAuth<{
+            tracks: Array<{ artist: string; matched: boolean; title: string }>;
+        }>(pymixAuth, (cookie) =>
+            axios.post(
+                `${pymixUrl}/sync/match_tracks`,
+                { tracks: clientTracks },
+                { headers: { Cookie: cookie }, httpsAgent },
+            ),
         );
 
         const missingTracks: Array<{ artist: string; title: string }> = [];
@@ -326,11 +429,17 @@ ipcMain.handle(
             console.log(
                 `[storage-check] calculated upload size: ${totalUploadBytes} bytes (${Math.round(totalUploadBytes / (1024 * 1024))} MB) for ${missingTracks.length} missing track(s)`,
             );
-            const storageRes = await axios.get(`${pymixUrl}/user/storage_check`, {
-                headers: { Cookie: pymixCookies },
-                httpsAgent,
-                params: { uploadSizeBytes: totalUploadBytes },
-            });
+            const storageRes = await withPymixAuth<{
+                allowed?: boolean;
+                currentUsageBytes?: number;
+                maxStorageBytes?: number;
+            }>(pymixAuth, (cookie) =>
+                axios.get(`${pymixUrl}/user/storage_check`, {
+                    headers: { Cookie: cookie },
+                    httpsAgent,
+                    params: { uploadSizeBytes: totalUploadBytes },
+                }),
+            );
 
             console.log('[storage-check] server response:', storageRes.data);
 
@@ -517,10 +626,12 @@ ipcMain.handle(
             uploaded: uploadedCount,
         });
 
-        await axios.post(
-            `${pymixUrl}/sync/map_meta`,
-            { tracks: originalTrackMetaData },
-            { headers: { Cookie: pymixCookies }, httpsAgent, params: { username } },
+        await withPymixAuth(pymixAuth, (cookie) =>
+            axios.post(
+                `${pymixUrl}/sync/map_meta`,
+                { tracks: originalTrackMetaData },
+                { headers: { Cookie: cookie }, httpsAgent },
+            ),
         );
 
         sendProgress({
@@ -865,7 +976,7 @@ ipcMain.handle(
             serverId,
             username,
         } = args;
-        const pymixCookies = await getCookiesForUrl(pymixUrl);
+        const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
 
         // Pause the watch-dir uploader for the duration of this download: its
         // concurrent uploads to the same host contend with the download stream
@@ -892,18 +1003,25 @@ ipcMain.handle(
             const localTracks = await scanLocalTracks();
 
             // Step 1: Call syncPlaylists to prepare the zip on the server
-            const syncResponse = await axios.post(
-                `${pymixUrl}/sync/playlists`,
-                {
-                    direction: 'download',
-                    localTracks,
-                    options: {
-                        fuzzyMatch: true,
-                        includeMetadata: true,
+            const syncResponse = await withPymixAuth<{
+                nTracksExported: number;
+                reason: string;
+                success: boolean;
+                zipPath: string;
+            }>(pymixAuth, (cookie) =>
+                axios.post(
+                    `${pymixUrl}/sync/playlists`,
+                    {
+                        direction: 'download',
+                        localTracks,
+                        options: {
+                            fuzzyMatch: true,
+                            includeMetadata: true,
+                        },
+                        playlists: playlistIds.map((id) => ({ id, source: 'subbox' })),
                     },
-                    playlists: playlistIds.map((id) => ({ id, source: 'subbox' })),
-                },
-                { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
+                    { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
+                ),
             );
 
             if (!syncResponse.data.success) {
@@ -939,10 +1057,12 @@ ipcMain.handle(
 
                 // Call pymix to prepare the Rekordbox XML on the server
                 console.log('[Subbox] Exporting Rekordbox XML with playlistIds:', playlistIds);
-                await axios.post(
-                    `${pymixUrl}/rekordbox/export`,
-                    { playlistIds, user_root: musicPath },
-                    { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
+                await withPymixAuth(pymixAuth, (cookie) =>
+                    axios.post(
+                        `${pymixUrl}/rekordbox/export`,
+                        { playlistIds, user_root: musicPath },
+                        { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
+                    ),
                 );
 
                 // Download the XML from filebrowser into the user-configured directory,
@@ -1352,6 +1472,8 @@ ipcMain.handle(
         // Clear cached presence so a fresh startup check runs immediately
         knownPresentIds.clear();
 
+        const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
+
         const sendProgress = (progress: WatchProgress) => {
             event.sender.send('sync:watch-progress', progress);
         };
@@ -1439,14 +1561,16 @@ ipcMain.handle(
                 );
 
                 if (uncheckedFiles.length > 0) {
-                    const pymixCookies = await getCookiesForUrl(pymixUrl);
-                    const presenceRes = await axios.post(
-                        `${pymixUrl}/tracks/presence`,
-                        { subbox_ids: uncheckedFiles.map((f) => fileIdMap.get(f)!) },
-                        // Pass username explicitly: the session cookie can be absent
-                        // here, and without it the server resolves the user as None
-                        // and 500s (AssertionError: found 0 users with username None).
-                        { headers: { Cookie: pymixCookies }, httpsAgent, params: { username } },
+                    // The cookie is routinely absent here — this poller outlives any
+                    // given renderer login — so withPymixAuth logs in on the 401.
+                    const presenceRes = await withPymixAuth<{
+                        presence: Record<string, boolean>;
+                    }>(pymixAuth, (cookie) =>
+                        axios.post(
+                            `${pymixUrl}/tracks/presence`,
+                            { subbox_ids: uncheckedFiles.map((f) => fileIdMap.get(f)!) },
+                            { headers: { Cookie: cookie }, httpsAgent },
+                        ),
                     );
                     const presence: Record<string, boolean> = presenceRes.data.presence;
 
@@ -1691,7 +1815,7 @@ ipcMain.handle(
     ): Promise<{ tracksExported: number }> => {
         const { filebrowserToken, filebrowserUrl, pymixUrl, serverId, tracksToDownload, username } =
             args;
-        const pymixCookies = await getCookiesForUrl(pymixUrl);
+        const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
 
         // Filebrowser auth that self-heals on a 401 by re-logging in (see download-playlists).
         const fbAuth = createFbAuth({
@@ -1703,10 +1827,17 @@ ipcMain.handle(
         });
 
         // Step 1: Call sync/tracks to prepare the zip on the server
-        const syncResponse = await axios.post(
-            `${pymixUrl}/sync/tracks`,
-            { tracksToDownload },
-            { headers: { Cookie: pymixCookies }, httpsAgent, timeout: 0 },
+        const syncResponse = await withPymixAuth<{
+            nTracksExported: number;
+            reason: string;
+            success: boolean;
+            zipPath: string;
+        }>(pymixAuth, (cookie) =>
+            axios.post(
+                `${pymixUrl}/sync/tracks`,
+                { tracksToDownload },
+                { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
+            ),
         );
 
         if (!syncResponse.data.success) {
