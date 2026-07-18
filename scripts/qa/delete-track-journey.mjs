@@ -81,6 +81,7 @@ async function rowPoint(row) {
         deleteCalls.push({
             body,
             method,
+            receivedAt: Date.now(),
             reqBody: res.request().postData(),
             status: res.status(),
             url,
@@ -146,6 +147,7 @@ async function rowPoint(row) {
         await electronApp.close();
         process.exit(5);
     }
+    const confirmedAt = Date.now();
     await confirmBtn.click();
     log('confirmed delete');
 
@@ -199,13 +201,41 @@ async function rowPoint(row) {
     log('--- summary ---');
     log('DELETE /track calls:', deleteCalls.length);
     for (const c of deleteCalls) {
-        log(`  status=${c.status} reqBody=${c.reqBody} respBody=${JSON.stringify(c.body)}`);
+        const latency = c.receivedAt - confirmedAt;
+        log(
+            `  status=${c.status} latency=${latency}ms reqBody=${c.reqBody} respBody=${JSON.stringify(c.body)}`,
+        );
     }
     log('console lines:', consoleLines.length ? consoleLines : '(none)');
     log('outcome:', outcome, '| rowStillVisible:', rowStillThere);
 
+    // Regression guard for laker-93/subbox-app#18: the toast the user sees MUST agree
+    // with pymix's body-level `success`. pymix returns HTTP 200 even on failure, so a
+    // `success:false` body that still shows a success toast is the exact bug. Also
+    // guard the batching contract: N selected tracks => a single DELETE /track call.
+    let assertionFailed = false;
+    const bodySuccess = deleteCalls.every(
+        (c) => c.body && typeof c.body === 'object' && c.body.success === true,
+    );
+    const anyBodyFailure = deleteCalls.some(
+        (c) => c.body && typeof c.body === 'object' && c.body.success === false,
+    );
+    if (anyBodyFailure && outcome === 'success-toast') {
+        log('ASSERT FAIL (#18): pymix reported success:false but the UI showed a SUCCESS toast');
+        assertionFailed = true;
+    }
+    if (deleteCalls.length && bodySuccess && outcome === 'error-toast') {
+        log('ASSERT FAIL: pymix reported success but the UI showed an ERROR toast');
+        assertionFailed = true;
+    }
+    log(
+        'toast/body agreement:',
+        assertionFailed ? 'MISMATCH' : 'ok',
+        `(bodySuccess=${bodySuccess}, outcome=${outcome})`,
+    );
+
     await electronApp.close();
-    process.exit(deleteCalls.length > 0 && outcome !== 'no-toast' ? 0 : 1);
+    process.exit(!assertionFailed && deleteCalls.length > 0 && outcome !== 'no-toast' ? 0 : 1);
 })().catch((e) => {
     console.error('[delete-track] driver error:', e);
     process.exit(9);
