@@ -143,7 +143,28 @@ export const PymixController = {
             throw new Error('Failed to delete song');
         }
 
-        return res.body.data;
+        // pymix signals per-track failure in the *body*, not the HTTP status: a failed
+        // delete still returns 200 with `{ success: false, results: [...] }`. Surface
+        // that as a thrown error so the caller can show which tracks failed instead of
+        // a false success toast (laker-93/subbox-app#18).
+        const data = res.body.data;
+        if (!data.success) {
+            const failed = data.results.filter((r) => !r.success);
+            const detail =
+                failed
+                    .map((r) => r.reason)
+                    .filter(Boolean)
+                    .join('; ') || 'Unknown error';
+            const err = new Error(
+                `Failed to delete ${failed.length} of ${data.results.length} track(s): ${detail}`,
+            );
+            // Attach the parsed body so callers can do partial-success handling
+            // (invalidate for the tracks that *did* delete).
+            (err as Error & { data?: typeof data }).data = data;
+            throw err;
+        }
+
+        return data;
     },
 
     getLibrarySize: async (args: PymixClientArgs) => {
