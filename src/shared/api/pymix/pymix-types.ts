@@ -37,7 +37,17 @@ const deleteDuplicates = z.object({
     success: z.boolean(),
 });
 
-const deleteSong = z.null();
+const deleteSongResult = z.object({
+    reason: z.string(),
+    subbox_id: z.string(),
+    success: z.boolean(),
+});
+
+const deleteSong = z.object({
+    results: z.array(deleteSongResult),
+    success: z.boolean(),
+    username: z.string(),
+});
 
 const importJob = z.object({
     job_id: z.string(),

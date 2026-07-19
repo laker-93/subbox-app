@@ -7,11 +7,13 @@ import { urlConfig } from '/@/renderer/config/url-config';
 import { MutationHookArgs } from '/@/renderer/lib/react-query';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
+type DeleteSongResult = Awaited<ReturnType<typeof PymixController.deleteSong>>;
+
 export const useDeleteSong = (args: MutationHookArgs) => {
     const { options } = args || {};
     const queryClient = useQueryClient();
 
-    return useMutation<null, Error, { ids: string[]; serverId: string }>({
+    return useMutation<DeleteSongResult, Error, { ids: string[]; serverId: string }>({
         mutationFn: async ({ ids }) => {
             return PymixController.deleteSong({
                 baseUrl: urlConfig.pymix,
@@ -19,9 +21,11 @@ export const useDeleteSong = (args: MutationHookArgs) => {
             });
         },
         ...options,
-        onSuccess: (data, variables, context) => {
+        onSettled: (data, error, variables, context) => {
             const { serverId } = variables;
 
+            // Invalidate on settle (not just success): a partial delete throws but
+            // still removed some tracks, so their rows must disappear from the list.
             queryClient.invalidateQueries({
                 exact: false,
                 queryKey: queryKeys.songs.root(serverId),
@@ -37,7 +41,7 @@ export const useDeleteSong = (args: MutationHookArgs) => {
                 queryKey: queryKeys.albums.root(serverId),
             });
 
-            options?.onSuccess?.(data, variables, context);
+            options?.onSettled?.(data, error, variables, context);
         },
     });
 };
