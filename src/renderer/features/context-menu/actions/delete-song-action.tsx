@@ -15,14 +15,20 @@ interface DeleteSongActionProps {
     items: Song[];
 }
 
-export const DeleteSongAction = ({ disabled, items }: DeleteSongActionProps) => {
+interface DeleteSongConfirmProps {
+    items: Song[];
+    serverId: string;
+}
+
+// Rendered *inside* the modal so it re-renders on the mutation's pending state —
+// that drives the ConfirmModal spinner / disabled buttons while pymix works
+// through the batch (which can take a moment for many tracks). The imperatively
+// opened modal in `openDeleteSongModal` can't observe hook state on its own.
+const DeleteSongConfirm = ({ items, serverId }: DeleteSongConfirmProps) => {
     const { t } = useTranslation();
-    const serverId = useCurrentServerId();
     const deleteSongMutation = useDeleteSong({});
 
     const handleDeleteSong = useCallback(async () => {
-        if (items.length === 0 || !serverId) return;
-
         const subboxIds = items
             .map((song) => {
                 const id = song.tags?.subboxid?.[0] || song.tags?.subbox_id?.[0];
@@ -58,30 +64,60 @@ export const DeleteSongAction = ({ disabled, items }: DeleteSongActionProps) => 
             });
 
             toast.success({
-                message: t('form.deleteSong.success', { postProcess: 'sentenceCase' }),
+                message:
+                    subboxIds.length > 1
+                        ? `${subboxIds.length} tracks deleted`
+                        : t('form.deleteSong.success', { postProcess: 'sentenceCase' }),
             });
         } catch (err: any) {
-            toast.error({
-                message: err.message,
-                title: t('error.genericError', { postProcess: 'sentenceCase' }),
-            });
+            // A partial failure still deleted some tracks (and the mutation's
+            // onSettled already invalidated the list). Tell the user how many
+            // failed and why, rather than a blanket error.
+            const results: Array<{ success: boolean }> | undefined = err?.data?.results;
+            if (results?.length) {
+                const failedCount = results.filter((r) => !r.success).length;
+                const okCount = results.length - failedCount;
+                toast.error({
+                    message:
+                        okCount > 0
+                            ? `Deleted ${okCount}, failed ${failedCount}: ${err.message}`
+                            : err.message,
+                    title: t('error.genericError', { postProcess: 'sentenceCase' }),
+                });
+            } else {
+                toast.error({
+                    message: err.message,
+                    title: t('error.genericError', { postProcess: 'sentenceCase' }),
+                });
+            }
         }
 
         closeAllModals();
     }, [deleteSongMutation, items, serverId, t]);
 
+    return (
+        <ConfirmModal loading={deleteSongMutation.isPending} onConfirm={handleDeleteSong}>
+            <Text>
+                {items.length > 1
+                    ? `${t('common.areYouSure', { postProcess: 'sentenceCase' })} (${items.length} tracks)`
+                    : t('common.areYouSure', { postProcess: 'sentenceCase' })}
+            </Text>
+        </ConfirmModal>
+    );
+};
+
+export const DeleteSongAction = ({ disabled, items }: DeleteSongActionProps) => {
+    const { t } = useTranslation();
+    const serverId = useCurrentServerId();
+
     const openDeleteSongModal = useCallback(() => {
-        if (items.length === 0) return;
+        if (items.length === 0 || !serverId) return;
 
         openModal({
-            children: (
-                <ConfirmModal onConfirm={handleDeleteSong}>
-                    <Text>{t('common.areYouSure', { postProcess: 'sentenceCase' })}</Text>
-                </ConfirmModal>
-            ),
+            children: <DeleteSongConfirm items={items} serverId={serverId} />,
             title: t('form.deleteSong.title', { postProcess: 'sentenceCase' }),
         });
-    }, [handleDeleteSong, items.length, t]);
+    }, [items, serverId, t]);
 
     if (items.length === 0) return null;
 
