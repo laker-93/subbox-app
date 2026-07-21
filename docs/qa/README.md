@@ -147,10 +147,12 @@ naturally passes through it.
 - [x] `[subbox]` Sync — External Drive tab: `features/external-drive-sync.md` (drive is
       compare-only by design, not a routing bug — corrects a prior misdiagnosis,
       issue #27/PR #29)
-- [ ] `[subbox]` Upload music — watch-dir uploader (Sync → Watch): point it at a
-      source dir, confirm tracks land in the library, tagged with `SUBBOX_ID`. Skill
-      `upload-music-dev` drives this; the wishlist → Soulseek → watch-dir import path
-      (`wishlist-import-dev`) is the background variant.
+- [x] `[subbox]` Upload music — watch-dir uploader (Sync → Watch): verified
+      end-to-end 2026-07-21 — `features/watch-upload.md`. No-`SUBBOX_ID` source →
+      real UI upload → watcher mints a fresh `SUBBOX_ID` per file → pymix import →
+      beets → Navidrome library. Skill `upload-music-dev` drives this; the
+      wishlist → Soulseek → watch-dir import path (`wishlist-import-dev`) is the
+      background variant.
 - [ ] `[subbox]` Rekordbox/Serato import-export UI (subbox-app side of pymix
       `/rekordbox/*`, `/serato/*` — see pymix-qa journal)
 - [x] `[subbox]` Sharing — `features/sharing.md`: Navidrome-native share, offered app-wide but **always fails** (per-user Navidrome has sharing disabled → `/api/share` 404s → "Failed to create share" toast). Logged ux-note (design call: enable server-side vs hide client-side)

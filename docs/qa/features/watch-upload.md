@@ -1,7 +1,25 @@
 # Feature: upload music via the watch-dir uploader
 
-**Status:** driver written; drive it once end-to-end against the local stack to
-promote this doc from "expected" to "verified".
+**Status:** **verified end-to-end 2026-07-21** against the local dev stack
+(`test260526`). Drove the real Sync → Watch UI on 2 guaranteed-new tracks
+(metadata stripped, so they carried **no** `SUBBOX_ID` and were new to the
+library) and confirmed the whole path:
+
+1. **Source had no `SUBBOX_ID`** (ffprobe: `(no subbox tag)` on both).
+2. **Real UI upload** (`scripts/qa/watch-upload.mjs`): Select Directory → Start
+   Watching → `phase=scanning` → `phase=idle uploaded=2/2`, drained cleanly, no
+   `[Subbox]`/error lines.
+3. **Watcher wrote a fresh `SUBBOX_ID` into each staged file in place**
+   (`QA_KEEP_WATCH_DIR=1` → ffprobe showed `SUBBOX_ID=1a10a19e-…` and
+   `93305dbc-…` where the source had none). This is the `getOrCreateSubboxId`
+   mint step, confirmed on real files.
+4. **pymix imported → beets**: both `subbox_id`s present in `beetstest260526`
+   with the right artist/title.
+5. **Navidrome rescanned them into the library**: both rows in
+   `media_file` (title/artist/album as tagged).
+6. **Cleaned up net-neutral**: deleted both via the proper `DELETE /track`
+   API (session cookie), beets empty + Navidrome dropped both (0 rows) after
+   rescan. No bug found — happy path is correct.
 
 ## What it does
 
