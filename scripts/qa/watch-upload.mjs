@@ -165,6 +165,19 @@ async function main() {
     await page.getByText(watchDir, { exact: false }).first().waitFor({ timeout: 10_000 });
     console.log('watch dir selected in UI ✓');
 
+    // Reset a stale "watching" state left over from a prior session. The app
+    // persists `watch_active` to disk (electron-store) and restores it on mount,
+    // so a fresh launch renders "Stop Watching" even though no watcher runs in
+    // this process — which would hide the "Start Watching" button we need. Clear
+    // it via the real UI (handleStopWatch → sync:stop-watch, sets watch_active
+    // false) so the flow starts from a known-clean state. No-op if already clean.
+    const staleStopBtn = page.getByRole('button', { name: /^stop watching$/i }).first();
+    if (await staleStopBtn.isVisible().catch(() => false)) {
+        console.log('stale watch state detected (Stop Watching shown) — resetting first');
+        await staleStopBtn.click();
+        await page.waitForTimeout(500);
+    }
+
     const startBtn = page.getByRole('button', { name: /^start watching$/i }).first();
     await startBtn.click();
     console.log('clicked Start Watching — uploader is live (app default 10s poll;');
