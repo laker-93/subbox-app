@@ -20,34 +20,6 @@ future cycle re-investigating; the archive has the detail if ever needed.
      Step 1½). Remove an entry (move to FIXED) once actually fixed and verified,
      don't just mark it done. -->
 
-### Watch uploader restores "watching" UI on relaunch but never re-arms the watcher
-
-Added: 2026-07-20. Found on the Sync → Watch journey while hardening the
-watch-upload driver (`scripts/qa/watch-upload.mjs`), account `test260526`.
-
-Issue: https://github.com/laker-93/subbox-app/issues/23
-
-**Symptom.** After Start Watching → quit → relaunch, Sync → Watch shows the red
-**Stop Watching** button and "Watching for new files..." — implying the folder
-is watched. It is not: no watcher runs in the fresh main process, so files
-dropped into the folder are silently never uploaded until the user manually
-toggles Stop → Start. The driver wedged on exactly this stale "Stop Watching"
-state on a clean launch (now hardened to auto-reset it before Start).
-
-**Root cause (confirmed by code read).** Persistence is half-implemented.
-`handleStartWatch` (`sync-watch.tsx:64-76`) invokes `sync:start-watch` *and*
-persists `watch_active: true`. On relaunch the mount effect
-(`sync-watch.tsx:29-37`) reads `watch_active` and only calls `setWatching(true)`
-— restoring the cosmetic flag, never re-invoking `sync:start-watch`. Main has no
-boot-time restore either: `sync:start-watch` is solely an `ipcMain.handle`
-(`sync/index.ts:1444`), nothing reads `watch_active` at startup, `watchInterval`
-stays `null`. UI state and actual watcher diverge. Owned by **subbox-app**.
-
-**Fix direction.** In the mount effect, when `watch_active === true` and a
-persisted `watch_directory` exists, re-invoke `sync:start-watch` (guarding until
-`currentServer` credentials are available), then `setWatching(true)` — genuine
-auto-resume, truthful UI. Full detail in issue #23.
-
 ### (unconfirmed — needs real-usage repro) Player-bar favorite button appears inert for the now-playing song
 
 Added: 2026-07-11. Found on the Library → Songs → play → Favorites journey
@@ -128,5 +100,6 @@ false positive if seen again — it's a real, correctly-flagged case.
 <!-- One line per FIXED bug: date | title | verdict | issue/PR. Full text lives
      in bugs-archive.md, which the loop never reads. -->
 
+- 2026-07-21 | Watch uploader "restores UI but never re-arms watcher" on relaunch | NOT A BUG — app.tsx already auto-resumes at boot (since 2026-06-05); re-verified live via watch-resume-relaunch.mjs | issue #23 (closed not-a-bug)
 - 2026-07-14 | Delete track showed a success toast even when the delete failed | FIXED (client captured pymix's 200+`success:false` body; throws on failure) | issue #18, PR #19
 - 2026-07-22 | External Drive "Download Missing Tracks" — misdiagnosed as ignoring drivePath (it doesn't; drive is compare-only by design) | NOT A ROUTING BUG — real defect was misleading tooltip/copy claiming tracks land on the drive; fixed by rewording copy + adding Rekordbox XML export, not by changing where files are written; full writeup `features/external-drive-sync.md` | issue #27, PR #29 (supersedes closed PR #28, which had wrongly routed downloads to drivePath)

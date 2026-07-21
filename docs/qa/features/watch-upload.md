@@ -71,6 +71,27 @@ server-side — deduped by the "already uploaded" skip), and `DONE` / `TIMED OUT
 | `QA_KEEP_WATCH_DIR` | unset | Keep the staging dir on exit (inspect it) |
 | `QA_UPLOAD_TIMEOUT_MS` | 1200000 | Cap waiting for the uploader to drain |
 
+## Relaunch auto-resume (verified 2026-07-21)
+
+After **Start Watching → quit → relaunch**, the watcher **genuinely re-arms** — it
+is not just a cosmetic "Stop Watching" flag. The restore happens at **app boot**,
+not in the Sync → Watch component:
+
+- `src/renderer/app.tsx` ("Auto-resume watch directory on app launch",
+  added 2026-06-05) reads persisted `watch_directory` + `watch_active` on mount
+  and re-invokes `sync:start-watch` as soon as `currentServer.fbToken` is
+  hydrated — **independent of whether the user ever opens Sync → Watch**.
+- `sync-watch.tsx`'s own mount effect only restores the `watching` UI flag
+  (`setWatching(true)`); the actual re-arm is app.tsx's job.
+
+**Verified** via `scripts/qa/watch-resume-relaunch.mjs` (pollution-free — the
+watch dir is kept empty, so nothing uploads): launch 1 Start Watching → quit →
+launch 2 (same userData) emits `[scanning,idle]` watch-progress events **before**
+navigating anywhere (proving the boot restore fired), Stop Watching shown, watcher
+running. This directly refutes subbox-app **#23**, which reported the watcher as
+never re-arming — that report inspected only `sync-watch.tsx` and missed the
+app.tsx restore. Issue closed as not-a-bug; no code change.
+
 ## Boundaries / gotchas
 
 - **Writes to a live dev user.** Uploads land in the logged-in user's per-user

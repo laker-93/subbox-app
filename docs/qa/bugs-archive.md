@@ -7,6 +7,41 @@ pattern as `directives-archive.md`.
 
 <!-- Full FIXED entries, appended verbatim from bugs.md when closed. -->
 
+### Watch uploader restores "watching" UI on relaunch but never re-arms the watcher — NOT A BUG
+
+Logged: 2026-07-20 (issue #23). Closed as not-a-bug: 2026-07-21 after live re-verification.
+Issue: https://github.com/laker-93/subbox-app/issues/23 (closed not-a-bug)
+
+**Reported symptom.** After Start Watching → quit → relaunch, Sync → Watch shows
+the red **Stop Watching** button, supposedly implying the folder is watched while
+no watcher actually runs — so dropped files would be silently ignored until a
+manual Stop → Start.
+
+**Why it's not a bug.** The original report inspected only `sync-watch.tsx` and
+concluded "nothing re-invokes `sync:start-watch` on relaunch; main has no boot
+restore." It **missed** `src/renderer/app.tsx` (lines ~75-94, "Auto-resume watch
+directory on app launch", added 2026-06-05 in commit 81fd618d — six weeks *before*
+this bug was filed). That effect reads persisted `watch_directory` + `watch_active`
+on app boot and re-invokes `sync:start-watch` as soon as `currentServer.fbToken`
+is hydrated, **independent of navigation**. `sync-watch.tsx`'s mount effect only
+restores the cosmetic `watching` flag — but the real re-arm is app.tsx's job, and
+it runs at boot. So the "Stop Watching" UI on relaunch is truthful: the watcher
+*is* running.
+
+**Live verification (2026-07-21).** New pollution-free regression
+`scripts/qa/watch-resume-relaunch.mjs`: launch 1 Start Watching (empty watch dir,
+nothing uploads) → quit → launch 2 (same userData) emitted `[scanning,idle]`
+watch-progress events **before** navigating to Sync → Watch (proving the boot
+restore fired), Stop Watching shown, watcher running. Ran identically against the
+base build with **and** without a speculative `sync-watch.tsx` re-arm patch —
+both re-armed, confirming app.tsx is what does it and the mount-effect change is
+redundant (it was reverted, not committed). PIDs differed between launches
+(separate processes); dev mode bypasses the single-instance lock
+(`src/main/index.ts:898`), so no cross-process leak.
+
+**Outcome.** No code change. Issue #23 closed as not-a-bug. Regression driver kept
++ documented in `features/watch-upload.md` ("Relaunch auto-resume").
+
 ### Delete track showed a success toast even when the delete failed
 
 Found + fixed: 2026-07-14. Journey: song context menu → "Delete track" → confirm
