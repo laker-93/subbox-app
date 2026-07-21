@@ -8,6 +8,15 @@ Verified 2026-07-14 by driving it live against the local dev stack, test user
 `test260526`, with purpose-made scratch tracks. Driver:
 `scripts/qa/delete-track-journey.mjs`.
 
+> **Re-verified 2026-07-21** as the client half of pymix's #30 fix confirmation
+> (`DELETE /track` reorder, PR #36 merged). Minted a fresh scratch track via the
+> watch-dir uploader, deleted it through this context menu: `DELETE /track` → 200
+> `success:true`, single batched call, success toast (body/toast agree), row gone
+> on re-navigation. Server-side, every store came out clean with no orphan (see
+> `../pymix-qa/docs/qa/features/track-delete.md`). The known search-route
+> non-invalidation (row not clearing on its own within 50s — see `ux-notes.md`)
+> reproduced unchanged; not a new bug.
+
 > **This is destructive.** `beet rm -df` deletes the real file. Only ever point
 > the driver at a scratch track you imported yourself on the dev test user.
 
