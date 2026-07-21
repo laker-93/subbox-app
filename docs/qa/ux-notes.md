@@ -18,6 +18,44 @@ future cycle re-investigating; the archive has the detail if ever needed.
      find confusing/awkward and why, evidence (screenshot path), and whether
      you think it's a safe small fix or needs a design call. -->
 
+### "Share item" context action is offered everywhere but always fails (Navidrome sharing disabled)
+
+Added: 2026-07-21. Route: any list/detail with a context menu (song, album,
+artist, album-artist, playlist, folder, queue). Verified API + code trace,
+account `test260526`. See `features/sharing.md`.
+
+**What a user sees.** Right-click almost anything → **"Share item"** → fill in the
+modal (expiration / description / allow-downloading) → **Share** → a generic
+**"Failed to create share"** error toast. Every item type, every time, no
+explanation. The action looks like a first-class feature (it's in all 8 context
+menus, unconditionally) but can never succeed in the subbox deployment.
+
+**Root cause (empirically confirmed).** The client POSTs to Navidrome's native
+`/api/share` (`navidrome-controller.ts:1124`), but the per-user Navidrome has
+**sharing disabled** — the container sets no `ND_ENABLESHARING` and
+`navidrome.toml` has no sharing key, so Navidrome (default off) never registers
+the `/api/share` routes. Proven live against `navidrometest260526` (0.60.3) with
+a valid native JWT: `/api/song` and `/api/playlist` → 200, but `GET`/`POST
+/api/share` → **404 page not found**. The controller throws on non-200 → the
+modal's `onError` → the error toast.
+
+Also: `ShareAction` (`share-action.tsx`) is rendered with **no feature gate** at
+all, so nothing hides it when the server can't share. (Upstream Feishin's
+`SHARING_ALBUM_SONG` is version-detected, `0.49.3+`, not enablement-detected —
+so even a version gate wouldn't have hidden it here.)
+
+**Why not fixed (needs a design call).** Two clean resolutions, both a
+deliberate decision, both outside the conservative single-repo fix bar:
+1. **Subbox intends sharing** → enable `ND_ENABLESHARING=true` in the per-user
+   Navidrome orchestration (a pymix/traefik deployment change, and enabling a
+   whole feature — not a bug fix), or
+2. **Subbox does not** → hide/disable the Share action client-side (touches
+   shared upstream-Feishin context-menu code app-wide; wants to be done as one
+   coherent gate, not a one-off).
+Inherited-upstream surface that doesn't fit subbox's deployment reality — same
+shape as the "role-only artists → empty detail" note above. Logged, not fixed;
+no `qa-bug` issue (friction/design call, per the ux-notes policy).
+
 ### The wishlist header's "+" (add item) button has no accessible name
 
 Added: 2026-07-14. Route `/wishlist` (`features/wishlist/components/wishlist-header.tsx`).

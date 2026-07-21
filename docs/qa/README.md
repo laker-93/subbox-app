@@ -153,7 +153,7 @@ naturally passes through it.
       (`wishlist-import-dev`) is the background variant.
 - [ ] `[subbox]` Rekordbox/Serato import-export UI (subbox-app side of pymix
       `/rekordbox/*`, `/serato/*` — see pymix-qa journal)
-- [ ] `[subbox]` Sharing
+- [x] `[subbox]` Sharing — `features/sharing.md`: Navidrome-native share, offered app-wide but **always fails** (per-user Navidrome has sharing disabled → `/api/share` 404s → "Failed to create share" toast). Logged ux-note (design call: enable server-side vs hide client-side)
 - [ ] `[subbox]` Filebrowser integration
 
 This list isn't exhaustive — add rows as you discover sub-flows worth tracking
