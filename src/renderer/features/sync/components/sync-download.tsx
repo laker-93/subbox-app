@@ -3,6 +3,7 @@ import isElectron from 'is-electron';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 
+import { FilebrowserController } from '/@/renderer/api/filebrowser/filebrowser-controller';
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
@@ -35,6 +36,32 @@ const XML_DIRECTORY_KEY = 'rekordbox_xml_directory';
 type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'select';
 
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
+
+// The web build has no filesystem access, so a download has to happen inside the
+// browser: fetch the file from filebrowser (which requires the X-Auth header —
+// a plain <a href> to a cross-origin filebrowser URL can never carry that, so it
+// 401s) as a blob, then trigger the save from an object URL instead of the raw URL.
+const downloadFileFromFilebrowser = async (
+    filebrowserBaseUrl: string,
+    filename: string,
+    token: string,
+): Promise<void> => {
+    const blob = (await FilebrowserController.download({
+        baseUrl: filebrowserBaseUrl,
+        filename,
+        responseType: 'blob',
+        token,
+    })) as Blob;
+
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+};
 
 const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -254,16 +281,15 @@ export const SyncDownload = () => {
                     throw new Error(result.reason || 'Sync failed');
                 }
 
-                const zipFileName = result.zipPath.split('/').pop();
-                const downloadUrl = `${urlConfig.filebrowser}/api/raw/downloads/${zipFileName}`;
-
-                // Trigger browser download via hidden anchor
-                const a = document.createElement('a');
-                a.href = downloadUrl;
-                a.download = zipFileName || 'music.zip';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+                // pymix's zipPath omits the .zip extension (the actual file on disk
+                // is "music.zip") — the Electron main-process download path already
+                // accounts for this (path.basename(zipPath) + '.zip'); mirror it here.
+                const zipFileName = `${result.zipPath.split('/').pop()}.zip`;
+                await downloadFileFromFilebrowser(
+                    urlConfig.filebrowser,
+                    zipFileName,
+                    server.fbToken ?? '',
+                );
 
                 // Optionally export and download Rekordbox XML
                 if (includeRekordboxXml) {
@@ -276,12 +302,11 @@ export const SyncDownload = () => {
                         body: { playlistIds: Array.from(selectedPlaylists), user_root: '' },
                     });
 
-                    const xmlLink = document.createElement('a');
-                    xmlLink.href = `${urlConfig.filebrowser}/api/raw/downloads/subbox_rb_export.xml`;
-                    xmlLink.download = 'subbox_rb_export.xml';
-                    document.body.appendChild(xmlLink);
-                    xmlLink.click();
-                    document.body.removeChild(xmlLink);
+                    await downloadFileFromFilebrowser(
+                        urlConfig.filebrowser,
+                        'subbox_rb_export.xml',
+                        server.fbToken ?? '',
+                    );
                 }
 
                 setDownloadResult({ tracksExported: result.nTracksExported });
