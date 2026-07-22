@@ -1,8 +1,3 @@
-import { openContextModal } from '@mantine/modals';
-import { useCallback, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-
-import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { LibraryItem } from '/@/shared/types/domain-types';
 
 interface ShareActionProps {
@@ -10,40 +5,10 @@ interface ShareActionProps {
     itemType: LibraryItem;
 }
 
-export const ShareAction = ({ ids, itemType }: ShareActionProps) => {
-    const { t } = useTranslation();
-
-    const resourceType = useMemo(() => {
-        switch (itemType) {
-            case LibraryItem.ALBUM:
-                return 'album';
-            case LibraryItem.ALBUM_ARTIST:
-                return 'albumArtist';
-            case LibraryItem.FOLDER:
-                return 'folder';
-            case LibraryItem.PLAYLIST:
-                return 'playlist';
-            case LibraryItem.SONG:
-                return 'song';
-            default:
-                return 'song';
-        }
-    }, [itemType]);
-
-    const onSelect = useCallback(() => {
-        openContextModal({
-            innerProps: {
-                itemIds: ids,
-                resourceType,
-            },
-            modalKey: 'shareItem',
-            title: t('page.contextMenu.shareItem', { postProcess: 'titleCase' }),
-        });
-    }, [ids, resourceType, t]);
-
-    return (
-        <ContextMenu.Item leftIcon="share" onSelect={onSelect}>
-            {t('page.contextMenu.shareItem', { postProcess: 'sentenceCase' })}
-        </ContextMenu.Item>
-    );
+// Subbox's per-user Navidrome instances run with sharing disabled server-side
+// (no ND_ENABLESHARING), so this Feishin-inherited action always fails with a
+// "Failed to create share" toast. Hidden until sharing is enabled server-side.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const ShareAction = (_props: ShareActionProps) => {
+    return null;
 };
