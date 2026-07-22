@@ -161,12 +161,13 @@ export const SyncExternalDrive = () => {
     }, []);
 
     const handleDownload = useCallback(async () => {
-        if (!plan) return;
+        if (!plan || !drivePath) return;
         setStep('downloading');
         setError(null);
 
         try {
             const result = await window.api.ipc.invoke('sync:download-missing-tracks', {
+                destinationPath: drivePath,
                 filebrowserToken: server.fbToken ?? '',
                 filebrowserUrl: urlConfig.filebrowser,
                 pymixUrl: urlConfig.pymix,
@@ -189,7 +190,7 @@ export const SyncExternalDrive = () => {
             setError(err?.message || 'Download failed');
             setStep('preview');
         }
-    }, [plan, server.fbToken, server.username, serverId]);
+    }, [plan, drivePath, server.fbToken, server.username, serverId]);
 
     // ── Select drive + playlists ──────────────────────────────────────────
     if (step === 'select') {

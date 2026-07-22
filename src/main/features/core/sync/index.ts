@@ -1799,6 +1799,7 @@ ipcMain.handle(
     async (
         event,
         args: {
+            destinationPath: string;
             filebrowserToken: string;
             filebrowserUrl: string;
             pymixUrl: string;
@@ -1813,8 +1814,15 @@ ipcMain.handle(
             username?: string;
         },
     ): Promise<{ tracksExported: number }> => {
-        const { filebrowserToken, filebrowserUrl, pymixUrl, serverId, tracksToDownload, username } =
-            args;
+        const {
+            destinationPath,
+            filebrowserToken,
+            filebrowserUrl,
+            pymixUrl,
+            serverId,
+            tracksToDownload,
+            username,
+        } = args;
         const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
 
         // Filebrowser auth that self-heals on a 401 by re-logging in (see download-playlists).
@@ -1847,7 +1855,10 @@ ipcMain.handle(
         const { nTracksExported, zipPath } = syncResponse.data;
         const zipFileName = `${path.basename(zipPath)}.zip`;
 
-        // Step 2: Download the zip from filebrowser
+        // Step 2: Download the zip from filebrowser. The zip itself is only
+        // staged in the app's own scratch directory; it's deleted below once
+        // extracted — the user's chosen destinationPath (their external
+        // drive/folder) is where the tracks actually need to end up.
         const appPath = getAppPath();
         if (!fs.existsSync(appPath)) {
             fs.mkdirSync(appPath, { recursive: true });
@@ -1855,9 +1866,13 @@ ipcMain.handle(
         const localZipPath = path.join(appPath, zipFileName);
         await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
 
-        // Step 3: Unzip and merge into app directory.
+        // Step 3: Unzip and merge into the selected destination (external
+        // drive/folder), NOT the app's internal library directory.
         // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
-        await unzipAndMerge(localZipPath, appPath);
+        if (!fs.existsSync(destinationPath)) {
+            fs.mkdirSync(destinationPath, { recursive: true });
+        }
+        await unzipAndMerge(localZipPath, destinationPath);
 
         // Clean up the zip
         try {
