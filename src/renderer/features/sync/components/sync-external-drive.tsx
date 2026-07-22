@@ -1,5 +1,5 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
@@ -7,22 +7,31 @@ import { urlConfig } from '/@/renderer/config/url-config';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { useCurrentServerId, useCurrentServerWithCredential } from '/@/renderer/store';
 import { pymixType } from '/@/shared/api/pymix/pymix-types';
+import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Group } from '/@/shared/components/group/group';
+import { Icon } from '/@/shared/components/icon/icon';
+import { Modal } from '/@/shared/components/modal/modal';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
+import { Tooltip } from '/@/shared/components/tooltip/tooltip';
+import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { Playlist, PlaylistListSort, SortOrder } from '/@/shared/types/domain-types';
 
 type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'scanning' | 'select';
 
 const NOPLAYLIST_ID = 'NOPLAYLIST';
+
+/** localSettings key holding the user-chosen folder for downloaded Rekordbox XML.
+ *  Shared with sync-download.tsx so the app has one XML output setting. */
+const XML_DIRECTORY_KEY = 'rekordbox_xml_directory';
 
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
 
@@ -51,7 +60,50 @@ export const SyncExternalDrive = () => {
     const [plan, setPlan] = useState<null | SyncPlanResponse>(null);
     const [error, setError] = useState<null | string>(null);
     const [activeTab, setActiveTab] = useState<'conflicts' | 'existing' | 'missing'>('missing');
-    const [downloadResult, setDownloadResult] = useState<null | { tracksExported: number }>(null);
+    const [downloadResult, setDownloadResult] = useState<null | {
+        musicPath?: string;
+        tracksExported: number;
+        xmlPath?: string;
+    }>(null);
+    const [includeRekordboxXml, setIncludeRekordboxXml] = useState(true);
+    const [xmlHelpOpened, xmlHelpHandlers] = useDisclosure(false);
+    // The folder the Rekordbox XML is saved to. `xmlDir` is the user's override
+    // (persisted in localSettings); `defaultXmlDir` is where it lands otherwise.
+    const [xmlDir, setXmlDir] = useState<null | string>(null);
+    const [defaultXmlDir, setDefaultXmlDir] = useState<null | string>(null);
+
+    // Load the persisted XML directory and the default fallback on mount.
+    useEffect(() => {
+        window.api.localSettings.get(XML_DIRECTORY_KEY).then((dir) => {
+            if (typeof dir === 'string' && dir.length > 0) setXmlDir(dir);
+        });
+        window.api.ipc.invoke('sync:get-default-xml-directory').then((dir) => {
+            if (typeof dir === 'string') setDefaultXmlDir(dir);
+        });
+    }, []);
+
+    const handleSelectXmlDirectory = useCallback(async () => {
+        const dir = await window.api.ipc.invoke('sync:select-xml-directory');
+        if (dir) {
+            setXmlDir(dir as string);
+            window.api.localSettings.set(XML_DIRECTORY_KEY, dir);
+        }
+    }, []);
+
+    const handleResetXmlDirectory = useCallback(() => {
+        setXmlDir(null);
+        window.api.localSettings.set(XML_DIRECTORY_KEY, '');
+    }, []);
+
+    const handleOpenMusicFolder = useCallback(() => {
+        if (!downloadResult?.musicPath) return;
+        window.api.ipc.invoke('sync:open-folder', downloadResult.musicPath);
+    }, [downloadResult]);
+
+    const handleRevealXml = useCallback(() => {
+        if (!downloadResult?.xmlPath) return;
+        window.api.ipc.invoke('sync:reveal-file', downloadResult.xmlPath);
+    }, [downloadResult]);
 
     const playlistQuery = useSuspenseQuery(
         playlistsQueries.list({
@@ -166,10 +218,19 @@ export const SyncExternalDrive = () => {
         setError(null);
 
         try {
+            // NOPLAYLIST is a client-only virtual entry (tracks not in any
+            // playlist) — pymix's rekordbox export only understands real
+            // playlist ids, so it's dropped here. An empty list exports every
+            // playlist, which also covers the "All server tracks" selection.
+            const playlistIds = Array.from(selectedPlaylists).filter((id) => id !== NOPLAYLIST_ID);
+
             const result = await window.api.ipc.invoke('sync:download-missing-tracks', {
                 filebrowserToken: server.fbToken ?? '',
                 filebrowserUrl: urlConfig.filebrowser,
+                includeRekordboxXml,
+                playlistIds,
                 pymixUrl: urlConfig.pymix,
+                rekordboxXmlDir: xmlDir ?? '',
                 // Let the main process silently re-login to filebrowser if its
                 // token has expired by the time the download runs.
                 serverId: serverId ?? undefined,
@@ -182,14 +243,24 @@ export const SyncExternalDrive = () => {
                 username: server.username,
             });
 
-            setDownloadResult(result as { tracksExported: number });
+            setDownloadResult(
+                result as { musicPath?: string; tracksExported: number; xmlPath?: string },
+            );
             setStep('done');
         } catch (err: any) {
             toast.error({ message: err?.message || 'Download failed' });
             setError(err?.message || 'Download failed');
             setStep('preview');
         }
-    }, [plan, server.fbToken, server.username, serverId]);
+    }, [
+        includeRekordboxXml,
+        plan,
+        selectedPlaylists,
+        server.fbToken,
+        server.username,
+        serverId,
+        xmlDir,
+    ]);
 
     // ── Select drive + playlists ──────────────────────────────────────────
     if (step === 'select') {
@@ -215,7 +286,10 @@ export const SyncExternalDrive = () => {
                     <Text c="dimmed" size="sm">
                         Select a folder on an external drive, then choose playlists to compare
                         against. Missing tracks — those in your playlists but not on the drive —
-                        will be shown as a preview.
+                        will be shown as a preview. The drive folder is only used for this
+                        comparison: downloaded tracks are saved to your Subbox library, the same
+                        place regular playlist downloads go, ready to add to Rekordbox and export
+                        back to the drive from there.
                     </Text>
                 </Stack>
 
@@ -354,7 +428,7 @@ export const SyncExternalDrive = () => {
                     onClick={handleCompare}
                     size="md"
                     tooltip={{
-                        label: 'Check which of the selected tracks are not yet on the drive. Nothing is copied until you confirm on the next screen.',
+                        label: 'Check which of the selected tracks are not yet on the drive. Nothing is downloaded until you confirm on the next screen.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
@@ -407,9 +481,39 @@ export const SyncExternalDrive = () => {
                         {downloadResult
                             ? `${downloadResult.tracksExported} track${
                                   downloadResult.tracksExported === 1 ? '' : 's'
-                              } downloaded.`
+                              } downloaded to your Subbox library.`
                             : 'Download finished.'}
                     </Text>
+                    {(downloadResult?.musicPath || downloadResult?.xmlPath) && (
+                        <Group gap="sm" justify="center" wrap="wrap">
+                            {downloadResult?.musicPath && (
+                                <Button
+                                    leftSection={<Icon icon="folder" />}
+                                    onClick={handleOpenMusicFolder}
+                                    size="sm"
+                                    tooltip={{
+                                        label: 'Open the folder your music was downloaded to',
+                                    }}
+                                    variant="default"
+                                >
+                                    Show Music
+                                </Button>
+                            )}
+                            {downloadResult?.xmlPath && (
+                                <Button
+                                    leftSection={<Icon icon="folder" />}
+                                    onClick={handleRevealXml}
+                                    size="sm"
+                                    tooltip={{
+                                        label: 'Reveal the downloaded Rekordbox XML in its folder',
+                                    }}
+                                    variant="default"
+                                >
+                                    Show Rekordbox XML
+                                </Button>
+                            )}
+                        </Group>
+                    )}
                     <Button onClick={handleBack} size="md" variant="filled">
                         Start Over
                     </Button>
@@ -598,6 +702,115 @@ export const SyncExternalDrive = () => {
                 )}
             </ScrollArea>
 
+            <Group gap="xs" style={{ width: 'fit-content' }}>
+                <Tooltip
+                    label="Also create a Rekordbox XML alongside the downloaded tracks. Import that file into Rekordbox to bring these playlists into your collection without hunting through the app's music folder — click the info icon for step-by-step instructions."
+                    multiline
+                    openDelay={300}
+                    position="top-start"
+                    w={300}
+                >
+                    <Group
+                        gap="md"
+                        onClick={() => setIncludeRekordboxXml((v) => !v)}
+                        style={{ cursor: 'pointer', width: 'fit-content' }}
+                    >
+                        <Checkbox
+                            checked={includeRekordboxXml}
+                            label="Include Rekordbox XML"
+                            readOnly
+                            size="sm"
+                        />
+                    </Group>
+                </Tooltip>
+                <ActionIcon
+                    icon="info"
+                    iconProps={{ size: 'md' }}
+                    onClick={xmlHelpHandlers.open}
+                    size="sm"
+                    tooltip={{ label: 'How to import the XML into Rekordbox' }}
+                    variant="subtle"
+                />
+            </Group>
+
+            {includeRekordboxXml && (
+                <Stack gap={4}>
+                    <Group gap="sm">
+                        <Button
+                            onClick={handleSelectXmlDirectory}
+                            size="xs"
+                            tooltip={{
+                                label: 'Choose the folder the Rekordbox XML is saved to when you download. By default it is saved alongside your downloaded tracks.',
+                                multiline: true,
+                                openDelay: 300,
+                                w: 300,
+                            }}
+                            variant="subtle"
+                        >
+                            {xmlDir ? 'Change XML Folder' : 'Choose XML Folder'}
+                        </Button>
+                        {xmlDir && (
+                            <Button onClick={handleResetXmlDirectory} size="xs" variant="subtle">
+                                Reset to default
+                            </Button>
+                        )}
+                    </Group>
+                    <Text c="dimmed" size="xs" style={{ fontFamily: 'monospace' }}>
+                        {xmlDir ?? defaultXmlDir ?? 'Default download folder'}
+                    </Text>
+                </Stack>
+            )}
+
+            <Modal
+                handlers={xmlHelpHandlers}
+                opened={xmlHelpOpened}
+                size="lg"
+                title="Importing the XML into Rekordbox"
+            >
+                <Stack gap="lg">
+                    <Text size="sm">
+                        After downloading, follow these steps to bring the compared playlists into
+                        your Rekordbox collection — Rekordbox matches tracks by file path, so any
+                        you already have won&apos;t be duplicated.
+                    </Text>
+                    <Stack gap="md">
+                        <Stack gap="xs">
+                            <TextTitle order={5}>1. Enable the XML View</TextTitle>
+                            <Text size="sm">
+                                Open Rekordbox, go to Preferences (File &gt; Preferences), click the
+                                View tab, and ensure &quot;rekordbox xml&quot; is checked under the
+                                Layout section.
+                            </Text>
+                        </Stack>
+                        <Stack gap="xs">
+                            <TextTitle order={5}>2. Link Your XML File</TextTitle>
+                            <Text size="sm">
+                                In the same Preferences window, navigate to the Advanced tab. Under
+                                the Database section, find Imported Library and click the Browse
+                                button to locate and select your .xml file.
+                            </Text>
+                        </Stack>
+                        <Stack gap="xs">
+                            <TextTitle order={5}>3. Import to Collection</TextTitle>
+                            <Text size="sm">
+                                Close the Preferences window. On the far left of your Rekordbox
+                                screen, click the newly appeared rekordbox xml icon. Click the
+                                little drop-down arrow/play button to refresh the file. Right-click
+                                your desired playlists and click Import Playlist to bring them into
+                                your primary Rekordbox collection.
+                            </Text>
+                        </Stack>
+                        <Stack gap="xs">
+                            <TextTitle order={5}>4. Export to your drive</TextTitle>
+                            <Text size="sm">
+                                From your primary Rekordbox collection, export the imported
+                                playlists to your USB/external drive as you normally would.
+                            </Text>
+                        </Stack>
+                    </Stack>
+                </Stack>
+            </Modal>
+
             {error && (
                 <Text c="red" size="sm">
                     {error}
@@ -605,12 +818,12 @@ export const SyncExternalDrive = () => {
             )}
 
             <Button
-                disabled={plan.tracks.missing.length === 0}
+                disabled={plan.tracks.missing.length === 0 && !includeRekordboxXml}
                 fullWidth
                 onClick={handleDownload}
                 size="md"
                 tooltip={{
-                    label: 'Copy the missing tracks from your Subbox library onto the selected drive folder.',
+                    label: 'Download the missing tracks into your Subbox library, ready to use (plus a Rekordbox XML if ticked above).',
                     multiline: true,
                     openDelay: 300,
                     w: 280,
