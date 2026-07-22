@@ -13,6 +13,30 @@ future cycle re-investigating; the archive has the detail if ever needed.
 
 ## OPEN
 
+### Web build: Sync -> Download always fails (401, then would still 404) — no X-Auth on the filebrowser download link
+
+Added: 2026-07-22. Coverage: `[subbox]` Sync flows, web (non-Electron) path — never
+previously driven (the docker `player` container at `www.docker.localhost` isn't in
+pymix's CORS allowlist, so web-mode can't even log in there locally; had to drive
+it via `pnpm dev:web` on `localhost:4343`, which IS allowlisted).
+
+Issue: https://github.com/laker-93/subbox-app/issues/25
+
+**Symptom.** Clicking "Download Zip" (and the optional Rekordbox XML download) in
+the web build's Sync -> Download screen fails every time. Two stacked bugs in
+`sync-download.tsx`'s web branch of `handleDownload`:
+1. filebrowser requires a custom `X-Auth` header (`filebrowser-api.ts`) that a
+   plain `<a href>` click to a cross-origin URL can never carry — every download
+   401'd, and the click also navigated the whole SPA away to the (401) raw URL
+   since `download` is ignored cross-origin.
+2. Independently, `/sync/playlists`'s `zipPath` response omits the `.zip`
+   extension (real file is `music.zip`) — the Electron main-process path already
+   knew this and appended `.zip`; the web path used the bare name, so it would
+   still 404 even with auth fixed.
+
+**Evidence.** Live Playwright run (before fix) against `pnpm dev:web`:
+`GET .../api/raw/downloads/music -> 401`.
+
 <!-- One entry per bug. Include: date found, journey/route it showed up on,
      repro steps, evidence (screenshot path / console error), your hypothesis
      for root cause + which repo owns it, and an `Issue: <github url>` line
