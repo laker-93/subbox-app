@@ -1801,7 +1801,10 @@ ipcMain.handle(
         args: {
             filebrowserToken: string;
             filebrowserUrl: string;
+            includeRekordboxXml?: boolean;
+            playlistIds?: string[];
             pymixUrl: string;
+            rekordboxXmlDir?: string;
             serverId?: string;
             tracksToDownload: Array<{
                 album?: string;
@@ -1812,9 +1815,18 @@ ipcMain.handle(
             }>;
             username?: string;
         },
-    ): Promise<{ tracksExported: number }> => {
-        const { filebrowserToken, filebrowserUrl, pymixUrl, serverId, tracksToDownload, username } =
-            args;
+    ): Promise<{ musicPath: string; tracksExported: number; xmlPath?: string }> => {
+        const {
+            filebrowserToken,
+            filebrowserUrl,
+            includeRekordboxXml,
+            playlistIds,
+            pymixUrl,
+            rekordboxXmlDir,
+            serverId,
+            tracksToDownload,
+            username,
+        } = args;
         const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
 
         // Filebrowser auth that self-heals on a 401 by re-logging in (see download-playlists).
@@ -1866,6 +1878,38 @@ ipcMain.handle(
             // ignore cleanup errors
         }
 
-        return { tracksExported: nTracksExported };
+        // Step 4: Optionally export and download a Rekordbox XML for the compared
+        // playlists (mirrors sync:download-playlists) so the user can import the
+        // exact tracks into Rekordbox instead of hunting through the app's music
+        // folder — Rekordbox matches XML entries to its collection by file path,
+        // so tracks it already has aren't duplicated.
+        let xmlPath: string | undefined;
+        if (includeRekordboxXml) {
+            const musicPath = getMusicPath();
+
+            await withPymixAuth(pymixAuth, (cookie) =>
+                axios.post(
+                    `${pymixUrl}/rekordbox/export`,
+                    { playlistIds: playlistIds ?? [], user_root: musicPath },
+                    { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
+                ),
+            );
+
+            const xmlDir =
+                rekordboxXmlDir && rekordboxXmlDir.length > 0 ? rekordboxXmlDir : appPath;
+            if (!fs.existsSync(xmlDir)) {
+                fs.mkdirSync(xmlDir, { recursive: true });
+            }
+            const xmlDestPath = path.join(xmlDir, 'subbox_rb_export.xml');
+            await downloadFileFromFilebrowser(
+                filebrowserUrl,
+                fbAuth,
+                'subbox_rb_export.xml',
+                xmlDestPath,
+            );
+            xmlPath = xmlDestPath;
+        }
+
+        return { musicPath: getMusicPath(), tracksExported: nTracksExported, xmlPath };
     },
 );
