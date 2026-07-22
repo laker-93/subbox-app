@@ -76,6 +76,33 @@ harness artifact — document alongside the sync.md one and close. **No issue
 filed yet by design** — see reasoning above; do not auto-backfill one until
 confirmed in real usage.
 
+**2026-07-21 attempt (inconclusive, no issue filed).** Tried the packaged-app
+route to rule out the harness explanation: `electron-vite build --mode
+development` + `electron-builder --dir` (unsigned, arm64, `--config.mac.identity=null`
+— arm64 electron-builder warns signing is normally required but the unsigned
+`.app` still launches fine locally), then Playwright `_electron.launch` with
+`executablePath` pointing at the real `Subbox.app` binary. Confirmed this route
+resolves the **real** app identity (`app.getName()` → `subbox`, matching
+`productName` in `electron-builder.yml`) unlike the bare `out/main/index.js`
+launch every other driver uses — so it's a genuinely different code path from
+the `app.getName()` artifact in `features/sync.md`. **Caution for next attempt:**
+a first run without `--user-data-dir` reused the machine's real, persistent
+`~/Library/Application Support/subbox-dev` profile (auto-logged-in, real
+playlists) rather than an isolated one — always pass
+`--user-data-dir=/tmp/<scratch>` to `electron.launch({ args: [...] })` when
+using `executablePath`, confirmed that isolates cleanly and a fresh login still
+lands on the same `test260526` library (playlist names match — they're
+server-side, not local). Never got to a clean repro attempt this cycle: hit an
+unrelated first-run "settings sync" restart toast
+(`error.settingsSyncError`, fires ~5s after mount whenever the main-process
+electron-store has no prior config to compare against, i.e. any fresh profile —
+see `use-sync-settings-to-main.ts`) that ate click-target space, and the driver
+hung/timed out reaching the songs list via a sidebar-text click. Ran out of
+cycle time debugging harness plumbing rather than the actual bug. Scratch probe
+script was not kept (deleted, not committed). **Still needs real interactive
+`pnpm dev` usage to confirm** — the packaged-Playwright route is not obviously
+faster than that at this point.
+
 ### (informational, not urgent) Playlist "Kodzo" has a duplicate track server-side
 
 Added: 2026-07-09. Found while validating pymix#22's new
