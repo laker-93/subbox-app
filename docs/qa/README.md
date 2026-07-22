@@ -145,7 +145,9 @@ naturally passes through it.
 - [x] `[subbox]` Sync flows (subbox-app side of pymix `/sync/*`): Download tab, both
       Electron (`features/sync.md`) and web (`features/sync.md` "WEB build" section,
       fixed issue #25) verified; watch/concurrency (`watch-download-concurrency.md`).
-      "External Drive" tab (`sync-external-drive.tsx`) still unchecked.
+      "External Drive" tab verified: `features/external-drive-sync.md` (drive is
+      compare-only by design, not a routing bug — corrects a prior misdiagnosis,
+      issue #27/PR #29).
 - [x] `[subbox]` Sync — watch vs. download concurrency: `features/watch-download-concurrency.md`, skill `test-watch-download-concurrency`
 - [x] `[subbox]` Sync — External Drive tab: `features/external-drive-sync.md` (drive is
       compare-only by design, not a routing bug — corrects a prior misdiagnosis,
