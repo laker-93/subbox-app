@@ -88,7 +88,9 @@ async function main() {
     await page.waitForTimeout(2_000);
     await page.screenshot({ path: shot('03-after-click') });
 
-    console.log(`[driver] Playwright download event: ${download ? download.suggestedFilename() : 'NONE'}`);
+    console.log(
+        `[driver] Playwright download event: ${download ? download.suggestedFilename() : 'NONE'}`,
+    );
     console.log(`[driver] page URL after click: ${page.url()}`);
     console.log(`[driver] captured download responses: ${JSON.stringify(downloadResponses)}`);
 
