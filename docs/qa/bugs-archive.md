@@ -92,3 +92,47 @@ Commit: see `claude/continuous-ux`. PR: https://github.com/laker-93/subbox-app/p
 Writeup: `features/delete-track.md`. Single-repo (subbox-app). The pymix half of
 this story — a failed delete still commits pymix's DB-row deletion, orphaning the
 file — is logged separately as pymix issue #30, and is **not** fixed.
+
+### Web build: Sync -> Download always fails (401, then would still 404) — no X-Auth on the filebrowser download link
+
+Added: 2026-07-22. Coverage: `[subbox]` Sync flows, web (non-Electron) path — never
+previously driven (the docker `player` container at `www.docker.localhost` isn't in
+pymix's CORS allowlist, so web-mode can't even log in there locally; had to drive
+it via `pnpm dev:web` on `localhost:4343`, which IS allowlisted).
+
+Issue: https://github.com/laker-93/subbox-app/issues/25
+
+**Symptom.** Clicking "Download Zip" (and the optional Rekordbox XML download) in
+the web build's Sync -> Download screen fails every time. Two stacked bugs in
+`sync-download.tsx`'s web branch of `handleDownload`:
+1. filebrowser requires a custom `X-Auth` header (`filebrowser-api.ts`) that a
+   plain `<a href>` click to a cross-origin URL can never carry — every download
+   401'd, and the click also navigated the whole SPA away to the (401) raw URL
+   since `download` is ignored cross-origin.
+2. Independently, `/sync/playlists`'s `zipPath` response omits the `.zip`
+   extension (real file is `music.zip`) — the Electron main-process path already
+   knew this and appended `.zip`; the web path used the bare name, so it would
+   still 404 even with auth fixed.
+
+**Evidence.** Live Playwright run (before fix) against `pnpm dev:web`:
+`GET .../api/raw/downloads/music -> 401`.
+
+**Fix.** Added `downloadFileFromFilebrowser()` in `sync-download.tsx`: fetches
+the file as a blob via the already-existing-but-previously-unused
+`FilebrowserController.download` (`fbApiClient` with the `X-Auth` header +
+`responseType: 'blob'`), then triggers the save from a same-origin
+`URL.createObjectURL` blob instead of a raw cross-origin href. Both the zip and
+XML downloads route through it; the zip filename is corrected to
+`${basename}.zip`, matching what the Electron main-process path already does.
+
+**Re-verified live** via `scripts/qa/web-sync-download-zip.mjs` (Chromium
+Playwright against `pnpm dev:web`, account `test260526`, playlist "Dance Mix" —
+3 tracks): `GET .../api/raw/downloads/music.zip -> 200`,
+`.../subbox_rb_export.xml -> 200`, a genuine Playwright `download` event fired
+(`music.zip`), app stayed mounted (no stray top-level navigation). `pnpm
+typecheck` clean; `pnpm lint-code` clean on the changed file (pre-existing
+unrelated lint debt in some `scripts/qa/*.mjs` files, untouched).
+
+Commit: see `claude/continuous-ux`. Issue: #25. Writeup:
+`features/sync.md` ("Download side, WEB build" section). Single-repo
+(subbox-app) — no pymix change needed.

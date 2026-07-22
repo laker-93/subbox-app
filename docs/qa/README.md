@@ -142,7 +142,10 @@ naturally passes through it.
 - [ ] `[mixed]` Settings (`/settings`) — most panes are upstream; the
       subbox-specific ones (sync/watch, pymix connection, sharing) are the ones to drive
 - [ ] `[mixed]` Action required / no-network states (`/action-required`, `/no-network`)
-- [ ] `[subbox]` Sync flows (subbox-app side of pymix `/sync/*` — see pymix-qa journal)
+- [x] `[subbox]` Sync flows (subbox-app side of pymix `/sync/*`): Download tab, both
+      Electron (`features/sync.md`) and web (`features/sync.md` "WEB build" section,
+      fixed issue #25) verified; watch/concurrency (`watch-download-concurrency.md`).
+      "External Drive" tab (`sync-external-drive.tsx`) still unchecked.
 - [x] `[subbox]` Sync — watch vs. download concurrency: `features/watch-download-concurrency.md`, skill `test-watch-download-concurrency`
 - [x] `[subbox]` Sync — External Drive tab: `features/external-drive-sync.md` (drive is
       compare-only by design, not a routing bug — corrects a prior misdiagnosis,

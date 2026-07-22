@@ -13,30 +13,6 @@ future cycle re-investigating; the archive has the detail if ever needed.
 
 ## OPEN
 
-### Web build: Sync -> Download always fails (401, then would still 404) — no X-Auth on the filebrowser download link
-
-Added: 2026-07-22. Coverage: `[subbox]` Sync flows, web (non-Electron) path — never
-previously driven (the docker `player` container at `www.docker.localhost` isn't in
-pymix's CORS allowlist, so web-mode can't even log in there locally; had to drive
-it via `pnpm dev:web` on `localhost:4343`, which IS allowlisted).
-
-Issue: https://github.com/laker-93/subbox-app/issues/25
-
-**Symptom.** Clicking "Download Zip" (and the optional Rekordbox XML download) in
-the web build's Sync -> Download screen fails every time. Two stacked bugs in
-`sync-download.tsx`'s web branch of `handleDownload`:
-1. filebrowser requires a custom `X-Auth` header (`filebrowser-api.ts`) that a
-   plain `<a href>` click to a cross-origin URL can never carry — every download
-   401'd, and the click also navigated the whole SPA away to the (401) raw URL
-   since `download` is ignored cross-origin.
-2. Independently, `/sync/playlists`'s `zipPath` response omits the `.zip`
-   extension (real file is `music.zip`) — the Electron main-process path already
-   knew this and appended `.zip`; the web path used the bare name, so it would
-   still 404 even with auth fixed.
-
-**Evidence.** Live Playwright run (before fix) against `pnpm dev:web`:
-`GET .../api/raw/downloads/music -> 401`.
-
 <!-- One entry per bug. Include: date found, journey/route it showed up on,
      repro steps, evidence (screenshot path / console error), your hypothesis
      for root cause + which repo owns it, and an `Issue: <github url>` line
@@ -151,6 +127,7 @@ false positive if seen again — it's a real, correctly-flagged case.
 <!-- One line per FIXED bug: date | title | verdict | issue/PR. Full text lives
      in bugs-archive.md, which the loop never reads. -->
 
+- 2026-07-22 | Web build Sync->Download always failed (401 no X-Auth, then would 404 on missing .zip ext) | FIXED — blob-fetch download via FilebrowserController.download + corrected filename; re-verified live via web-sync-download-zip.mjs | issue #25
 - 2026-07-21 | Watch uploader "restores UI but never re-arms watcher" on relaunch | NOT A BUG — app.tsx already auto-resumes at boot (since 2026-06-05); re-verified live via watch-resume-relaunch.mjs | issue #23 (closed not-a-bug)
 - 2026-07-14 | Delete track showed a success toast even when the delete failed | FIXED (client captured pymix's 200+`success:false` body; throws on failure) | issue #18, PR #19
 - 2026-07-22 | External Drive "Download Missing Tracks" — misdiagnosed as ignoring drivePath (it doesn't; drive is compare-only by design) | NOT A ROUTING BUG — real defect was misleading tooltip/copy claiming tracks land on the drive; fixed by rewording copy + adding Rekordbox XML export, not by changing where files are written; full writeup `features/external-drive-sync.md` | issue #27, PR #29 (supersedes closed PR #28, which had wrongly routed downloads to drivePath)

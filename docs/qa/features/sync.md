@@ -188,6 +188,50 @@ for a bare Electron launch) as a reusable diagnostic, but note its own
 limitation in its header comment so it doesn't mislead a future cycle the
 same way.
 
+## Download side, WEB build (non-Electron) — verified 2026-07-22, bug found + fixed
+
+The web build has no filesystem access, so `handleDownload` takes a completely
+separate branch in `sync-download.tsx` (`!isElectron()`): `getLocalTracks()`
+always returns `[]` (every track is always "missing" — there's no local cache to
+compare against), `syncPlan`/`syncPlaylists` are called with `localTracks: []`,
+and the resulting zip has to be downloaded **inside the browser** rather than
+via Node's filesystem.
+
+**Environment note for testing this locally:** the docker `player` container
+(`www.docker.localhost`) is a real image, but its origin is **not** in pymix's
+CORS allowlist (`registration.py`) — logging in there fails on a CORS-blocked
+`/user/login` before you can even reach Sync. `pnpm dev:web` (port 4343) **is**
+allowlisted and is the only way to drive the web build against the local pymix
+in this environment.
+
+**Bug found (issue [#25](https://github.com/laker-93/subbox-app/issues/25)),
+FIXED same cycle.** Clicking "Download Zip" (and the optional Rekordbox XML
+download) always failed, for two stacked reasons:
+1. filebrowser requires a custom `X-Auth` header (`filebrowser-api.ts`), which a
+   plain `<a href>` click to a cross-origin URL can never carry — every request
+   401'd, and since `download` is ignored cross-origin the click also navigated
+   the whole SPA away to the (401) raw filebrowser URL.
+2. `/sync/playlists`'s `zipPath` response field omits the `.zip` extension
+   (confirmed live: real file on disk is `music.zip`, `zipPath` was
+   `.../downloads/music`) — Electron's main-process path already knew to append
+   `.zip` itself; the web branch didn't, so it would still 404 even with auth
+   fixed.
+
+**Fix.** Added `downloadFileFromFilebrowser()` in `sync-download.tsx`, using the
+already-existing-but-previously-unused `FilebrowserController.download`
+(`fbApiClient` with `X-Auth` + `responseType: 'blob'`), then triggers the save
+from a same-origin `URL.createObjectURL` blob instead of a raw cross-origin
+href. Both the zip and XML downloads route through it; the zip filename is
+corrected to `${basename}.zip`.
+
+**Verified live** via `scripts/qa/web-sync-download-zip.mjs` (Chromium
+Playwright against `pnpm dev:web`, account `test260526`, playlist "Dance Mix" —
+3 tracks, kept small on purpose): before the fix, `GET
+.../api/raw/downloads/music -> 401`; after, `GET
+.../api/raw/downloads/music.zip -> 200` and `.../subbox_rb_export.xml -> 200`,
+a genuine Playwright `download` event fired (`music.zip`), and the app stayed
+mounted (no stray top-level navigation to the filebrowser origin).
+
 ## Not yet verified (next steps for a future cycle)
 
 - Warm-cache re-scan timing (does the second scan actually skip TagLib
