@@ -93,7 +93,10 @@ async function main() {
     await selectFolderButton.click();
     await page.waitForTimeout(500);
 
-    const drivePathShown = await page.getByText(destDir, { exact: false }).isVisible().catch(() => false);
+    const drivePathShown = await page
+        .getByText(destDir, { exact: false })
+        .isVisible()
+        .catch(() => false);
     console.log('drive path shown in UI:', drivePathShown);
 
     const playlistRow = page.getByText(PLAYLIST, { exact: true }).first();
@@ -121,7 +124,9 @@ async function main() {
     if (!downloadEnabled) {
         // Nothing missing (unexpected for a brand-new empty scratch dir) — bail
         // loudly rather than declaring a false pass.
-        throw new Error('Download Missing Tracks disabled — expected an empty scratch dir to show missing tracks');
+        throw new Error(
+            'Download Missing Tracks disabled — expected an empty scratch dir to show missing tracks',
+        );
     }
     await downloadButton.click();
 
@@ -142,7 +147,10 @@ async function main() {
     console.log('screenshot:', shotPath);
 
     if (result !== 'done') {
-        const bodyText = await page.locator('body').innerText().catch(() => '(unreadable)');
+        const bodyText = await page
+            .locator('body')
+            .innerText()
+            .catch(() => '(unreadable)');
         console.log('--- visible text on non-done result ---');
         console.log(bodyText.slice(0, 1500));
         console.log('--- console/page errors ---');
@@ -156,14 +164,16 @@ async function main() {
 
     await electronApp.close();
 
-    fs.rmSync(destDir, { recursive: true, force: true });
+    fs.rmSync(destDir, { force: true, recursive: true });
 
     if (audioFileCount === 0) {
         throw new Error(
             'FAIL: no audio files landed in the selected destination directory — the drivePath-ignored bug is NOT fixed',
         );
     }
-    console.log(`PASS: ${audioFileCount} audio file(s) correctly extracted into the selected destination directory`);
+    console.log(
+        `PASS: ${audioFileCount} audio file(s) correctly extracted into the selected destination directory`,
+    );
 }
 
 main().catch((err) => {
