@@ -144,6 +144,9 @@ naturally passes through it.
 - [ ] `[mixed]` Action required / no-network states (`/action-required`, `/no-network`)
 - [ ] `[subbox]` Sync flows (subbox-app side of pymix `/sync/*` — see pymix-qa journal)
 - [x] `[subbox]` Sync — watch vs. download concurrency: `features/watch-download-concurrency.md`, skill `test-watch-download-concurrency`
+- [x] `[subbox]` Sync — External Drive tab: `features/external-drive-sync.md` (drive is
+      compare-only by design, not a routing bug — corrects a prior misdiagnosis,
+      issue #27/PR #29)
 - [ ] `[subbox]` Upload music — watch-dir uploader (Sync → Watch): point it at a
       source dir, confirm tracks land in the library, tagged with `SUBBOX_ID`. Skill
       `upload-music-dev` drives this; the wishlist → Soulseek → watch-dir import path
