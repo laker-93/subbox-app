@@ -136,3 +136,48 @@ unrelated lint debt in some `scripts/qa/*.mjs` files, untouched).
 Commit: see `claude/continuous-ux`. Issue: #25. Writeup:
 `features/sync.md` ("Download side, WEB build" section). Single-repo
 (subbox-app) — no pymix change needed.
+
+### External Drive "Download Missing Tracks" — misdiagnosed as ignoring drivePath
+
+Found + corrected: 2026-07-22. See `bugs.md` Closed index and
+`features/external-drive-sync.md` for the full writeup (kept there rather than
+duplicated here since the correction itself, not a fix commit, is the record).
+Issue: https://github.com/laker-93/subbox-app/issues/27. PR:
+https://github.com/laker-93/subbox-app/pull/29 (supersedes closed PR #28).
+
+### Rekordbox metadata-only import: 401 not retried + failed import shown as success
+
+Added: 2026-07-23. Found driving the never-before-covered `[subbox]` Sync ->
+Upload (Rekordbox) metadata-only path, live against `test260526`, using a
+real XML built via a `POST /rekordbox/export` round-trip.
+
+**Bug 1.** `sync:upload-xml` (`src/main/features/core/sync/index.ts`) posted
+the XML with a bare `axios.post` and a raw `filebrowserToken` — no
+refresh-on-401 retry, unlike every sibling filebrowser call site
+(`sync:upload-from-xml`, `downloadFileFromFilebrowser`,
+`sync:start-watch`), and the renderer never passed `serverId`/`username`
+needed to refresh. Same bug class as the already-fixed issue #25.
+
+**Bug 2.** `sync-rekordbox.tsx`'s import-progress poll only checks
+`prog.in_progress`; on completion it unconditionally shows a success toast,
+ignoring `prog.result`/`prog.reason`. The "done" screen is hardcoded to a
+green success UI with no error branch, even though an existing catch path
+already does `setError(...); setStep('done')` expecting one. Live repro: a
+real (separate, server-side) pymix crash mid-import
+(`_set_metadata_from_xml` AverageBpm TypeError, pymix#37) flipped
+`GET /beets/import/progress` to `{"result":false}`, and the client showed
+"Upload Complete / Success — Imported 0 tracks" with no error indication.
+
+**Fix.** `sync:upload-xml` now builds a `createFbAuth`/`fbRequest` pair
+(renderer passes `serverId`/`username` through) for the same refresh-on-401
+retry as the sibling handlers. The poll loop now branches on `prog.result`:
+success keeps the existing toast; failure sets `error` and the "done" screen
+gets a real error branch (icon/copy matching the existing storage-exceeded
+error pattern) instead of always rendering the green success screen.
+Re-verified live via new `scripts/qa/rekordbox-metadata-import.mjs`: upload
+no longer 401s, and the (separately tracked, still-crashing server-side)
+failure now correctly renders "Import Failed" instead of a false success
+toast. typecheck + lint clean.
+
+Issue: https://github.com/laker-93/subbox-app/issues/30. PR:
+https://github.com/laker-93/subbox-app/pull/31.
