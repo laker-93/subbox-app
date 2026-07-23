@@ -45,16 +45,18 @@ the bug below, which every self-round-tripped fixture will hit.
   by code reading — the true happy path needs a fixture whose tracks all have a
   populated `AverageBpm`, which the round-tripped export can't produce; see below).
 
-## Known separate bug (not fixed here)
+## Known separate bug — FIXED 2026-07-23
 
-**pymix#37** — `rekordbox_xml_controller.py::_set_metadata_from_xml` does
+**pymix#37** (fixed, PR [laker-93/pymix#39](https://github.com/laker-93/pymix/pull/39))
+— `rekordbox_xml_controller.py::_set_metadata_from_xml` did
 `bpm={int(track.AverageBpm)}` uncaught; `AverageBpm` is `None` whenever the source
-XML omits it (which this app's own export always does), so `int(None)` raises a
-`TypeError` that aborts metadata/cue/loop processing for **every** track in the
-batch, not just the offending one. This is why the "successful import" happy path
-above couldn't be driven with a self-round-tripped fixture in this cycle — a real
-Rekordbox-authored XML (which does populate `AverageBpm`) would be needed, or the
-pymix bug fixed first. Logged in `../pymix-qa/docs/qa/bugs.md` (OPEN), issue #37.
+XML omits it (which this app's own export always does), so `int(None)` raised a
+`TypeError` that aborted metadata/cue/loop processing for **every** track in the
+batch, not just the offending one. Fixed by skipping just that track's bpm modify
+when `AverageBpm is None` (logs and continues). Re-verified live 2026-07-23 against
+`laker93/pymix:qa-local`: re-exported "Kodzo" (8 tracks, 0 `AverageBpm` attrs) and
+re-imported metadata-only via this same driver — job completed `success=True`
+("Upload Complete"), no crash. See `../pymix-qa/docs/qa/bugs-archive.md`.
 
 ## Driver notes
 
