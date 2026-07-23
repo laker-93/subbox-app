@@ -395,7 +395,7 @@ export const SyncRekordbox = () => {
     // ── Preview: playlist selection ────────────────────────────────────────
     if (step === 'preview') {
         return (
-            <Stack gap="md" p="xl" style={{ height: '100%', overflow: 'auto' }}>
+            <Stack gap="md" p="xl" style={{ height: '100%', overflow: 'hidden' }}>
                 <Group justify="space-between">
                     <TextTitle order={3}>
                         {t('page.sync.rekordbox.previewTitle', {
@@ -455,7 +455,7 @@ export const SyncRekordbox = () => {
                     </span>
                 </Tooltip>
 
-                <Stack gap="xs">
+                <Stack gap="xs" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                     {playlists.map((pl) => {
                         const key = playlistKey(pl);
                         return (
@@ -493,6 +493,7 @@ export const SyncRekordbox = () => {
                     fullWidth
                     onClick={handleUpload}
                     size="md"
+                    style={{ flexShrink: 0 }}
                     tooltip={{
                         label: metadataOnly
                             ? 'Send the selected playlists’ track info to your library without uploading any audio files.'
