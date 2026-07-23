@@ -359,6 +359,17 @@ ipcMain.handle(
             xmlPath,
         } = args;
         const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
+
+        // Same self-healing token refresh as sync:upload-xml and downloadFileFromFilebrowser
+        // — the ~2h filebrowser token can lapse mid-upload on a long-running attempt.
+        const fbAuth = createFbAuth({
+            event,
+            filebrowserUrl,
+            initialToken: filebrowserToken,
+            serverId,
+            username,
+        });
+
         const result = extractPlaylists(xmlPath);
         const selectedNames = new Set(playlistNames);
         const selectedPlaylists = collectPlaylistsByName(result, selectedNames);
@@ -396,12 +407,11 @@ ipcMain.handle(
         const xmlResourcePath = `${filebrowserUrl}/api/resources/uploads/${xmlFileName}?override=true`;
         const xmlContents = fs.readFileSync(xmlPath);
 
-        await axios.post(xmlResourcePath, xmlContents, {
-            headers: {
-                'Content-Type': 'application/xml',
-                'X-Auth': filebrowserToken,
-            },
-            httpsAgent,
+        await fbRequest(fbAuth, {
+            data: xmlContents,
+            headers: { 'Content-Type': 'application/xml' },
+            method: 'post',
+            url: xmlResourcePath,
         });
 
         // Step 2: Match tracks with pymix
@@ -595,9 +605,11 @@ ipcMain.handle(
                 const fileSize = fs.statSync(track.location).size;
                 const resourcePath = `${filebrowserUrl}/api/tus/uploads/${encodeURIComponent(stagingPath)}?override=true`;
 
-                const createResp = await axios.post(resourcePath, null, {
-                    headers: { 'upload-length': fileSize, 'X-Auth': filebrowserToken },
-                    httpsAgent,
+                const createResp = await fbRequest(fbAuth, {
+                    data: null,
+                    headers: { 'upload-length': fileSize },
+                    method: 'post',
+                    url: resourcePath,
                 });
                 if (createResp.status !== 201) {
                     throw new Error(

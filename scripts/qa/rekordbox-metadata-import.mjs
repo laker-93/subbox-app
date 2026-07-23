@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { _electron as electron } from 'playwright';
 
 import {
@@ -7,8 +9,6 @@ import {
     resolveAppEntry,
     SNAPSHOT_DIR,
 } from '../ui-snapshot-shared.mjs';
-import fs from 'fs';
-import path from 'path';
 
 // Coverage driver: subbox-app's "Rekordbox/Serato import-export UI" row (Sync ->
 // Upload (Rekordbox), metadata-only path) + pymix's POST /rekordbox/import, both
@@ -97,7 +97,10 @@ async function main() {
     console.log('clicked Select XML File (stubbed dialog resolves immediately)');
 
     // --- Preview step: confirm playlist parsed, tick metadata-only, submit ---
-    await page.getByText(/preview changes/i).first().waitFor({ timeout: 15_000 });
+    await page
+        .getByText(/preview changes/i)
+        .first()
+        .waitFor({ timeout: 15_000 });
     const badges = await page.locator('.mantine-Badge-root, [class*="Badge"]').allTextContents();
     console.log('preview badges:', badges.filter(Boolean));
 
@@ -135,7 +138,10 @@ async function main() {
     }
 
     const timedOut = finalState === null;
-    const bodyText = await page.locator('body').innerText().catch(() => '');
+    const bodyText = await page
+        .locator('body')
+        .innerText()
+        .catch(() => '');
 
     fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
     const shot = path.join(SNAPSHOT_DIR, `rekordbox-metadata-import-${Date.now()}.png`);
@@ -144,7 +150,9 @@ async function main() {
     console.log('\n--- main [Subbox]/error lines ---');
     console.log(
         mainLogs
-            .filter((l) => /rekordbox|rbimport|import|error/i.test(l) && !/Autofill|GPUCache/i.test(l))
+            .filter(
+                (l) => /rekordbox|rbimport|import|error/i.test(l) && !/Autofill|GPUCache/i.test(l),
+            )
             .slice(-40)
             .join('\n') || '(none)',
     );
@@ -153,7 +161,9 @@ async function main() {
     console.log(`  final state: ${finalState ?? 'TIMED OUT'}`);
     console.log(`  screenshot: ${shot}`);
     if (finalState === 'done' || finalState === 'error') {
-        console.log(`  final screen text (trimmed): ${bodyText.replace(/\s+/g, ' ').slice(0, 400)}`);
+        console.log(
+            `  final screen text (trimmed): ${bodyText.replace(/\s+/g, ' ').slice(0, 400)}`,
+        );
     }
 
     await electronApp.close();
