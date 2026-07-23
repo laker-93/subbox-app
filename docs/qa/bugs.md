@@ -20,6 +20,31 @@ future cycle re-investigating; the archive has the detail if ever needed.
      Step 1½). Remove an entry (move to FIXED) once actually fixed and verified,
      don't just mark it done. -->
 
+### Rekordbox metadata-only import: 401 not retried + failed import shown as success
+
+Added: 2026-07-23. Found driving the never-before-covered `[subbox]` Sync ->
+Upload (Rekordbox) metadata-only path, live against `test260526`, using a
+real XML built via a `POST /rekordbox/export` round-trip.
+
+**Bug 1.** `sync:upload-xml` (`src/main/features/core/sync/index.ts`) posted
+the XML with a bare `axios.post` and a raw `filebrowserToken` — no
+refresh-on-401 retry, unlike every sibling filebrowser call site
+(`sync:upload-from-xml`, `downloadFileFromFilebrowser`,
+`sync:start-watch`), and the renderer never passed `serverId`/`username`
+needed to refresh. Same bug class as the already-fixed issue #25.
+
+**Bug 2.** `sync-rekordbox.tsx`'s import-progress poll only checks
+`prog.in_progress`; on completion it unconditionally shows a success toast,
+ignoring `prog.result`/`prog.reason`. The "done" screen is hardcoded to a
+green success UI with no error branch, even though an existing catch path
+already does `setError(...); setStep('done')` expecting one. Live repro: a
+real (separate, server-side) pymix crash mid-import
+(`_set_metadata_from_xml` AverageBpm TypeError, pymix#37) flipped
+`GET /beets/import/progress` to `{"result":false}`, and the client showed
+"Upload Complete / Success — Imported 0 tracks" with no error indication.
+
+Issue: https://github.com/laker-93/subbox-app/issues/30
+
 ### (latent, NOT user-reachable — no issue filed by design) `PymixController.syncTracks` posts to the wrong path
 
 Added: 2026-07-22. Found while driving the pymix-qa `Sync` coverage row
