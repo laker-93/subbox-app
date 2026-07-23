@@ -175,6 +175,30 @@ function createPymixAuth(args: {
     return { getCookieHeader: () => getCookiesForUrl(args.pymixUrl), refresh };
 }
 
+/**
+ * Issue a filebrowser request that refreshes the token once on a 401 and retries —
+ * the same self-healing behaviour `createFbAuth`'s doc comment promises.
+ */
+async function fbRequest<T = any>(
+    fbAuth: FbAuth,
+    config: AxiosRequestConfig,
+    retried = false,
+): Promise<AxiosResponse<T>> {
+    try {
+        return await axios.request<T>({
+            ...config,
+            headers: { ...config.headers, 'X-Auth': fbAuth.getToken() },
+            httpsAgent,
+        });
+    } catch (err) {
+        if (!retried && isAxiosError(err) && err.response?.status === 401) {
+            const token = await fbAuth.refresh();
+            if (token) return fbRequest<T>(fbAuth, config, true);
+        }
+        throw err;
+    }
+}
+
 async function getCookiesForUrl(url: string): Promise<string> {
     const cookies = await session.defaultSession.cookies.get({ url });
     return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
@@ -650,24 +674,36 @@ ipcMain.handle(
 ipcMain.handle(
     'sync:upload-xml',
     async (
-        _event,
+        event,
         args: {
             filebrowserToken: string;
             filebrowserUrl: string;
+            serverId?: string;
+            username?: string;
             xmlPath: string;
         },
     ): Promise<void> => {
-        const { filebrowserToken, filebrowserUrl, xmlPath } = args;
+        const { filebrowserToken, filebrowserUrl, serverId, username, xmlPath } = args;
         const xmlFileName = path.basename(xmlPath);
         const xmlResourcePath = `${filebrowserUrl}/api/resources/uploads/${xmlFileName}?override=true`;
         const xmlContents = fs.readFileSync(xmlPath);
 
-        await axios.post(xmlResourcePath, xmlContents, {
-            headers: {
-                'Content-Type': 'application/xml',
-                'X-Auth': filebrowserToken,
-            },
-            httpsAgent,
+        // Same self-healing token refresh as the other filebrowser call sites
+        // (e.g. sync:upload-from-xml) — the ~2h token can already be stale by
+        // the time the user picks a file and confirms the metadata-only import.
+        const fbAuth = createFbAuth({
+            event,
+            filebrowserUrl,
+            initialToken: filebrowserToken,
+            serverId,
+            username,
+        });
+
+        await fbRequest(fbAuth, {
+            data: xmlContents,
+            headers: { 'Content-Type': 'application/xml' },
+            method: 'post',
+            url: xmlResourcePath,
         });
     },
 );

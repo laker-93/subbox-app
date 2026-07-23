@@ -160,6 +160,10 @@ export const SyncRekordbox = () => {
                 await ipc.invoke('sync:upload-xml', {
                     filebrowserToken: currentServer.fbToken,
                     filebrowserUrl: urlConfig.filebrowser,
+                    // serverId/username let the main process re-login for a fresh
+                    // filebrowser token if this upload outlives the current one.
+                    serverId: currentServer.id,
+                    username: currentServer.username,
                     xmlPath,
                 });
 
@@ -276,7 +280,13 @@ export const SyncRekordbox = () => {
 
                     if (!prog.in_progress) {
                         setStep('done');
-                        toast.success({ message: `Imported ${prog.n_tracks_processed} tracks` });
+                        if (prog.result) {
+                            toast.success({
+                                message: `Imported ${prog.n_tracks_processed} tracks`,
+                            });
+                        } else {
+                            setError(prog.reason || 'Import failed');
+                        }
                         break;
                     }
                 } catch (err: any) {
@@ -616,6 +626,29 @@ export const SyncRekordbox = () => {
                         })}
                     </Button>
                     <Button fullWidth onClick={handleReset} variant="subtle">
+                        {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
+                    </Button>
+                </Stack>
+            </Center>
+        );
+    }
+
+    // ── Done (failed) ─────────────────────────────────────────────────────
+    if (error) {
+        return (
+            <Center style={{ height: '100%' }}>
+                <Stack align="center" gap="md" maw={400}>
+                    <Icon color="warn" icon="error" size="3rem" />
+                    <TextTitle order={3}>
+                        {t('page.sync.rekordbox.importFailed', {
+                            defaultValue: 'Import Failed',
+                            postProcess: 'titleCase',
+                        })}
+                    </TextTitle>
+                    <Text c="dimmed" size="sm" ta="center">
+                        {error}
+                    </Text>
+                    <Button fullWidth onClick={handleReset} variant="filled">
                         {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
                     </Button>
                 </Stack>
