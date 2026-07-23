@@ -1,10 +1,10 @@
 # Rekordbox import — Sync → Upload (Rekordbox)
 
-Partial coverage of the `[subbox]` "Rekordbox/Serato import-export UI" README row.
+Full coverage of the `[subbox]` "Rekordbox/Serato import-export UI" README row.
 Both the **metadata-only** import sub-path and the **full track-upload** sub-path
-(non-metadata-only `sync:upload-from-xml`) are now verified — see below. The
-Serato import/export UI is **still not covered**; leave the README row unchecked
-until that's driven too.
+(non-metadata-only `sync:upload-from-xml`) are verified — see below. The Serato
+side has **no client UI at all** to drive — see "Serato: no client UI" below,
+confirmed 2026-07-23.
 
 Verified: 2026-07-23, live against the local dev stack (`test260526`,
 `laker93/pymix:qa-local`), driven end to end via
@@ -103,6 +103,25 @@ for the dedup driver) and `/tmp/qa/rekordbox-full-upload-fixture{,-uniquealbum}.
 + `/tmp/qa/audio/` (4-track fixture for the full-upload driver, seed 777). A future
 cycle wanting a truly clean (non-colliding) full-upload fixture should regenerate
 with a fresh `--seed` rather than reusing these, given the false-match finding above.
+
+## Serato: no client UI
+
+Confirmed 2026-07-23 (code trace, no driver needed — there is nothing to click):
+`PymixController.seratoDownload`/`seratoImport` (`pymix-controller.ts:247,258`)
+and their API definitions (`pymix-api.ts`) exist, but zero UI component
+references them (`grep -rn -i serato src/renderer` matches only the controller/API
+files themselves plus one marketing line on the landing page). The Sync screen's
+tab set is hardcoded to exactly four modes — `SyncTab = 'download' | 'external-drive'
+| 'upload' | 'watch'` (`sync-mode-placeholder.tsx:14`) — `'upload'` renders only
+`SyncRekordbox`; there is no fifth Serato tab or toggle anywhere. This matches
+`../pymix-qa/docs/qa/features/serato-export.md`'s finding that `seratoDownload` has
+no UI callsite, from the other side. **Nothing to drive; this half of the row is
+"verified absent," not "still needs a cycle."**
+
+Landing page (`features/home/components/landing-page.tsx:37-40`) advertises "Sync
+and convert libraries between **Serato**, Rekordbox, and more" — logged as a
+ux-note (`ux-notes.md`) since it's ambiguous whether this is inaccurate present-tense
+copy or intentional whole-platform/roadmap framing; not changed this cycle.
 
 ## Driver notes
 

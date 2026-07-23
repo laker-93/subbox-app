@@ -18,6 +18,33 @@ future cycle re-investigating; the archive has the detail if ever needed.
      find confusing/awkward and why, evidence (screenshot path), and whether
      you think it's a safe small fix or needs a design call. -->
 
+### Landing page advertises Serato sync, but the client has no Serato UI at all
+
+Added: 2026-07-23. Route: pre-login landing page (`features/home/components/landing-page.tsx:37-40`).
+Found while closing out the `[subbox]` "Rekordbox/Serato import-export UI" coverage
+row (`features/rekordbox-import.md`).
+
+**What a user sees.** Before logging in, the feature list reads "Sync and convert
+libraries between **Serato**, Rekordbox, and more." Once inside the app, the Sync
+screen has exactly four tabs — Upload (Rekordbox), Download, Watch, External Drive
+(`sync-mode-placeholder.tsx:14`) — no Serato tab, toggle, or menu item anywhere. A
+user drawn in by the Serato promise has no path to act on it client-side.
+
+**Not purely a client gap** — pymix's backend genuinely supports Serato
+(`POST /serato/export` produces real, valid `.crate` files; verified live in
+`../pymix-qa/docs/qa/features/serato-export.md`) and the client even has the
+plumbing (`PymixController.seratoDownload`/`seratoImport`), just no UI wired to
+either. So the claim isn't entirely false — it's a real, working backend feature
+with zero way to reach it from the app today.
+
+**Why not fixed.** Ambiguous, not a clean copy bug like the External Drive case
+(issue #27/PR #29, which corrected a claim about *where files land* that was
+simply wrong): here the honest fix depends on intent — is Serato UI actually on
+the roadmap (leave the copy, it's accurate-but-early) or abandoned (reword to drop
+Serato until/unless a UI ships)? That's a product decision, not something to
+infer from code. Logged, not fixed; no `qa-bug` issue (copy/scope judgment call,
+not a correctness bug).
+
 ### "Share item" context action is offered everywhere but always fails (Navidrome sharing disabled)
 
 Added: 2026-07-21. Route: any list/detail with a context menu (song, album,
