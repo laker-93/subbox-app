@@ -33,6 +33,7 @@ interface PlaylistPreview {
     name: string;
     path: string[];
     trackCount: number;
+    trackKeys: string[];
 }
 
 type SyncStep =
@@ -312,9 +313,11 @@ export const SyncRekordbox = () => {
         setMetadataOnly(false);
     }, []);
 
-    const totalSelectedTracks = playlists
-        .filter((p) => selectedPlaylists.has(playlistKey(p)))
-        .reduce((sum, p) => sum + p.trackCount, 0);
+    // Dedup across selected playlists by track key (same scheme as the upload-time
+    // trackMap in main), since a track shared by multiple playlists must only count once.
+    const totalSelectedTracks = new Set(
+        playlists.filter((p) => selectedPlaylists.has(playlistKey(p))).flatMap((p) => p.trackKeys),
+    ).size;
 
     // ── Idle: source selection ─────────────────────────────────────────────
     if (step === 'idle') {

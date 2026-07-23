@@ -27,6 +27,13 @@ export interface PlaylistPreview {
     name: string;
     path: string[];
     trackCount: number;
+    /**
+     * Dedup key (`${artist} - ${cleanName}`) for each track in the playlist that would
+     * count toward an upload, in the same scheme as the `trackMap` dedup below. Lets the
+     * renderer report a unique-track total across selected playlists instead of a raw
+     * sum of `trackCount`, which double-counts tracks shared by multiple playlists.
+     */
+    trackKeys: string[];
 }
 
 export interface UploadProgress {
@@ -188,6 +195,23 @@ function sendSessionExpired(event: Electron.IpcMainEvent | Electron.IpcMainInvok
     event.sender.send('sync:session-expired');
 }
 
+// ── Parse XML → return playlist previews ───────────────────────────────────
+
+/**
+ * Dedup key for a track, in the same scheme as the upload-time `trackMap` below.
+ * Tracks missing a name or artist are skipped there too, so this returns null for them
+ * rather than a key, so callers can drop them from both the count and the dedup set.
+ */
+function trackDedupKey(track: ParsedTrack): null | string {
+    if (!track.name || !track.artist) return null;
+    const cleanName = extractTrackName(track.name, track.artist, track.album ?? undefined);
+    return `${track.artist} - ${cleanName}`;
+}
+
+function trackKeysForPlaylist(pl: { tracks: ParsedTrack[] }): string[] {
+    return pl.tracks.map(trackDedupKey).filter((key): key is string => key !== null);
+}
+
 /**
  * Run a pymix request with the session cookie, refreshing it once on a 401 (the only
  * auth failure pymix reports). `run` must build the request from the cookie header it
@@ -208,8 +232,6 @@ async function withPymixAuth<T>(
     }
 }
 
-// ── Parse XML → return playlist previews ───────────────────────────────────
-
 ipcMain.handle(
     'sync:parse-rekordbox-xml',
     async (_event, xmlPath: string): Promise<PlaylistPreview[]> => {
@@ -218,7 +240,12 @@ ipcMain.handle(
 
         // Collect top-level playlists
         for (const pl of result.playlists) {
-            previews.push({ name: pl.name, path: [], trackCount: pl.trackCount });
+            previews.push({
+                name: pl.name,
+                path: [],
+                trackCount: pl.trackCount,
+                trackKeys: trackKeysForPlaylist(pl),
+            });
         }
 
         // Recursively collect from folders
@@ -228,7 +255,12 @@ ipcMain.handle(
         ) {
             const currentPath = [...parentPath, folder.name];
             for (const pl of folder.playlists) {
-                previews.push({ name: pl.name, path: currentPath, trackCount: pl.trackCount });
+                previews.push({
+                    name: pl.name,
+                    path: currentPath,
+                    trackCount: pl.trackCount,
+                    trackKeys: trackKeysForPlaylist(pl),
+                });
             }
             for (const sub of folder.subfolders) {
                 collectFromFolder(sub, currentPath);
@@ -242,7 +274,12 @@ ipcMain.handle(
         // Add a synthetic entry for tracks not in any playlist
         const orphanTracks = collectTracksNotInAnyPlaylist(result);
         if (orphanTracks.length > 0) {
-            previews.push({ name: NOPLAYLIST_NAME, path: [], trackCount: orphanTracks.length });
+            previews.push({
+                name: NOPLAYLIST_NAME,
+                path: [],
+                trackCount: orphanTracks.length,
+                trackKeys: trackKeysForPlaylist({ tracks: orphanTracks }),
+            });
         }
 
         return previews;
