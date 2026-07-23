@@ -1,9 +1,10 @@
-# Rekordbox import — Sync → Upload (Rekordbox), metadata-only path
+# Rekordbox import — Sync → Upload (Rekordbox)
 
-Partial coverage of the `[subbox]` "Rekordbox/Serato import-export UI" README row —
-**only the metadata-only import sub-path** is verified here. The full track-upload
-path (non-metadata-only `sync:upload-from-xml`) and the Serato import/export UI are
-**not yet covered**; leave the README row unchecked until those are driven too.
+Partial coverage of the `[subbox]` "Rekordbox/Serato import-export UI" README row.
+Both the **metadata-only** import sub-path and the **full track-upload** sub-path
+(non-metadata-only `sync:upload-from-xml`) are now verified — see below. The
+Serato import/export UI is **still not covered**; leave the README row unchecked
+until that's driven too.
 
 Verified: 2026-07-23, live against the local dev stack (`test260526`,
 `laker93/pymix:qa-local`), driven end to end via
@@ -57,6 +58,51 @@ when `AverageBpm is None` (logs and continues). Re-verified live 2026-07-23 agai
 `laker93/pymix:qa-local`: re-exported "Kodzo" (8 tracks, 0 `AverageBpm` attrs) and
 re-imported metadata-only via this same driver — job completed `success=True`
 ("Upload Complete"), no crash. See `../pymix-qa/docs/qa/bugs-archive.md`.
+
+## Full track-upload path (non-metadata-only), verified 2026-07-23
+
+Flow: same Preview step as above but "Import metadata only" left **unchecked** →
+"Upload Selected Playlists" → `ipc sync:upload-from-xml` (main process): uploads the
+XML to filebrowser, calls `POST /sync/match_tracks` per track to find which are
+already on the server, TUS-uploads only the unmatched ("missing") tracks' audio
+files, then triggers `POST /rekordbox/import`.
+
+Driven live via `scripts/qa/rekordbox-full-upload.mjs` against a fresh 4-track
+fixture (`make-test-rekordbox-xml` skill, self-contained real audio + XML, seed
+777). Confirmed **the happy path works end-to-end**: the one track genuinely new
+to the library (`match_tracks` correctly returned unmatched) uploaded via TUS with
+no 401s (PR #31's retry-on-401 fix still holds on this path too), `/rekordbox/import`
+ran, and the UI showed "Upload Complete / 1 tracks uploaded / 1 tracks imported into
+library / Success — Imported 1 tracks". Scratch track cleaned up via `DELETE /track`
+(subbox_id `f8ff35e8-5944-4e57-98d3-beb97d6b0beb`) after.
+
+**Not a subbox-app/pymix bug, but a QA-tooling footgun worth knowing:** the other 3
+of 4 fixture tracks were falsely reported `matched: true` by `/sync/match_tracks`
+against unrelated tracks left over from *earlier, unrelated* QA fixture runs (e.g.
+seed 31/42), so their audio was silently skipped from upload. Root-caused to
+`pymix/scripts/make_test_rekordbox_xml.py`: every track it ever generates gets a
+literal, shared `"(QA Fixture <seed>-<n>)"` suffix baked into the title, and draws
+artist/album from a small fixed pool — so repeated runs of this generator create
+self-colliding fake libraries. `sync.py`'s `/sync/match_tracks` uses
+`SubsonicClient.get_track_match`, which does live per-token Subsonic full-text
+search with a threshold that falls as low as 0.4 on the last tier — real user
+libraries won't have this shared-boilerplate-title collision pattern, but this test
+tool's own leftover fixtures do. Confirmed by re-running with hand-randomized,
+non-colliding album names: still 3/4 false-matched purely on title+artist overlap
+with old `(QA Fixture ...)` tracks. **Takeaway for future cycles using this
+generator for the full-upload path:** the false "already matched" result is
+expected noise from accumulated fixture debris in this shared dev library, not a
+regression to chase — a track only proves the upload path broken if it's the one
+`match_tracks` legitimately calls unmatched. No fix made (out of scope: the
+generator script lives in `../pymix`, not this worktree's `claude/continuous-ux`
+branch, and this doesn't reproduce for real users).
+
+Scratch fixtures from this cycle left in place for reuse (ephemeral `/tmp`, not
+repo-tracked): `/tmp/qa/rekordbox-overlap-fixture.xml` (6-playlist overlap fixture
+for the dedup driver) and `/tmp/qa/rekordbox-full-upload-fixture{,-uniquealbum}.xml`
++ `/tmp/qa/audio/` (4-track fixture for the full-upload driver, seed 777). A future
+cycle wanting a truly clean (non-colliding) full-upload fixture should regenerate
+with a fresh `--seed` rather than reusing these, given the false-match finding above.
 
 ## Driver notes
 
