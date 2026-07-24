@@ -415,12 +415,21 @@ ipcMain.handle(
         const trackMap = new Map<string, ParsedTrack>();
         for (const pl of selectedPlaylists) {
             for (const track of pl.tracks) {
-                if (!track.name || !track.artist) continue;
+                // Skip tracks with no usable name/artist. Trim first: a
+                // whitespace-only Name (e.g. "  ") is truthy so it slips past a
+                // plain falsy check, then extractTrackName reduces it to null —
+                // which we'd send as title:null and pymix's /sync/match_tracks
+                // rejects with a 422 that fails the *whole* batch.
+                if (!track.name?.trim() || !track.artist?.trim()) continue;
                 const cleanName = extractTrackName(
                     track.name,
                     track.artist,
                     track.album ?? undefined,
                 );
+                // extractTrackName can still return null when the title is
+                // entirely the artist/album text; such a track has nothing to
+                // match on, so drop it rather than poison the batch.
+                if (!cleanName) continue;
                 track.cleanName = cleanName;
                 const key = `${track.artist} - ${cleanName}`;
                 if (!trackMap.has(key)) {
