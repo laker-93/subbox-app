@@ -35,8 +35,8 @@ const logger = (
     ipcRenderer.send('logger', cb);
 };
 
-const download = (url: string) => {
-    ipcRenderer.send('download-url', url);
+const download = (url: string, filename?: string) => {
+    ipcRenderer.send('download-url', url, filename);
 };
 
 const checkForUpdates = (): Promise<{ updateAvailable: boolean; version?: string }> => {

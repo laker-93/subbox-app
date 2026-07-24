@@ -278,6 +278,7 @@ if (isLinux()) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let pendingDownloadFilename: string | undefined;
 let tray: null | Tray = null;
 let exitFromTray = false;
 let forceQuit = false;
@@ -524,6 +525,18 @@ async function createWindow(first = true): Promise<void> {
         }
     }
 
+    // downloadURL()'d data: URLs (e.g. the settings export) carry no path segment
+    // for Chromium to derive a filename from, so it falls back to a generic name.
+    // Give it the caller-supplied filename instead. Real http(s) downloads (e.g.
+    // song download) already get a correct filename from the response, so this
+    // only takes effect when the renderer explicitly asked for one.
+    mainWindow.webContents.session.on('will-download', (_event, item) => {
+        if (pendingDownloadFilename) {
+            item.setSavePath(path.join(app.getPath('downloads'), pendingDownloadFilename));
+            pendingDownloadFilename = undefined;
+        }
+    });
+
     electronLocalShortcut.register(mainWindow, 'Ctrl+Shift+I', () => {
         mainWindow?.webContents.openDevTools();
     });
@@ -629,7 +642,8 @@ async function createWindow(first = true): Promise<void> {
         disableMediaKeys();
     });
 
-    ipcMain.on('download-url', (_event, url: string) => {
+    ipcMain.on('download-url', (_event, url: string, filename?: string) => {
+        pendingDownloadFilename = filename;
         mainWindow?.webContents.downloadURL(url);
     });
 
