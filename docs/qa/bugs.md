@@ -20,6 +20,49 @@ future cycle re-investigating; the archive has the detail if ever needed.
      Step 1½). Remove an entry (move to FIXED) once actually fixed and verified,
      don't just mark it done. -->
 
+### Export Settings backup writes no file until the whole app is quit (Electron)
+
+Added: 2026-07-24. Route: Settings → Advanced → Export settings. Found while
+driving the never-checked `[mixed]` Settings coverage row. See `features/settings.md`.
+
+Issue: https://github.com/laker-93/subbox-app/issues/39
+
+**Observation.** Clicking "Export settings" in the Electron desktop app produces
+no visible file in `~/Downloads` while the app keeps running — confirmed via
+`fs` polling up to 60s, clicking Export twice, and forcing the window to
+foreground/focus (rules out App Nap / background throttling). The real, valid
+53KB `subbox-settings.json` only materializes the instant the app fully quits
+(file absent right before `electronApp.close()`, present right after, PID
+already dead). No toast/dialog/feedback in the meantime — a real user would
+reasonably conclude the button does nothing.
+
+**Hypothesis.** `export-import-settings.tsx`'s `onExportSettings` always uses
+`Blob` + `URL.createObjectURL` + anchor `.click()` + `URL.revokeObjectURL()`,
+regardless of `isElectron()`. That pattern is correct and proven-working for
+the **web** build (`sync-download.tsx`'s `downloadFileFromFilebrowser` is the
+same pattern, verified working, issue #25/#26). No `will-download` handler
+exists anywhere in `src/main/index.ts`; on Electron the download apparently
+never completes until the app's own shutdown forces a flush. The app already
+has a different, proven Electron download path used elsewhere:
+`download-action.tsx` → `window.api.utils.download(url)` → preload's
+`download-url` IPC → `mainWindow.webContents.downloadURL(url)`
+(`main/index.ts:632`). `export-import-settings.tsx` doesn't use it.
+
+**Why NOT fixed.** Root cause isn't pinned to the exact Chromium/Electron
+mechanism (ruled out focus/App Nap and zombie processes across 6+ trials), and
+a fix touches shared main-process download plumbing also used by the
+song-download feature — needs care to avoid regressing that proven path, plus
+a slower rebuild+relaunch verify loop than fit this cycle. Suggested fix
+shape: branch `onExportSettings` on `isElectron()`; route the Electron case
+through a `data:application/json` URL + the existing `download-url` IPC
+instead of blob+anchor (likely needs a new `will-download` handler to force
+the saved filename, since a `data:` URL carries no `Content-Disposition`).
+Keep the web build on the current blob approach.
+
+**Also verified (separately, working correctly):** Import Settings — flip a
+setting, import the exported file, diff screen renders, confirm applies it,
+setting correctly reverts to the imported value, success message shown.
+
 ### (latent, NOT user-reachable — no issue filed by design) `PymixController.syncTracks` posts to the wrong path
 
 Added: 2026-07-22. Found while driving the pymix-qa `Sync` coverage row
