@@ -471,18 +471,28 @@ ipcMain.handle(
             title: t.cleanName,
         }));
 
-        const matchResponse = await withPymixAuth<{
-            tracks: Array<{ artist: string; matched: boolean; title: string }>;
-        }>(pymixAuth, (cookie) =>
-            axios.post(
-                `${pymixUrl}/sync/match_tracks`,
-                { tracks: clientTracks },
-                { headers: { Cookie: cookie }, httpsAgent },
-            ),
-        );
+        // Chunk the match request so no single call can exceed Cloudflare's ~100s edge
+        // timeout (the 524 seen on large libraries). Each chunk matches its tracks
+        // server-side concurrently, so a chunk of this size stays well within the limit
+        // regardless of total library size; the server also preserves per-chunk order.
+        const MATCH_CHUNK_SIZE = 500;
+        const matchedTracks: Array<{ artist: string; matched: boolean; title: string }> = [];
+        for (let i = 0; i < clientTracks.length; i += MATCH_CHUNK_SIZE) {
+            const chunk = clientTracks.slice(i, i + MATCH_CHUNK_SIZE);
+            const matchResponse = await withPymixAuth<{
+                tracks: Array<{ artist: string; matched: boolean; title: string }>;
+            }>(pymixAuth, (cookie) =>
+                axios.post(
+                    `${pymixUrl}/sync/match_tracks`,
+                    { tracks: chunk },
+                    { headers: { Cookie: cookie }, httpsAgent },
+                ),
+            );
+            matchedTracks.push(...matchResponse.data.tracks);
+        }
 
         const missingTracks: Array<{ artist: string; title: string }> = [];
-        for (const track of matchResponse.data.tracks) {
+        for (const track of matchedTracks) {
             if (track.matched === false) {
                 missingTracks.push(track);
             }
