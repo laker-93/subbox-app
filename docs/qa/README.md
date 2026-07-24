@@ -129,10 +129,10 @@ naturally passes through it.
 - [x] `[upstream]` Library — albums — grid → detail → play → Now Playing: `features/albums-browse-and-play.md`
 - [x] `[upstream]` Library — artists — grid → album-artist detail → discography/top-songs → play: `features/artists-browse.md` (role-only-artist friction in ux-notes)
 - [ ] `[upstream]` Library — album artists (`/library/album-artists`, detail)
-- [x] `[upstream]` Library — songs — list render + play-from-list: `features/songs-browse-and-play.md` (OPEN issue #38: player-bar un-favorite often doesn't visually update — bugs.md)
+- [x] `[upstream]` Library — songs — list render + play-from-list: `features/songs-browse-and-play.md` (player-bar favorite toggle verified both directions; issue #38 closed not-reproducible)
 - [x] `[upstream]` Library — genres — grid → detail → album/track toggle → play: `features/genres-browse.md`
 - [ ] `[upstream]` Library — folders (`/library/folders`)
-- [ ] `[upstream]` Favorites (`/favorites`) — list *rendering* verified (tail of songs journey); the add/remove *toggle* is unverified (player-bar toggle has a confirmed bug, issue #38 — the `/favorites` page's own toggle UI, likely a different code path, is still untested).
+- [ ] `[upstream]` Favorites (`/favorites`) — list *rendering* verified (tail of songs journey); the player-bar toggle is now verified reliable both directions (issue #38 closed not-reproducible), but the `/favorites` page's own add/remove toggle UI, likely a different code path, is still untested.
 - [x] `[mixed]` Playlists — add-to-playlist + sync-download: `features/playlist-add-and-download.md`
 - [x] `[subbox]` Delete a track — `DELETE {pymix}/track` by `subbox_id`: `features/delete-track.md` (fixed false-success toast #18/#19; do **not** hand-roll `beet remove` — that's the no-`subboxid` fallback only)
 - [x] `[upstream]` Now playing queue — tail of albums journey: `features/albums-browse-and-play.md` (NB `/playing` is a dead orphaned route, not a bug)

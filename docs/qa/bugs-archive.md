@@ -181,3 +181,51 @@ toast. typecheck + lint clean.
 
 Issue: https://github.com/laker-93/subbox-app/issues/30. PR:
 https://github.com/laker-93/subbox-app/pull/31.
+
+### Player-bar favorite button: removing a favorite often doesn't visually update — NOT REPRODUCIBLE ON RE-CHECK
+
+Logged: 2026-07-11, re-investigated and confirmed 2026-07-24 (earlier that same
+day), then re-investigated again 2026-07-24 (this cycle) and closed as not
+currently reproducible.
+Issue: https://github.com/laker-93/subbox-app/issues/38 (closed not-reproducible)
+
+**Original finding (earlier 2026-07-24 cycle).** Rewrote `_probe-fav.mjs` to
+locate the button by its SVG heart-path signature and click live coordinates.
+Across 9 fresh-launch trials, every click fired exactly one `star.view`/
+`unstar.view` request (200) — not inert — but the icon's visual state only
+reliably reflected an ADD (4/4 clean). REMOVE failed to visually update in 3/5
+trials, staying "favorited" indefinitely with no self-correction. Static review
+of `create-favorite-mutation.ts`/`delete-favorite-mutation.ts` found no
+asymmetry that would explain the skew; filed as a race not pinned down.
+
+**Re-investigation (this cycle).** Instrumented the actual runtime path with
+temporary `console.log` calls: `audio-players.tsx`'s `handleFavorite` (payload +
+resulting `getCurrentSong()` state) and `right-controls.tsx`'s `FavoriteButton`
+render (id/uniqueId/userFavorite on every render). Rebuilt
+(`electron-vite build --mode development`) and ran `_probe-fav.mjs` repeatedly:
+
+- 13 runs, then 3 more (16 total) with instrumentation live, capturing the full
+  page-console trace via a `page.on('console')` listener added to the probe —
+  **16/16 correct** (icon fill matched the mutation direction every time, both
+  add and remove).
+- Reverted the instrumentation, rebuilt clean, ran 5 more — **5/5 correct**
+  (21/21 overall, 8 of which were REMOVE trials).
+
+Traced logs on every trial showed the expected sequence with no anomaly:
+`handleFavorite` fires once per click with the correct payload,
+`updateQueueFavorites` flips `userFavorite` on the matching queue song
+immediately, and `FavoriteButton` re-renders 2-3 times afterward each showing
+the new, correct value. No asymmetry, no race, no missed re-render observed in
+any trial.
+
+**Verdict.** Under the previously-measured ~60% failure rate, 8/8 clean REMOVE
+trials in a row has <0.2% probability by chance — the original failures are not
+reproducing now. Root cause of the *original* 3/5 failures was never pinned down
+(possibly a transient condition — machine load, a stale build predating a
+same-day rebase, or genuine environment flakiness in the earlier cycle's run),
+but it is not present in this codebase as currently checked out. Closed issue
+#38 as not-reproducible rather than fixed (no code change was needed — or
+possible, since nothing wrong was found). Instrumentation was reverted, not
+shipped. `features/songs-browse-and-play.md` updated to reflect the toggle as
+verified. If this resurfaces, re-run `_probe-fav.mjs` several times fresh and
+note any correlation with system load or a specific build.

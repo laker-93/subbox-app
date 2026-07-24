@@ -51,15 +51,24 @@ pointing at the local stack) with `scripts/qa/songs-favorites-journey.mjs` +
   heart-path `d` signature and clicks live-computed coordinates — reliable
   across 9 fresh-launch trials.
 
-## Confirmed bug (see bugs.md, issue #38)
+## Favorites toggle round-trip — re-verified 2026-07-24, NOT reproducible (issue #38 closed)
 
-The player-bar favorite button reliably fires a real `star.view`/`unstar.view`
-request on every click (the earlier "completely inert, 0 requests" hypothesis
-was a false lead from the old hover-tooltip finder, and is retracted). But
-un-favoriting the now-playing track fails to visually update the icon in ~60%
-of trials (3/5) — it keeps showing "favorited" indefinitely — while favoriting
-is reliable (4/4). Root cause not yet nailed down (see `bugs.md` for the
-hypothesis); not fixed this cycle, tracked as issue #38.
+A prior cycle (same day) found un-favoriting the now-playing track failed to
+visually update the icon in ~60% of trials (3/5), filed issue #38. Re-investigated
+by instrumenting the actual code path (`console.log` in `audio-players.tsx`'s
+`handleFavorite`, `right-controls.tsx`'s `FavoriteButton` render) and re-running
+`_probe-fav.mjs` against a fresh rebuild: **21/21 fresh-launch trials (8 add, 8
+remove with instrumentation logging the exact request/state/render sequence, plus
+5 more add/remove on a clean non-instrumented rebuild) all updated correctly** —
+every click fired exactly one `star.view`/`unstar.view` request, `updateQueueFavorites`
+flipped `userFavorite` on the matching queue song, and `FavoriteButton` re-rendered
+with the correct `fill` every time. Under the previously-measured 60% failure rate,
+8/8 clean remove trials has <0.2% probability of occurring by chance — strong
+evidence whatever caused the original failures (machine load, a stale build, or
+some other transient condition) is not present now. Closed issue #38 as
+not-reproducible; instrumentation was reverted (not shipped), no product code
+changed. If this resurfaces, re-run `_probe-fav.mjs` several times fresh and check
+whether it correlates with system load or a specific build.
 
-Coverage: **Songs list render + play — verified.** **Favorites toggle round-trip
-— confirmed buggy** (add works; remove often doesn't reflect — issue #38).
+Coverage: **Songs list render + play — verified. Favorites toggle round-trip —
+verified** (both add and remove reliably update the UI as of this re-check).
