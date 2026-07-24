@@ -139,8 +139,9 @@ naturally passes through it.
 - [ ] `[upstream]` Radio (`/radio`)
 - [x] `[upstream]` Search — Tracks/Albums/Artists tabs + no-match/empty-query edges: `features/search.md` (2 ux-notes)
 - [x] `[subbox]` Wishlist — full CRUD journey: `features/wishlist.md` (client correct; surfaced pymix #31 resolve-overwrite). Sub-flows still unchecked: bulk actions, parse-link/collection create, inbox items, Google-Sheet sync, match-youtube.
-- [ ] `[mixed]` Settings (`/settings`) — most panes are upstream; the
-      subbox-specific ones (sync/watch, pymix connection, sharing) are the ones to drive
+- [x] `[mixed]` Settings (`/settings`) — all 5 tabs render content; subbox-specific
+      Export/Import settings backup (Advanced tab) driven live: `features/settings.md`
+      (found + fixed issue #39, Electron export never completed until app quit)
 - [ ] `[mixed]` Action required / no-network states (`/action-required`, `/no-network`)
 - [x] `[subbox]` Sync flows (subbox-app side of pymix `/sync/*`): Download tab, both
       Electron (`features/sync.md`) and web (`features/sync.md` "WEB build" section,

@@ -229,3 +229,56 @@ possible, since nothing wrong was found). Instrumentation was reverted, not
 shipped. `features/songs-browse-and-play.md` updated to reflect the toggle as
 verified. If this resurfaces, re-run `_probe-fav.mjs` several times fresh and
 note any correlation with system load or a specific build.
+
+### Export Settings backup writes no file until the whole app is quit (Electron)
+
+Added: 2026-07-24. Fixed: 2026-07-25. Route: Settings → Advanced → Export
+settings. Found while driving the never-checked `[mixed]` Settings coverage
+row. See `features/settings.md`.
+
+Issue: https://github.com/laker-93/subbox-app/issues/39
+
+**Observation.** Clicking "Export settings" in the Electron desktop app produced
+no visible file in `~/Downloads` while the app kept running — confirmed via
+`fs` polling up to 60s, clicking Export twice, and forcing the window to
+foreground/focus (rules out App Nap / background throttling). The real, valid
+53KB `subbox-settings.json` only materialized the instant the app fully quit
+(file absent right before `electronApp.close()`, present right after, PID
+already dead). No toast/dialog/feedback in the meantime — a real user would
+reasonably conclude the button does nothing.
+
+**Root cause.** `export-import-settings.tsx`'s `onExportSettings` always used
+`Blob` + `URL.createObjectURL` + anchor `.click()` + `URL.revokeObjectURL()`,
+regardless of `isElectron()`. That pattern is correct and proven-working for
+the **web** build (`sync-download.tsx`'s `downloadFileFromFilebrowser` is the
+same pattern, verified working, issue #25/#26). No `will-download` handler
+existed anywhere in `src/main/index.ts`; on Electron the download apparently
+never completed until the app's own shutdown forced a flush. The app already
+had a different, proven Electron download path used elsewhere:
+`download-action.tsx` → `window.api.utils.download(url)` → preload's
+`download-url` IPC → `mainWindow.webContents.downloadURL(url)`
+(`main/index.ts:632`). `export-import-settings.tsx` didn't use it.
+
+**Fix.** Branched `onExportSettings` on `isElectron()`: the Electron path
+base64-encodes the settings JSON into a `data:application/json;base64,...`
+URL and sends it through the proven `window.api.utils.download` → IPC →
+`webContents.downloadURL` pipeline (now passing an explicit filename through
+that channel). Added a `will-download` handler on the main window's session
+(`src/main/index.ts`) that calls `item.setSavePath(...)` with the
+caller-supplied filename when one is provided — needed because a `data:` URL
+carries no `Content-Disposition`/path segment for Chromium to derive a
+filename from, unlike the real HTTP download URLs the song-download feature
+downloads (which already get a correct filename from the response and are
+unaffected by this change, since they pass no filename). The web build is
+untouched — still the original blob/anchor pattern.
+
+**Re-verified live.** `scripts/qa/settings-journey.mjs` post-fix: export
+button click → real file `~/Downloads/subbox-settings.json` appears in ~300ms
+while the app keeps running (previously: absent even after 60s of polling,
+only appeared on app quit) → valid JSON, correct size (53083 bytes), correct
+top-level keys. typecheck clean, lint clean on changed files
+(`export-import-settings.tsx`, `src/main/index.ts`, `src/preload/utils.ts`).
+
+**Also verified (separately, working correctly, unaffected by this fix):**
+Import Settings — flip a setting, import the exported file, diff screen
+renders, confirm applies it, setting correctly reverts to the imported value.
