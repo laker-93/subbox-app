@@ -202,6 +202,14 @@ filler when the subbox areas were all exercised recently.
   Record the PR URL in this `bugs.md` `FIXED` entry. **Never merge, never
   force-push a shared branch.** The user merges on GitHub; the next daily run
   rebases this branch onto the updated `development` to pull the merged code in.
+  **Keep the fix commit code-only** (`src/`, not `docs/qa/`): `docs/qa/*` on
+  `development` is a stale, infrequently-synced snapshot, so a commit that
+  bundles product code with journal edits (bugs.md/log.md/features/*.md) will
+  often fail `open-pr.sh`'s cherry-pick with a conflict (e.g. a modify/delete on
+  `bugs-archive.md`, which may not exist on `development` at all). Commit the
+  journal update separately (before or after the PR) — this repo's history is
+  full of exactly this split (e.g. a `fix(...)` commit + a following `qa:
+  journal — ... (PR #N)` commit).
 - **Every bug gets a GitHub issue, and a closed issue means it's fixed.** When you
   log a bug OPEN in `bugs.md`, file a tracking issue with
   `../subbox-workspace/qa-runner/open-issue.sh <this worktree> "<title>" "<body>"
