@@ -8,46 +8,54 @@ import {
     waitForRouteSettled,
 } from '../ui-snapshot-shared.mjs';
 
-// Focused probe: does clicking the player-bar FavoriteButton actually issue a
-// star.view/unstar.view request, and does the button's own DOM state reflect
-// the current song's favorite status? Decides bug-vs-measurement-artifact for
-// the songs-favorites journey. Reads button state from the DOM (icon fill),
-// not the racy hover tooltip, and captures network at the *request* level.
+// Probe for the player-bar FavoriteButton (right-controls.tsx). Locates it by
+// its SVG path signature (the LuHeart icon's `d` attribute) rather than the
+// portalled hover tooltip — the original version of this probe used a
+// hover+tooltip-text finder plus a snapshot elementHandle click, which proved
+// unreliable (button "NOT FOUND" or a stale-handle click landing wrong,
+// producing false "0 requests fired" readings). This version reads the
+// button's live geometry via page.evaluate and clicks fresh coordinates each
+// time, then watches BOTH the network response and the icon's `fill`
+// attribute (primary = favorited) over several checkpoints so a real
+// no-visual-update case can't be mistaken for "hasn't happened yet".
+//
+// Live-driven finding (2026-07-24, 9 runs): clicking always fires exactly one
+// star.view/unstar.view request (200) — the button is NOT inert. But the
+// icon's visual state only reliably reflects an ADD (star.view): 4/4 clean
+// updates within 200ms. A REMOVE (unstar.view) fails to visually update ~60%
+// of the time (3/5) despite the request succeeding — the icon stays showing
+// "favorited" indefinitely (no correction even after further playback
+// re-renders). See bugs.md for the full write-up.
 
 const MAIN_ENTRY = resolveAppEntry();
 const log = (...a) => console.log('[probe-fav]', ...a);
-
-// The player FavoriteButton is only identifiable via its portalled hover
-// tooltip ("Favorite"/"Unfavorite") — same finder the journey uses. Returns the
-// live button handle + tooltip text (favorited === tooltip "Unfavorite").
-async function findFavButton(page) {
-    await page.keyboard.press('Escape').catch(() => {});
-    await page.mouse.move(5, 5).catch(() => {});
-    await page.waitForTimeout(150);
-    const buttons = await page.locator('button').elementHandles();
-    const vh = page.viewportSize()?.height ?? 900;
-    for (const btn of buttons) {
-        const box = await btn.boundingBox().catch(() => null);
-        if (!box || box.y < vh - 140) continue;
-        await btn.hover({ timeout: 1500 }).catch(() => {});
-        await page.waitForTimeout(150);
-        const tip = await page
-            .getByRole('tooltip')
-            .first()
-            .textContent()
-            .catch(() => null);
-        if (tip && /^(un)?favorite$/i.test(tip.trim())) {
-            return { box, handle: btn, tooltip: tip.trim() };
-        }
-    }
-    return null;
-}
 
 async function goto(page, route) {
     await page.evaluate((r) => {
         window.location.hash = `#${r}`;
     }, route);
     return waitForRouteSettled(page);
+}
+
+function findFavBox(page) {
+    return page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button')).filter((b) => {
+            const r = b.getBoundingClientRect();
+            return Math.round(r.y) === 841;
+        });
+        // Favorite button = the one whose svg path is the LuHeart shape.
+        const heart = buttons.find((b) =>
+            b.querySelector('svg path')?.getAttribute('d')?.startsWith('M19 14c1.49'),
+        );
+        if (!heart) return null;
+        const svg = heart.querySelector('svg');
+        const r = heart.getBoundingClientRect();
+        return {
+            fill: svg?.getAttribute('fill') || null,
+            x: r.x + r.width / 2,
+            y: r.y + r.height / 2,
+        };
+    });
 }
 
 async function main() {
@@ -58,12 +66,11 @@ async function main() {
     });
     const page = await app.firstWindow();
 
-    const netLog = [];
-    page.on('request', (req) => {
-        const u = req.url();
-        if (/star\.view|unstar\.view|\/star|\/unstar/.test(u)) {
-            netLog.push(u.replace(/([?&])(u|p|s|t|c)=[^&]*/g, '$1$2=***'));
-            log('REQ', u.replace(/([?&])(u|p|s|t|c)=[^&]*/g, '$1$2=***'));
+    const responses = [];
+    page.on('response', (res) => {
+        const u = res.url();
+        if (/star\.view|unstar\.view/.test(u)) {
+            responses.push({ status: res.status(), url: u });
         }
     });
 
@@ -94,59 +101,28 @@ async function main() {
         await goto(page, '/library/songs');
     }
 
-    // Play a data row. ag-grid's role=row wrapper is 0-height so its boundingBox
-    // is meaningless (every row reports the same top-of-grid box) — instead
-    // double-click at an absolute on-screen y well down the list to land on a
-    // real-metadata track (rows 7+ in test260526 have proper tags; rows 1-6 are
-    // stripped "_unknown" QA scratch imports). ~y=640 hits the "1 on 1" track.
-    const playX = 650;
-    const playY = Number(process.env.PLAY_Y || 640);
-    await page.mouse.dblclick(playX, playY);
+    await page.mouse.dblclick(650, Number(process.env.PLAY_Y || 640));
     await page.waitForTimeout(3000);
 
-    const playing = await page.evaluate(() => {
-        const a = document.querySelector('audio');
-        const bar = document.querySelector('[class*="playerbar" i], [class*="PlayerBar" i]');
-        return {
-            bar: bar?.textContent?.trim()?.slice(0, 100) || null,
-            paused: a?.paused ?? null,
-            t: a ? Number(a.currentTime.toFixed(1)) : null,
-        };
-    });
-    log('playing?', JSON.stringify(playing));
-
-    const before = await findFavButton(page);
-    log(
-        'fav button before click:',
-        before ? JSON.stringify({ tooltip: before.tooltip }) : 'NOT FOUND',
-    );
+    const before = await findFavBox(page);
+    log('before:', JSON.stringify(before));
     if (!before) {
-        log('no fav button found — abort');
+        log('heart button not found by path signature — abort');
         await app.close();
-        return;
+        process.exit(1);
     }
 
-    // Click the found button handle directly and watch for a star/unstar request.
-    const netBefore = netLog.length;
-    await before.handle.click({ timeout: 3000 });
-    await page.waitForTimeout(2500);
-    const after = await findFavButton(page);
-    log(
-        'fav button after click:',
-        after ? JSON.stringify({ tooltip: after.tooltip }) : 'NOT FOUND',
-    );
-    log(`star/unstar requests fired by this click: ${netLog.length - netBefore}`);
+    await page.mouse.click(before.x, before.y);
 
-    // Toggle back only if the click actually fired a request (kept state honest).
-    if (netLog.length - netBefore > 0) {
-        const b2 = await findFavButton(page);
-        if (b2) await b2.handle.click({ timeout: 3000 });
-        await page.waitForTimeout(2000);
-        log(`total star/unstar requests after revert click: ${netLog.length - netBefore}`);
+    for (const wait of [200, 500, 1000, 2000, 4000]) {
+        await page.waitForTimeout(wait);
+        const state = await findFavBox(page);
+        log(`+${wait}ms fill=`, state?.fill, 'responses so far:', JSON.stringify(responses));
     }
 
     await app.close();
     log('done');
+    process.exit(0);
 }
 main().catch((e) => {
     console.error(e);

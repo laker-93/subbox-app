@@ -44,88 +44,49 @@ fix (wiring up an actual caller) has different requirements than guessed here.
 **Fix it when a UI callsite for the lenient matcher is wired up, alongside
 that change, not now.** No `qa-bug` issue by design (nothing a user hits).
 
-### (unconfirmed — needs real-usage repro) Player-bar favorite button appears inert for the now-playing song
+### Player-bar favorite button: removing a favorite often doesn't visually update
 
-Added: 2026-07-11. Found on the Library → Songs → play → Favorites journey
-(`scripts/qa/songs-favorites-journey.mjs` + `scripts/qa/_probe-fav.mjs`),
-account `test260526`.
+Added: 2026-07-11, re-investigated and confirmed 2026-07-24. Route: player bar,
+any playing song. Driver `scripts/qa/_probe-fav.mjs` (rewritten this cycle —
+see below), account `test260526`.
 
-**Symptom (reproduced across 3 runs).** While a track plays, the player-bar
-FavoriteButton (`right-controls.tsx` `FavoriteButton`, tooltip
-"Favorite"/"Unfavorite") shows the current song as **un-favorited even for
-tracks that are already starred** (present in `/favorites`). Clicking it does
-not flip its state, and the favorites list is unchanged after a supposed
-add/remove. In `_probe-fav.mjs`, clicking the button (via its found handle)
-fired **0** `star.view`/`unstar.view` **requests** (captured at the request
-level) and the tooltip stayed "Favorite".
+Issue: https://github.com/laker-93/subbox-app/issues/38
 
-**Evidence.**
-- Journey run: now-playing scratch track "00 - _unknown - _unknown.4" was in
-  `/favorites` (present-after-add = true), yet button tooltip read "Favorite"
-  through both the add and the remove clicks; favorites row count stayed 12,
-  track still present after "remove".
-- Probe run: track playing (`audio.paused=false`), button found, click → **0**
-  star/unstar requests, no state change. Endpoint confirmed as `star.view` /
-  `unstar.view` (`subsonic-api.ts:28,270`), so the driver's matcher would have
-  caught a real request.
+**The original "completely inert" hypothesis is NOT reproducible and is
+retracted.** It rested on a hover+tooltip button finder that itself proved
+unreliable (found the control 3/4 runs previously; this cycle it was NOT FOUND
+2/2 times using the old script, and the process hung after failing to find
+it). Rewrote the probe to locate the button by its SVG heart-path signature
+(`d` starts `"M19 14c1.49"`) instead of the racy portalled tooltip, and to
+click computed live coordinates rather than a snapshot `elementHandle`.
 
-**Hypothesis.** The favorite wiring itself is correct (create-favorite mutation
-→ `USER_FAVORITE` event → `audio-players.tsx` → `updateQueueFavorites`; and
-`subsonic-normalize.ts:209` sets `userFavorite` from `starred`). The only way a
-click fires **no** request is `handleToggleFavorite`/`handleAddToFavorites`
-hitting the `if (!song?.id) return` guard — i.e. `usePlayerSong()` /
-`getCurrentSong()` returns an **undefined or id-less** current song at click
-time (the button still renders, and its tooltip falls to "Favorite" when
-`currentSong?.userFavorite` is undefined), even though audio plays via the
-separate player1/player2 path. That would also explain the never-filled icon.
+**Confirmed finding, 9 fresh-launch trials against the real dev stack:** every
+click fires exactly one real `star.view`/`unstar.view` request (200) — the
+button is not inert. But the visual result is asymmetric:
+- **Add (`star.view`): 4/4 trials** — icon fill flips to "primary" (favorited)
+  within 200ms, every time.
+- **Remove (`unstar.view`): 2/5 trials** correct; **3/5 trials** the icon kept
+  showing "favorited" through 200ms/500ms/1s/2s/4s checkpoints and never
+  self-corrected (checked across further playback re-renders too).
 
-**Why NOT filed as a GitHub issue / fixed this cycle.**
-1. **Only observed under the Playwright bare-`out/main` launch.** This harness
-   has produced a launch-specific *false lead* before (the `app.getName()` /
-   userData-path artifact — see `features/sync.md`, log 2026-07-09 13:35). The
-   known artifact is narrow (getName/userData) and doesn't obviously touch the
-   renderer player store, so this is *more* likely real than that one — but it
-   still must be confirmed in real `pnpm dev`/packaged usage before treating it
-   as a product defect.
-2. **Flaky repro.** The hover-tooltip button finder found the control in 3 of 4
-   runs (1 NOT-FOUND), and the "0 requests" result was captured once. A stable
-   locator is needed to nail it down.
+**Hypothesis (not confirmed as root cause).** Both `create-favorite-mutation.ts`
+and `delete-favorite-mutation.ts` emit `USER_FAVORITE` synchronously in
+`onMutate`, consumed by `audio-players.tsx` → `updateQueueFavorites`
+(`player.store.ts`) to mutate the matching queue song's `userFavorite`;
+`usePlayerSong()`'s selector equality includes `userFavorite`, so a real
+change should always re-render. Static review of both mutation files found no
+asymmetry between add/remove that would explain the skew — this looks like an
+intermittent race (a `favoriteSongs` query-invalidation refetch or similar
+racing the optimistic event?) rather than a missing wire-up, but needs actual
+tracing (e.g. temporary logging around `updateQueueFavorites`/`getCurrentSong`)
+to pin down.
 
-**Next step (for a future cycle or the user).** Confirm in a real
-`pnpm dev`/packaged session: play a track that IS favorited and check whether
-the player-bar heart shows filled/"Unfavorite"; then toggle it and watch for a
-`star.view`/`unstar.view` request. If it reproduces there, file a `qa-bug`
-issue and it's a real single-repo (subbox-app) fix; if it doesn't, it's another
-harness artifact — document alongside the sync.md one and close. **No issue
-filed yet by design** — see reasoning above; do not auto-backfill one until
-confirmed in real usage.
-
-**2026-07-21 attempt (inconclusive, no issue filed).** Tried the packaged-app
-route to rule out the harness explanation: `electron-vite build --mode
-development` + `electron-builder --dir` (unsigned, arm64, `--config.mac.identity=null`
-— arm64 electron-builder warns signing is normally required but the unsigned
-`.app` still launches fine locally), then Playwright `_electron.launch` with
-`executablePath` pointing at the real `Subbox.app` binary. Confirmed this route
-resolves the **real** app identity (`app.getName()` → `subbox`, matching
-`productName` in `electron-builder.yml`) unlike the bare `out/main/index.js`
-launch every other driver uses — so it's a genuinely different code path from
-the `app.getName()` artifact in `features/sync.md`. **Caution for next attempt:**
-a first run without `--user-data-dir` reused the machine's real, persistent
-`~/Library/Application Support/subbox-dev` profile (auto-logged-in, real
-playlists) rather than an isolated one — always pass
-`--user-data-dir=/tmp/<scratch>` to `electron.launch({ args: [...] })` when
-using `executablePath`, confirmed that isolates cleanly and a fresh login still
-lands on the same `test260526` library (playlist names match — they're
-server-side, not local). Never got to a clean repro attempt this cycle: hit an
-unrelated first-run "settings sync" restart toast
-(`error.settingsSyncError`, fires ~5s after mount whenever the main-process
-electron-store has no prior config to compare against, i.e. any fresh profile —
-see `use-sync-settings-to-main.ts`) that ate click-target space, and the driver
-hung/timed out reaching the songs list via a sidebar-text click. Ran out of
-cycle time debugging harness plumbing rather than the actual bug. Scratch probe
-script was not kept (deleted, not committed). **Still needs real interactive
-`pnpm dev` usage to confirm** — the packaged-Playwright route is not obviously
-faster than that at this point.
+**Why NOT fixed this cycle.** Root cause isn't confidently identified — only a
+reproducible symptom plus a disproven alternate hypothesis — so it doesn't meet
+the conservative "confidently root-caused, fully verifiable" bar. Logged with a
+tracking issue for a future cycle or the user to pick up; the rewritten probe
+script is the reusable repro tool (run it a handful of times to see the ~60%
+remove-side failure rate).
 
 ### (informational, not urgent) Playlist "Kodzo" has a duplicate track server-side
 
