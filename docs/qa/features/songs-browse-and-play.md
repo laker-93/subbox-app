@@ -44,23 +44,22 @@ pointing at the local stack) with `scripts/qa/songs-favorites-journey.mjs` +
   starts playback via the header **Play** button (reliable) with a
   coordinate-dblclick fallback; `_probe-fav.mjs` double-clicks at a fixed
   screen `y` to land on a real-metadata row.
-- The **player-bar FavoriteButton** is only locatable via its portalled hover
-  tooltip ("Favorite"/"Unfavorite") — the icon is a react-icons `LuHeart` SVG
-  with no text/aria, and inline row hearts carry no tooltip. The hover-scan
-  finder is **somewhat flaky** (found it in 3 of 4 runs); a stable locator is
-  still an open tooling gap.
+- The **player-bar FavoriteButton** is a react-icons `LuHeart` SVG with no
+  text/aria and inline row hearts carry no tooltip either. The original
+  hover-tooltip finder was unreliable (flaky NOT-FOUND, stale-handle clicks).
+  `_probe-fav.mjs` (rewritten 2026-07-24) instead locates it by its SVG
+  heart-path `d` signature and clicks live-computed coordinates — reliable
+  across 9 fresh-launch trials.
 
-## Open anomaly (NOT verified as a real bug — see bugs.md)
+## Confirmed bug (see bugs.md, issue #38)
 
-The player-bar favorite button did **not** reflect the now-playing song's
-server-side favorite state, and one network probe showed clicking it fired
-**zero** `star.view` requests and changed nothing. This is logged OPEN in
-`bugs.md` ("Player-bar favorite button appears inert for the now-playing
-song") with the full evidence, the competing hypotheses, and the caveat that it
-must be confirmed in real `pnpm dev`/packaged usage (not just the Playwright
-bare-`out/main` launch) before filing/fixing — this harness has produced a
-launch-specific false lead before (see `sync.md`).
+The player-bar favorite button reliably fires a real `star.view`/`unstar.view`
+request on every click (the earlier "completely inert, 0 requests" hypothesis
+was a false lead from the old hover-tooltip finder, and is retracted). But
+un-favoriting the now-playing track fails to visually update the icon in ~60%
+of trials (3/5) — it keeps showing "favorited" indefinitely — while favoriting
+is reliable (4/4). Root cause not yet nailed down (see `bugs.md` for the
+hypothesis); not fixed this cycle, tracked as issue #38.
 
 Coverage: **Songs list render + play — verified.** **Favorites toggle round-trip
-— NOT verified** (list rendering is; the add/remove interaction is the open
-anomaly above).
+— confirmed buggy** (add works; remove often doesn't reflect — issue #38).
