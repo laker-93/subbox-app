@@ -20,6 +20,37 @@ future cycle re-investigating; the archive has the detail if ever needed.
      Step 1½). Remove an entry (move to FIXED) once actually fixed and verified,
      don't just mark it done. -->
 
+### (latent, NOT user-reachable — no issue filed by design) `/action-required` route + its entire component tree are dead code
+
+Added: 2026-07-25. Found while closing out the `[mixed]` "Action required /
+no-network states" coverage row (`features/no-network-and-action-required.md`).
+
+**Observation.** `AppRoute.ACTION_REQUIRED` (`/action-required`) and its full
+component tree (`features/action-required/routes/action-required-route.tsx` +
+`action-required-container.tsx` + `server-credential-required.tsx` +
+`server-required.tsx`) are never mounted: `grep -rn "AppRoute.ACTION_REQUIRED"
+src/` finds zero hits outside the enum declaration, and `app-router.tsx`'s
+`<Routes>` tree has no `<Route path={AppRoute.ACTION_REQUIRED}>` and never
+lazy-imports the route component (it does mount its sibling `NoNetworkRoute`
+from the same folder). The scenarios this component was built to cover — no
+server (`ServerRequired`), server-with-no-credential
+(`ServerCredentialRequired`, with a log-off action) — are instead fully
+handled by `AppOutlet` rendering `LandingPage` + `PymixAuthModal` directly
+whenever `!currentServer`, a different (subbox-specific) flow that never
+navigates here.
+
+**Why NOT filed / fixed.** No live symptom — nothing a user does reaches this
+code, so there's no correctness bug with a repro. Unlike the `syncTracks`/
+serato-`playlistIds` dead-surface findings (dormant call paths one UI wiring
+change away from firing), this looks like code fully **superseded** by
+`AppOutlet`'s later pymix-auth-modal flow, not paused-pending-a-caller — so
+the natural resolution is deletion, not a future wire-up. Not done this cycle:
+deleting is a 4-file cleanup/refactor call, not a small bug fix (and
+`ServerCredentialRequired`'s "log off" affordance has no equivalent in the
+`AppOutlet` flow, so it isn't a strict no-op removal) — outside the
+conservative "bug fixes and small UX improvements only" bar. No `qa-bug` issue
+by design (nothing a user hits).
+
 ### (latent, NOT user-reachable — no issue filed by design) `PymixController.syncTracks` posts to the wrong path
 
 Added: 2026-07-22. Found while driving the pymix-qa `Sync` coverage row

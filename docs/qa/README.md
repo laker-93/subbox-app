@@ -142,7 +142,9 @@ naturally passes through it.
 - [x] `[mixed]` Settings (`/settings`) — all 5 tabs render content; subbox-specific
       Export/Import settings backup (Advanced tab) driven live: `features/settings.md`
       (found + fixed issue #39, Electron export never completed until app quit)
-- [ ] `[mixed]` Action required / no-network states (`/action-required`, `/no-network`)
+- [x] `[mixed]` Action required / no-network states — `/no-network` verified end-to-end
+      (real network failure → retry → redirect, credentials preserved, Retry recovers);
+      `/action-required` confirmed dead/unreachable code, not fixed: `features/no-network-and-action-required.md`
 - [x] `[subbox]` Sync flows (subbox-app side of pymix `/sync/*`): Download tab, both
       Electron (`features/sync.md`) and web (`features/sync.md` "WEB build" section,
       fixed issue #25) verified; watch/concurrency (`watch-download-concurrency.md`).
