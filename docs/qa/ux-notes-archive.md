@@ -35,7 +35,7 @@ control in `features/genres-browse.md`) — that stays a separate design call.
 **Verified live.** Built with `electron-vite build --mode development`, launched
 via Playwright, navigated to `/wishlist`: `getByRole('button', { name: 'add to
 wishlist' })` now resolves to exactly 1 element (previously 0). `pnpm lint-code`
-and `pnpm typecheck` clean.
+and `pnpm typecheck` clean. PR https://github.com/laker-93/subbox-app/pull/43.
 
 **Knock-on for QA.** `wishlist-journey.mjs` still anchors to the "Offline
 Wishlist" button and takes its next sibling rather than querying by role/name —

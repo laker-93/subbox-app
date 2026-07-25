@@ -196,4 +196,4 @@ touches an upstream Feishin pattern. Needs a design call; logged, not fixed.
      in ux-notes-archive.md, which the loop never reads. -->
 
 - 2026-07-09 | First "Preview Download" click after launch 400s once then silently retries | RESOLVED (working as designed — pymix session-lapse reauth-and-retry; also in features/sync.md)
-- 2026-07-25 | Wishlist header "+" button had no accessible name | IMPROVED — added `aria-label` using existing `action.addToWishlist` string; re-verified live (role query now resolves)
+- 2026-07-25 | Wishlist header "+" button had no accessible name | IMPROVED — added `aria-label` using existing `action.addToWishlist` string; re-verified live (role query now resolves) | PR https://github.com/laker-93/subbox-app/pull/43
