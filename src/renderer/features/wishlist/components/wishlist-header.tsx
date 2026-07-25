@@ -51,6 +51,9 @@ export const WishlistHeader = () => {
                         {t('page.wishlist.offlineWishlist.title', { postProcess: 'titleCase' })}
                     </Button>
                     <ActionIcon
+                        aria-label={
+                            t('action.addToWishlist', { postProcess: 'sentenceCase' }) as string
+                        }
                         icon="add"
                         iconProps={{ size: 'lg' }}
                         onClick={openCreateWishlistModal}
