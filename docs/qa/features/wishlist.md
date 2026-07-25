@@ -66,11 +66,12 @@ match"; no URL at all → "Match preview" (`POST /wishlist/{id}/match-youtube`).
 
 ## Driver gotchas (cost real time — don't re-derive)
 
-- **The header "+" button has no accessible name** — it's an icon-only `ActionIcon` with a
-  tooltip but no `aria-label`, so `getByRole('button', {name: …})` can't find it, and
-  `button[data-variant="default"]` also matches the *disabled player-bar* controls. The
-  driver anchors to the "Offline Wishlist" button and takes its next sibling. Logged as
-  friction in `ux-notes.md`.
+- **Fixed 2026-07-25:** the header "+" button now has `aria-label="add to
+  wishlist"` (`wishlist-header.tsx`), so `getByRole('button', { name: 'add to
+  wishlist' })` resolves it directly — re-verified live. `wishlist-journey.mjs`
+  still anchors to the "Offline Wishlist" button's next sibling (not touched this
+  cycle) but could be simplified to the role query if the driver is revisited.
+  See `ux-notes-archive.md` (IMPROVED) for the full writeup.
 - **Label is "Edit details", not "Edit entry"** (`action.editWishlistItem` = `'edit details'`).
   Likewise the create submit is "Create" and the edit submit is "Save".
 - **pymix's resolve loop rewrites hand-typed scratch text within a cycle or two** (that's
