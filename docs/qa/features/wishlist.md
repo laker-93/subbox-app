@@ -2,7 +2,9 @@
 
 Verified: 2026-07-14, driven end-to-end against the local dev stack with
 `scripts/qa/wishlist-journey.mjs` (account `test260526`, dev-mode Electron build).
-Backend half: `../pymix-qa/docs/qa/features/wishlist-api.md`.
+Sub-flows (bulk actions, parse-link, sheet-status badge) re-verified 2026-07-26,
+`scripts/qa/wishlist-bulk-and-sheet.mjs`. Backend half:
+`../pymix-qa/docs/qa/features/wishlist-api.md`.
 
 Subbox-only surface — no upstream Feishin equivalent. The wishlist is "tracks I want but
 don't have yet": add by hand or by link, `subbox-slskd` hunts them on Soulseek, and a
@@ -63,6 +65,35 @@ the client's perspective except that the row's text changes on its own.
 The match/edit block above the status buttons varies by source: a Bandcamp URL → "Open on
 Bandcamp"; SoundCloud → an embedded player; YouTube → an embedded video + "Find another
 match"; no URL at all → "Match preview" (`POST /wishlist/{id}/match-youtube`).
+
+## Sub-flows re-verified 2026-07-26 (`wishlist-bulk-and-sheet.mjs`)
+
+1. **Sheet sync status badge.** Read-only check: the header's error-colored badge
+   icon appears whenever `GET /wishlist/sheet/status` reports `status: 'error'`,
+   and its tooltip surfaces the server's `error` string verbatim. Confirmed live
+   against this account's real broken sheet link (`404 Requested entity was not
+   found` — the linked Google Sheet is deleted/unshared) — badge visible, tooltip
+   text matched exactly.
+2. **Bulk actions.** Selecting 2 rows (checkboxes) surfaces `WishlistBulkActions`;
+   "Mark downloaded" fires one `PATCH` per selected row (not a single batched
+   call) and both transition correctly; bulk delete fires one `DELETE` per row
+   and both are gone client + server-side. Selection is cleared after each bulk
+   action (re-select needed between steps — not a bug, matches the self-healing
+   selection behavior already documented above).
+3. **Parse-link single-track prefill.** Pasting a link and blurring the field
+   resolves via `resolveLink` and fills Artist/Title. **Found + fixed a real bug
+   here** (issue #44): `create-wishlist-modal.tsx`'s Link `TextInput` set
+   `onBlur={handleLinkBlur}` *before* spreading `{...form.getInputProps('link')}`;
+   the spread's own validation `onBlur` silently overwrote it, so the prefill
+   never fired. Fixed by reordering so `handleLinkBlur` runs after the spread.
+   Re-verified live: pasting a stable YouTube link and blurring now correctly
+   fills `artist="Rick Astley" title="Never Gonna Give You Up"` (previously both
+   stayed empty).
+
+Still unchecked: collection-link create (a playlist/album URL that expands to
+multiple items), inbox items, a full Google-Sheet sync round-trip (only the
+status-badge half was driven — no sheet was actually linked/synced), and
+match-youtube.
 
 ## Driver gotchas (cost real time — don't re-derive)
 

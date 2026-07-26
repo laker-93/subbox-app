@@ -138,7 +138,7 @@ naturally passes through it.
 - [x] `[upstream]` Now playing queue — tail of albums journey: `features/albums-browse-and-play.md` (NB `/playing` is a dead orphaned route, not a bug)
 - [ ] `[upstream]` Radio (`/radio`)
 - [x] `[upstream]` Search — Tracks/Albums/Artists tabs + no-match/empty-query edges: `features/search.md` (2 ux-notes)
-- [x] `[subbox]` Wishlist — full CRUD journey: `features/wishlist.md` (client correct; surfaced pymix #31 resolve-overwrite). Sub-flows still unchecked: bulk actions, parse-link/collection create, inbox items, Google-Sheet sync, match-youtube.
+- [x] `[subbox]` Wishlist — full CRUD journey: `features/wishlist.md` (client correct; surfaced pymix #31 resolve-overwrite). Bulk actions + single-track parse-link prefill + sheet-status-badge now also verified live (issue #44 found+fixed). Sub-flows still unchecked: collection-link create, inbox items, full Google-Sheet sync, match-youtube.
 - [x] `[mixed]` Settings (`/settings`) — all 5 tabs render content; subbox-specific
       Export/Import settings backup (Advanced tab) driven live: `features/settings.md`
       (found + fixed issue #39, Electron export never completed until app quit)

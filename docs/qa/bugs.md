@@ -20,25 +20,6 @@ future cycle re-investigating; the archive has the detail if ever needed.
      Step 1½). Remove an entry (move to FIXED) once actually fixed and verified,
      don't just mark it done. -->
 
-### Wishlist create modal: link parse-link prefill never fires
-
-Added: 2026-07-26 (recovered from an uncommitted, unjournaled crashed cycle — see
-`log.md`). Route: Wishlist → "+" create modal, Link field. Driver
-`scripts/qa/wishlist-bulk-and-sheet.mjs` Part 3.
-
-Issue: https://github.com/laker-93/subbox-app/issues/44
-
-**Observation.** Pasting a link (e.g. YouTube) into the create-item modal's Link
-field and blurring should prefill Artist/Title from the resolved metadata
-(`resolveLink`) — this is the client-side "parse-link" sub-flow the wishlist README
-row flagged unchecked. `create-wishlist-modal.tsx`'s Link `TextInput` set
-`onBlur={handleLinkBlur}` **before** spreading `{...form.getInputProps('link')}`.
-`form.getInputProps` supplies its own `onBlur` (for field validation); since JSX
-prop spread order matters (later wins), the spread silently overwrote
-`handleLinkBlur`, so it never ran — the fields just stayed empty on blur.
-
-**Fix in progress this cycle:** reorder so `handleLinkBlur` comes after the spread.
-
 ### (latent, NOT user-reachable — no issue filed by design) `/action-required` route + its entire component tree are dead code
 
 Added: 2026-07-25. Found while closing out the `[mixed]` "Action required /
@@ -126,3 +107,4 @@ false positive if seen again — it's a real, correctly-flagged case.
 - 2026-07-23 | Rekordbox metadata-only import: filebrowser 401 not retried + failed import shown as success toast | FIXED — sync:upload-xml now uses createFbAuth/fbRequest retry; poll loop + done screen now branch on prog.result/error; re-verified live via new rekordbox-metadata-import.mjs | issue #30, PR #31
 - 2026-07-24 | Player-bar favorite button: removing a favorite often doesn't visually update | NOT REPRODUCIBLE on re-check — 21/21 fresh trials (8 REMOVE) correct with full request/state/render tracing; original 3/5 remove-failure cause unknown, not present now; no code change | issue #38 (closed not-reproducible)
 - 2026-07-25 | Export Settings backup wrote no file until the whole app was quit (Electron) | FIXED — onExportSettings now routes Electron through window.api.utils.download (data: URL + will-download handler names the file); re-verified live via settings-journey.mjs (export lands in ~300ms, was previously stuck until app quit) | issue #39, PR #40
+- 2026-07-26 | Wishlist create modal: link parse-link prefill never fired (onBlur silently overwritten by form.getInputProps spread) | FIXED — reordered so handleLinkBlur runs after the spread; re-verified live via wishlist-bulk-and-sheet.mjs (artist/title now prefill from a pasted YouTube link) | issue #44

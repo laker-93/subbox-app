@@ -282,3 +282,30 @@ top-level keys. typecheck clean, lint clean on changed files
 **Also verified (separately, working correctly, unaffected by this fix):**
 Import Settings — flip a setting, import the exported file, diff screen
 renders, confirm applies it, setting correctly reverts to the imported value.
+
+## 2026-07-26 | Wishlist create modal: link parse-link prefill never fires (FIXED, issue #44)
+
+Route: Wishlist → "+" create modal, Link field. Driver
+`scripts/qa/wishlist-bulk-and-sheet.mjs` Part 3. Recovered from an uncommitted,
+unjournaled crashed cycle (fix + driver already existed in the working tree at
+this cycle's start with no journal trace; verified and journaled properly here).
+
+**Observation.** Pasting a link (e.g. YouTube) into the create-item modal's Link
+field and blurring should prefill Artist/Title from the resolved metadata
+(`resolveLink`) — the client-side "parse-link" sub-flow the wishlist README row
+flagged unchecked. `create-wishlist-modal.tsx`'s Link `TextInput` set
+`onBlur={handleLinkBlur}` **before** spreading `{...form.getInputProps('link')}`.
+`form.getInputProps` supplies its own `onBlur` (for field validation); since JSX
+prop spread order matters (later wins), the spread silently overwrote
+`handleLinkBlur`, so it never ran — the fields just stayed empty on blur.
+
+**Fix.** Reordered the JSX so `handleLinkBlur` is spread-then-set (comes after
+`{...form.getInputProps('link')}`), so it wins over the form's own `onBlur`.
+
+**Re-verified live.** `wishlist-bulk-and-sheet.mjs` Part 3: pasted a stable
+YouTube link (Rick Astley — Never Gonna Give You Up), blurred the field —
+`artist="Rick Astley" title="Never Gonna Give You Up"` now correctly prefill
+(previously both stayed empty). Also re-verified Part 1 (sheet-status error
+badge/tooltip matches server verbatim) and Part 2 (bulk mark-downloaded + bulk
+delete, one PATCH/DELETE per selected row) pass cleanly. typecheck + lint clean
+on the one changed file.
