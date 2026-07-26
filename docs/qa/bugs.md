@@ -20,6 +20,25 @@ future cycle re-investigating; the archive has the detail if ever needed.
      Step 1½). Remove an entry (move to FIXED) once actually fixed and verified,
      don't just mark it done. -->
 
+### Wishlist create modal: link parse-link prefill never fires
+
+Added: 2026-07-26 (recovered from an uncommitted, unjournaled crashed cycle — see
+`log.md`). Route: Wishlist → "+" create modal, Link field. Driver
+`scripts/qa/wishlist-bulk-and-sheet.mjs` Part 3.
+
+Issue: https://github.com/laker-93/subbox-app/issues/44
+
+**Observation.** Pasting a link (e.g. YouTube) into the create-item modal's Link
+field and blurring should prefill Artist/Title from the resolved metadata
+(`resolveLink`) — this is the client-side "parse-link" sub-flow the wishlist README
+row flagged unchecked. `create-wishlist-modal.tsx`'s Link `TextInput` set
+`onBlur={handleLinkBlur}` **before** spreading `{...form.getInputProps('link')}`.
+`form.getInputProps` supplies its own `onBlur` (for field validation); since JSX
+prop spread order matters (later wins), the spread silently overwrote
+`handleLinkBlur`, so it never ran — the fields just stayed empty on blur.
+
+**Fix in progress this cycle:** reorder so `handleLinkBlur` comes after the spread.
+
 ### (latent, NOT user-reachable — no issue filed by design) `/action-required` route + its entire component tree are dead code
 
 Added: 2026-07-25. Found while closing out the `[mixed]` "Action required /
