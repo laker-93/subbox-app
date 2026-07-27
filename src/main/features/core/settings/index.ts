@@ -13,7 +13,11 @@ const getFrame = () => {
     }
 
     if (isMacOS) {
-        return 'macOS';
+        // Must match Platform.MACOS ('macos') exactly: useSyncSettingsToMain
+        // string-compares this default against the renderer's value, so 'macOS' here
+        // made every first launch on macOS report a spurious settings discrepancy
+        // and show the "restart required" toast.
+        return 'macos';
     }
 
     return 'linux';
