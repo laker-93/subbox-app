@@ -150,7 +150,10 @@ naturally passes through it.
       fixed issue #25) verified; watch/concurrency (`watch-download-concurrency.md`).
       "External Drive" tab verified: `features/external-drive-sync.md` (drive is
       compare-only by design, not a routing bug — corrects a prior misdiagnosis,
-      issue #27/PR #29).
+      issue #27/PR #29). Sync-plan classification (no false "missing locally" on
+      duplicate-`subbox_id`/no-album-folder tracks) re-verified live 2026-07-27, no
+      regression: `features/sync-plan-classification.md`, skill
+      `test-sync-plan-matching`.
 - [x] `[subbox]` Sync — watch vs. download concurrency: `features/watch-download-concurrency.md`, skill `test-watch-download-concurrency`
 - [x] `[subbox]` Sync — External Drive tab: `features/external-drive-sync.md` (drive is
       compare-only by design, not a routing bug — corrects a prior misdiagnosis,
