@@ -70,6 +70,7 @@ export const SyncRekordbox = () => {
     const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
     const [jobId, setJobId] = useState<null | string>(null);
     const [uploadResult, setUploadResult] = useState<null | {
+        failed?: Array<{ reason: string; trackName: string }>;
         skipped: number;
         totalTracksInXml?: number;
         uploaded: number;
@@ -168,7 +169,7 @@ export const SyncRekordbox = () => {
                     xmlPath,
                 });
 
-                setUploadResult({ skipped: 0, uploaded: 0 });
+                setUploadResult({ failed: [], skipped: 0, uploaded: 0 });
             } else {
                 // Pre-flight storage check (renderer-side, works for both Electron and web)
                 try {
@@ -687,8 +688,25 @@ export const SyncRekordbox = () => {
                                 <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
                                 {uploadResult.skipped > 0 && (
                                     <Text c="dimmed" size="sm">
-                                        {uploadResult.skipped} tracks skipped (files not found)
+                                        {uploadResult.skipped} tracks skipped
+                                        {uploadResult.failed && uploadResult.failed.length > 0
+                                            ? ` (${uploadResult.failed.length} failed to upload, rest not found or already uploaded)`
+                                            : ' (files not found)'}
                                     </Text>
+                                )}
+                                {uploadResult.failed && uploadResult.failed.length > 0 && (
+                                    <Stack align="center" gap={2}>
+                                        {uploadResult.failed.map((f) => (
+                                            <Text
+                                                c="dimmed"
+                                                key={f.trackName}
+                                                size="xs"
+                                                ta="center"
+                                            >
+                                                {f.trackName}: {f.reason}
+                                            </Text>
+                                        ))}
+                                    </Stack>
                                 )}
                                 {importProgress && (
                                     <Text size="sm">
