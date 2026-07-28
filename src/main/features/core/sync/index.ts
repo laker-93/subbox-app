@@ -45,6 +45,9 @@ export interface UploadProgress {
 }
 
 export interface UploadResult {
+    /** Tracks whose upload failed server-side (e.g. a TUS create rejection) rather
+     *  than being skipped for a known local reason (missing file, already uploaded). */
+    failed: Array<{ reason: string; trackName: string }>;
     skipped: number;
     totalTracksInXml: number;
     uploaded: number;
@@ -561,6 +564,9 @@ ipcMain.handle(
 
         let uploadedCount = 0;
         let skippedCount = 0;
+        // Per-track TUS create/upload failures (e.g. a transient filebrowser error)
+        // land here instead of aborting the whole batch — see the worker loop below.
+        const failedTracks: Array<{ reason: string; stagingPath: string; trackName: string }> = [];
         const originalTrackMetaData: Array<{
             originalAlbum: null | string;
             originalArtist: null | string;
@@ -600,7 +606,14 @@ ipcMain.handle(
             // already used for playlist/folder names. The file extension is a
             // controlled value (path.extname) so it's left as-is. This is the same
             // value sent to /sync/map_meta below, so server-side tagging still matches.
-            const stagingPath = `${sanitizeName(track.artist)}/${sanitizeName(track.album)}/${sanitizeName(track.cleanName)}${track.fileExtension}`;
+            // Album is optional in Rekordbox exports (white labels, promos, single-track
+            // downloads) — sanitizeName(undefined) is '', which would otherwise collapse
+            // to an empty path component ("Artist//Title.mp3") that filebrowser 404s on.
+            const stagingPath = [
+                sanitizeName(track.artist),
+                sanitizeName(track.album) || 'Unknown Album',
+                `${sanitizeName(track.cleanName)}${track.fileExtension}`,
+            ].join('/');
             uploadableTracks.push({ stagingPath, track, trackName });
 
             originalTrackMetaData.push({
@@ -699,18 +712,37 @@ ipcMain.handle(
                 emitUploadingProgress(trackName);
             };
 
-            // Run with bounded concurrency
+            // Run with bounded concurrency. A single track's upload failure must not
+            // sink the whole batch: it's caught here, counted as skipped, and recorded
+            // with its reason, instead of rejecting Promise.all(workers) below and
+            // aborting every other in-flight and queued track.
             const queue = [...tracksToUpload];
             const workers = Array.from({ length: CONCURRENCY }, async () => {
                 while (queue.length > 0) {
                     const item = queue.shift()!;
-                    await uploadTrack(item);
+                    try {
+                        await uploadTrack(item);
+                    } catch (err) {
+                        activeUploads.delete(item.trackName);
+                        completedCount++;
+                        skippedCount++;
+                        const reason = err instanceof Error ? err.message : String(err);
+                        failedTracks.push({
+                            reason,
+                            stagingPath: item.stagingPath,
+                            trackName: item.trackName,
+                        });
+                        console.warn(`Upload failed for "${item.trackName}", skipping:`, err);
+                        emitUploadingProgress();
+                    }
                 }
             });
             await Promise.all(workers);
         }
 
-        // Step 4: Map metadata
+        // Step 4: Map metadata. Tracks whose upload failed above never landed on the
+        // server, so mapping metadata onto them would target a nonexistent file —
+        // exclude them by the same stagingPath used to build originalTrackMetaData.
         sendProgress({
             currentTrack: '',
             phase: 'mapping-metadata',
@@ -718,10 +750,15 @@ ipcMain.handle(
             uploaded: uploadedCount,
         });
 
+        const failedStagingPaths = new Set(failedTracks.map((f) => f.stagingPath));
+        const trackMetaDataToMap = originalTrackMetaData.filter(
+            (m) => !failedStagingPaths.has(m.stagingLocation),
+        );
+
         await withPymixAuth(pymixAuth, (cookie) =>
             axios.post(
                 `${pymixUrl}/sync/map_meta`,
-                { tracks: originalTrackMetaData },
+                { tracks: trackMetaDataToMap },
                 { headers: { Cookie: cookie }, httpsAgent },
             ),
         );
@@ -733,7 +770,12 @@ ipcMain.handle(
             uploaded: uploadedCount,
         });
 
-        return { skipped: skippedCount, totalTracksInXml: totalTracks, uploaded: uploadedCount };
+        return {
+            failed: failedTracks.map(({ reason, trackName }) => ({ reason, trackName })),
+            skipped: skippedCount,
+            totalTracksInXml: totalTracks,
+            uploaded: uploadedCount,
+        };
     },
 );
 
