@@ -109,7 +109,15 @@ function parseNodes<T, R>(nodes: Node[], callback: (node: T) => R): R[] {
 function parseTrack(track: Track): ParsedTrack {
     let location = decodeURIComponent(track.getAttribute('Location') || '');
     location = location.replace(/^file:\/\/localhost/, '');
-    location = path.resolve(location);
+
+    // Rekordbox on Windows encodes paths as file://localhost/C:/... — the leading
+    // slash before the drive letter isn't part of the real path. Left in place,
+    // path.resolve() treats "C:" as a literal folder under root instead of a
+    // drive letter, so the file never resolves and gets skipped as "not found".
+    const windowsDriveMatch = location.match(/^\/([A-Za-z]:.*)$/);
+    location = windowsDriveMatch
+        ? path.win32.resolve(windowsDriveMatch[1])
+        : path.resolve(location);
 
     return {
         album: track.getAttribute('Album') || null,
