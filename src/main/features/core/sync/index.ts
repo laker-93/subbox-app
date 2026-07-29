@@ -672,7 +672,12 @@ ipcMain.handle(
                 trackName,
             }: (typeof tracksToUpload)[number]) => {
                 const fileSize = fs.statSync(track.location).size;
-                const resourcePath = `${filebrowserUrl}/api/tus/uploads/${encodeURIComponent(stagingPath)}?override=true`;
+                // Encode each path segment individually so `/` separators remain real slashes in
+                // the URL. Using encodeURIComponent on the whole path encodes `/` as `%2F` which
+                // causes filebrowser to track the TUS upload state at a different URL than the
+                // one the client uses for HEAD/PATCH, producing 404s on resume.
+                const encodedStagingPath = stagingPath.split('/').map(encodeURIComponent).join('/');
+                const resourcePath = `${filebrowserUrl}/api/tus/uploads/${encodedStagingPath}?override=true`;
 
                 const createResp = await fbRequest(fbAuth, {
                     data: null,
@@ -685,6 +690,19 @@ ipcMain.handle(
                         `Failed to create TUS upload for "${trackName}": ${createResp.status}`,
                     );
                 }
+
+                // Use the Location header returned by the server as the canonical TUS upload URL.
+                // The creation URL (with ?override=true) is only for creation; HEAD/PATCH must
+                // use the URL the server assigned to the upload. The header is server-root-relative
+                // and already includes filebrowser's own base path (e.g. "/browser/api/tus/..." when
+                // VITE_FILEBROWSER_URL is ".../browser") — resolve it against the origin only, not
+                // the full filebrowserUrl, or that base path gets doubled.
+                const rawLocation = createResp.headers['location'] as string | undefined;
+                const uploadUrl = rawLocation
+                    ? rawLocation.startsWith('http')
+                        ? rawLocation
+                        : `${new URL(filebrowserUrl).origin}${rawLocation}`
+                    : resourcePath;
 
                 await new Promise<void>((resolve, reject) => {
                     const fileStream = fs.createReadStream(track.location);
@@ -701,7 +719,7 @@ ipcMain.handle(
                         },
                         onSuccess: () => resolve(),
                         uploadSize: fileSize,
-                        uploadUrl: resourcePath,
+                        uploadUrl: uploadUrl,
                     });
                     uploader.start();
                 });
