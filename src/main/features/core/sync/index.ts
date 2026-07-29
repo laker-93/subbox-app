@@ -693,12 +693,15 @@ ipcMain.handle(
 
                 // Use the Location header returned by the server as the canonical TUS upload URL.
                 // The creation URL (with ?override=true) is only for creation; HEAD/PATCH must
-                // use the URL the server assigned to the upload.
+                // use the URL the server assigned to the upload. The header is server-root-relative
+                // and already includes filebrowser's own base path (e.g. "/browser/api/tus/..." when
+                // VITE_FILEBROWSER_URL is ".../browser") — resolve it against the origin only, not
+                // the full filebrowserUrl, or that base path gets doubled.
                 const rawLocation = createResp.headers['location'] as string | undefined;
                 const uploadUrl = rawLocation
                     ? rawLocation.startsWith('http')
                         ? rawLocation
-                        : `${filebrowserUrl}${rawLocation}`
+                        : `${new URL(filebrowserUrl).origin}${rawLocation}`
                     : resourcePath;
 
                 await new Promise<void>((resolve, reject) => {
