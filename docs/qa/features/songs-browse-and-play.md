@@ -72,3 +72,16 @@ whether it correlates with system load or a specific build.
 
 Coverage: **Songs list render + play — verified. Favorites toggle round-trip —
 verified** (both add and remove reliably update the UI as of this re-check).
+
+## Row-level favorite toggle (table list) — separate code path, OPEN bug (issue #53)
+
+Not to be confused with the player-bar `FavoriteButton` above. The **table list's own
+inline heart icon** (`USER_FAVORITE` column, `favorite-column.tsx`, visible on
+`/library/songs` and `/favorites` row-hover) is a different component/data path
+(`item._serverId` off the row's own list-query data, not `currentSong`). Confirmed
+2026-07-29: clicking it silently no-ops — `getServerById(item._serverId)` returns
+undefined because the row's `_serverId` doesn't match the live `serverList`, so the
+create/delete-favorite mutation throws before any network call, with no toast and no
+visible feedback. Root cause of the `_serverId` mismatch itself not pinned down (see
+`bugs.md` OPEN entry + issue #53 for full evidence). Driver:
+`scripts/qa/favorites-row-toggle.mjs`.
