@@ -13,6 +13,72 @@ future cycle re-investigating; the archive has the detail if ever needed.
 
 ## OPEN
 
+### Row-level favorite heart icon (list views) silently no-ops — `item._serverId` doesn't match the live server
+
+Added: 2026-07-29. Route: any table list with the `USER_FAVORITE` column (`/library/songs`,
+`/favorites`, etc). Resumed from a multi-day abandoned/uncommitted investigation found
+uncommitted at cycle start (a chain of `_debug-*.mjs`/`_fav-click-test*.mjs` scratch scripts
+dated 2026-07-26 through 2026-07-29, plus an uncommitted temporary `console.log` in
+`favorite-column.tsx` — no journal trace, evidently a run of crashed cycles chasing this same
+symptom under the "player-bar favorite button" framing). Driver:
+`scripts/qa/favorites-row-toggle.mjs` (recovered/cleaned up this cycle, was
+`favorites-row-toggle-v2.mjs`).
+
+**What a user sees.** Clicking the row's own inline heart icon (in the table list, as
+opposed to the player-bar `FavoriteButton`) to add or remove a favorite does **nothing**:
+no visible state change, no toast, no network request — a fully silent no-op. Confirmed via
+`.ui-snapshots/qa-fav-toast-check-1785285454378.png` (no toast rendered) and a
+`page.on('request')` listener that saw zero `star.view`/`unstar.view` (or any
+favorite-shaped) request in the 800ms+ after the click, across 3 separate runs (2 fresh-login,
+1 plain resume of an existing session).
+
+**Root cause (confirmed, but not fully pinned to a trigger).** Instrumented
+`favorite-column.tsx`'s `onClick` with a temporary `console.log` (now reverted) and confirmed:
+the click handler DOES fire, `props.controls.onFavorite` IS present, and the row item has a
+real `id` and `_serverId`. But `controller.ts`'s `createFavorite`/`deleteFavorite` both do
+`const server = getServerById(args.apiClientProps.serverId); if (!server) throw ...` — and a
+direct dump of `localStorage['store_authentication']` at the same moment showed the row's
+`_serverId` (e.g. `qezW8uzZSGePPZdudqjS_`) **does not match any entry** in the live
+`serverList` (which had exactly one server, a different id, e.g. `mQJc9Hmx8cNv6Udq7G_le`).
+`getServerById` returns `undefined` → the mutation throws before any HTTP call → react-query's
+`onError` reverts the optimistic update and shows a toast — except no toast was observed
+either, so even that fallback isn't visibly reaching the user (not investigated further: could
+be a toast timing/dedup issue, or the throw happens somewhere not wrapped by the mutation's
+`onError` at all).
+
+**What's still unpinned.** Where the stale `_serverId` on the row data comes from. Ruled out:
+(1) IndexedDB-persisted react-query cache — `main.tsx`'s `shouldDehydrateQuery` only persists
+`lyrics`+`select` queries, not song lists, so this isn't stale disk-persisted data. (2) A
+simple multi-server mix-up — `serverList` only ever contained one entry in every repro.
+Suspected but unconfirmed: a race at app boot between an early session-resume path and
+`pymix-auth-modal.tsx`'s `authenticateServices`/`addServer`/`setCurrentServer` reauth flow
+(which the file's own comment says is *supposed* to reuse the existing server id via
+`findExistingServerId`, to avoid "stale, credential-stripped entries" accumulating) — if the
+song list's first fetch fires against an early/preliminary server identity that gets replaced
+moments later, the already-fetched rows would carry the orphaned id forever (nothing refetches
+them). Not confirmed with a direct trace of the boot sequence — would need instrumenting
+`authenticateServices`/`addServer`/`setCurrentServer` call order relative to the first
+`getSongList` fetch, which wasn't completed this cycle.
+
+**Possible connection to issue #38** (closed not-reproducible 2026-07-24, full text
+`bugs-archive.md`): that investigation found the player-bar favorite REMOVE action flaky
+(3/5 fail) then later 21/21 reliable with no code change and no root cause pinned. A boot-order
+race producing an intermittently-stale `_serverId` is at least consistent with that
+flakiness-then-disappearance pattern, though the player-bar button reads `currentSong`, a
+different data path than this table column — not confirmed as the same bug, just flagged as a
+plausible shared root cause for whoever picks this up.
+
+**Why not fixed this cycle.** The failure mode is confirmed and reproducible, but the actual
+trigger (why/when a row's `_serverId` diverges from the live server) isn't pinned down — a fix
+without knowing that would be a guess (e.g. patching `getServerById` to fall back to
+`currentServer` would mask the symptom without fixing why stale data is being rendered at
+all). Needs a boot-sequence trace before a conservative fix is possible. `bugs-archive.md`
+note for whoever resumes: the recovered `favorites-row-toggle.mjs` driver's `hoverAndClick`
+diagnostics (`cls before/after click`) are a red herring — the CSS class checked (`hover-only`)
+reflects hover-visibility, not favorited state, so it never signals success/failure; rely on
+the `star.view`/`unstar.view` network listener instead, as this writeup did.
+Issue: https://github.com/laker-93/subbox-app/issues/53
+
 <!-- One entry per bug. Include: date found, journey/route it showed up on,
      repro steps, evidence (screenshot path / console error), your hypothesis
      for root cause + which repo owns it, and an `Issue: <github url>` line
