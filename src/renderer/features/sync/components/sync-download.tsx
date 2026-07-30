@@ -19,6 +19,7 @@ import { Modal } from '/@/shared/components/modal/modal';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
+import { TextInput } from '/@/shared/components/text-input/text-input';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
@@ -31,6 +32,15 @@ const localSettings = isElectron() ? window.api.localSettings : null;
 
 /** localSettings key holding the user-chosen folder for downloaded Rekordbox XML. */
 const XML_DIRECTORY_KEY = 'rekordbox_xml_directory';
+
+// The web build can't ask the OS where a download landed or where the user later
+// extracts it — no browser exposes that path to a page (same reason Sync -> Upload
+// (Rekordbox) is desktop-only). The Rekordbox XML's track Locations are only useful
+// if they match wherever the user actually unzips music.zip, so ask them and persist
+// the answer in localStorage (there's no window.api.localSettings on web) rather than
+// silently sending pymix an empty user_root, which produced an XML that looked fine
+// but couldn't resolve a single track (see laker-93/pymix#66 follow-up).
+const WEB_EXTRACT_PATH_KEY = 'sync_web_extract_path';
 
 type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'select';
 
@@ -106,6 +116,9 @@ export const SyncDownload = () => {
     // (persisted in localSettings); `defaultXmlDir` is where it lands otherwise.
     const [xmlDir, setXmlDir] = useState<null | string>(null);
     const [defaultXmlDir, setDefaultXmlDir] = useState<null | string>(null);
+    // Web only: where the user says they'll extract music.zip, sent as the Rekordbox
+    // XML's user_root so its track Locations point somewhere real.
+    const [webExtractPath, setWebExtractPath] = useState('');
 
     // Load the persisted XML directory and the default fallback on mount (desktop only).
     useEffect(() => {
@@ -116,6 +129,18 @@ export const SyncDownload = () => {
         ipc.invoke('sync:get-default-xml-directory').then((dir) => {
             if (typeof dir === 'string') setDefaultXmlDir(dir);
         });
+    }, []);
+
+    // Load the persisted extraction path on mount (web only).
+    useEffect(() => {
+        if (isElectron()) return;
+        const saved = localStorage.getItem(WEB_EXTRACT_PATH_KEY);
+        if (saved) setWebExtractPath(saved);
+    }, []);
+
+    const handleWebExtractPathChange = useCallback((value: string) => {
+        setWebExtractPath(value);
+        localStorage.setItem(WEB_EXTRACT_PATH_KEY, value);
     }, []);
 
     const handleSelectXmlDirectory = useCallback(async () => {
@@ -292,7 +317,10 @@ export const SyncDownload = () => {
                     );
                     await PymixController.rbDownload({
                         baseUrl: urlConfig.pymix,
-                        body: { playlistIds: Array.from(selectedPlaylists), user_root: '' },
+                        body: {
+                            playlistIds: Array.from(selectedPlaylists),
+                            user_root: webExtractPath.trim(),
+                        },
                     });
 
                     await downloadFileFromPymix(urlConfig.pymix, 'subbox_rb_export.xml');
@@ -306,7 +334,15 @@ export const SyncDownload = () => {
             setError(err?.message || 'Download failed');
             setStep('preview');
         }
-    }, [includeRekordboxXml, selectedPlaylists, server.fbToken, server.username, serverId, xmlDir]);
+    }, [
+        includeRekordboxXml,
+        selectedPlaylists,
+        server.fbToken,
+        server.username,
+        serverId,
+        webExtractPath,
+        xmlDir,
+    ]);
 
     // ── Select playlists ───────────────────────────────────────────────────
     if (step === 'select') {
@@ -840,6 +876,19 @@ export const SyncDownload = () => {
                 </Stack>
             )}
 
+            {/* Where the tracks will end up (web only) — the browser can't tell us
+                this, so the Rekordbox XML's track locations depend on the user
+                telling us where they'll extract music.zip. */}
+            {!isElectron() && includeRekordboxXml && (
+                <TextInput
+                    description="Rekordbox needs this to find the tracks — the XML won't link them if it doesn't match where you actually unzip music.zip."
+                    label="Folder you'll extract music.zip into"
+                    onChange={(e) => handleWebExtractPathChange(e.currentTarget.value)}
+                    placeholder="e.g. /Users/you/Music or C:\Users\you\Music"
+                    value={webExtractPath}
+                />
+            )}
+
             <Modal
                 handlers={xmlHelpHandlers}
                 opened={xmlHelpOpened}
@@ -890,9 +939,10 @@ export const SyncDownload = () => {
 
             <Button
                 disabled={
-                    summary.tracksMissing === 0 &&
-                    metadata.updates.length === 0 &&
-                    !includeRekordboxXml
+                    (summary.tracksMissing === 0 &&
+                        metadata.updates.length === 0 &&
+                        !includeRekordboxXml) ||
+                    (!isElectron() && includeRekordboxXml && webExtractPath.trim().length === 0)
                 }
                 fullWidth
                 onClick={handleDownload}
