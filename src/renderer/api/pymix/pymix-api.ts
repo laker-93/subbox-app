@@ -1,5 +1,5 @@
 import { initClient, initContract } from '@ts-rest/core';
-import axios, { AxiosError, AxiosResponse, isAxiosError, Method } from 'axios';
+import axios, { AxiosError, AxiosResponse, isAxiosError, Method, ResponseType } from 'axios';
 import qs from 'qs';
 
 import i18n from '/@/i18n/i18n';
@@ -37,6 +37,20 @@ export const contract = c.router({
         path: 'track',
         responses: {
             200: resultWithHeaders(pymixType._response.deleteSong),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    // Streams a file /sync/playlists or /rekordbox/export already wrote to the
+    // (session-resolved) user's downloads dir, using the pymix session cookie
+    // instead of a separate filebrowser credential — see issue #66: the `demo`
+    // account's filebrowser token is scoped to its own (unrelated) account, so a
+    // direct filebrowser fetch 404s even though require_reader correctly proxies
+    // demo's pymix reads to demoadmin.
+    download: {
+        method: 'GET',
+        path: 'sync/download/:filename',
+        responses: {
+            200: resultWithHeaders(pymixType._response.download),
             500: resultWithHeaders(pymixType._response.error),
         },
     },
@@ -391,8 +405,13 @@ axiosClient.interceptors.response.use(
     },
 );
 
-export const pymixApiClient = (args: { baseUrl: string; signal?: AbortSignal; token?: string }) => {
-    const { baseUrl, signal, token } = args;
+export const pymixApiClient = (args: {
+    baseUrl: string;
+    responseType?: ResponseType;
+    signal?: AbortSignal;
+    token?: string;
+}) => {
+    const { baseUrl, responseType, signal, token } = args;
 
     return initClient(contract, {
         api: async ({ body, headers, method, path }) => {
@@ -407,6 +426,7 @@ export const pymixApiClient = (args: { baseUrl: string; signal?: AbortSignal; to
                     },
                     method: method as Method,
                     params,
+                    responseType: responseType || 'json',
                     signal,
                     url: `${baseUrl}/${api}`,
                 });
