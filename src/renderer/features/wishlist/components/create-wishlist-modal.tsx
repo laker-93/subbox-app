@@ -229,8 +229,8 @@ const CreateWishlistForm = ({ onCancel }: { onCancel: () => void }) => {
                         context: 'link',
                         postProcess: 'titleCase',
                     })}
-                    onBlur={handleLinkBlur}
                     {...form.getInputProps('link')}
+                    onBlur={handleLinkBlur}
                 />
                 <TextInput
                     label={t('form.createWishlistItem.input', {
