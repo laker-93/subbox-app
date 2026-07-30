@@ -11,6 +11,11 @@ type DeleteSongArgs = {
     body: z.infer<typeof pymixType._parameters.deleteSong>;
 };
 
+type DownloadFileArgs = {
+    filename: string;
+    responseType?: 'arraybuffer' | 'blob' | 'document' | 'json' | 'stream' | 'text';
+};
+
 type ImportArgs = {
     body: z.infer<typeof pymixType._parameters.import>;
 };
@@ -165,6 +170,19 @@ export const PymixController = {
         }
 
         return data;
+    },
+
+    downloadFile: async (args: DownloadFileArgs & PymixClientArgs) => {
+        const { baseUrl, filename, responseType, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, responseType, signal, token }).download({
+            params: { filename },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to download file');
+        }
+
+        return res.body.data;
     },
 
     getLibrarySize: async (args: PymixClientArgs) => {

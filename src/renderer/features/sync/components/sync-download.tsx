@@ -3,7 +3,6 @@ import isElectron from 'is-electron';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 
-import { FilebrowserController } from '/@/renderer/api/filebrowser/filebrowser-controller';
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
@@ -38,19 +37,17 @@ type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'select';
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
 
 // The web build has no filesystem access, so a download has to happen inside the
-// browser: fetch the file from filebrowser (which requires the X-Auth header —
-// a plain <a href> to a cross-origin filebrowser URL can never carry that, so it
-// 401s) as a blob, then trigger the save from an object URL instead of the raw URL.
-const downloadFileFromFilebrowser = async (
-    filebrowserBaseUrl: string,
-    filename: string,
-    token: string,
-): Promise<void> => {
-    const blob = (await FilebrowserController.download({
-        baseUrl: filebrowserBaseUrl,
+// browser: fetch the file through pymix (which streams it back using the caller's
+// own pymix session — see issue #66, where fetching straight from filebrowser
+// required a filebrowser credential the `demo` account doesn't have for
+// demoadmin's files) as a blob, then trigger the save from an object URL instead
+// of the raw URL (a plain <a href> to a cross-origin URL can't carry the session
+// cookie needed to authenticate the request).
+const downloadFileFromPymix = async (pymixBaseUrl: string, filename: string): Promise<void> => {
+    const blob = (await PymixController.downloadFile({
+        baseUrl: pymixBaseUrl,
         filename,
         responseType: 'blob',
-        token,
     })) as Blob;
 
     const objectUrl = URL.createObjectURL(blob);
@@ -285,11 +282,7 @@ export const SyncDownload = () => {
                 // is "music.zip") — the Electron main-process download path already
                 // accounts for this (path.basename(zipPath) + '.zip'); mirror it here.
                 const zipFileName = `${result.zipPath.split('/').pop()}.zip`;
-                await downloadFileFromFilebrowser(
-                    urlConfig.filebrowser,
-                    zipFileName,
-                    server.fbToken ?? '',
-                );
+                await downloadFileFromPymix(urlConfig.pymix, zipFileName);
 
                 // Optionally export and download Rekordbox XML
                 if (includeRekordboxXml) {
@@ -302,11 +295,7 @@ export const SyncDownload = () => {
                         body: { playlistIds: Array.from(selectedPlaylists), user_root: '' },
                     });
 
-                    await downloadFileFromFilebrowser(
-                        urlConfig.filebrowser,
-                        'subbox_rb_export.xml',
-                        server.fbToken ?? '',
-                    );
+                    await downloadFileFromPymix(urlConfig.pymix, 'subbox_rb_export.xml');
                 }
 
                 setDownloadResult({ tracksExported: result.nTracksExported });

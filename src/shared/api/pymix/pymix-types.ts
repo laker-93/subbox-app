@@ -5,6 +5,7 @@ const error = z.string();
 const create = z.null();
 const login = z.null();
 const sync = z.null();
+const download = z.any();
 
 const syncPlaylists = z.object({
     nTracksExported: z.number(),
@@ -420,6 +421,7 @@ export const pymixType = {
         create,
         deleteDuplicates,
         deleteSong,
+        download,
         error,
         exportJob,
         importJob,
