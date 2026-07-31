@@ -83,11 +83,12 @@ async function hoverAndClickRowFavorite(page, row) {
     const heartBox = await heart.boundingBox();
     if (!heartBox) throw new Error('heart icon has no bounding box even after row hover');
     log('DIAG heartBox:', JSON.stringify(heartBox), 'cls before click:', await heart.evaluate((el) => el.className));
-    await page.mouse.move(heartBox.x + heartBox.width / 2, heartBox.y + heartBox.height / 2);
-    await page.waitForTimeout(150);
-    await page.mouse.down();
-    await page.waitForTimeout(50);
-    await page.mouse.up();
+    // A synthetic mouse.move+down+up sequence at the icon's coordinates does NOT
+    // reliably register as a click here (confirmed: 0/2 live trials produced any
+    // onFavorite call or network request, vs. 100% via Playwright's own locator
+    // click) — likely a pointer-event/synthetic-event mismatch with Mantine's
+    // ActionIcon, not a product bug. Use the real locator click instead.
+    await heart.click({ force: true, timeout: 5000 });
     await page.waitForTimeout(300);
     log('DIAG cls after click:', await heart.evaluate((el) => el.className).catch((e) => `ERR:${e.message}`));
 }
