@@ -12,3 +12,15 @@ release
 .env.*.local
 !.env.development.local.example
 .ui-snapshots
+
+# Throwaway QA investigation scripts (underscore-prefixed, one-off scratch —
+# never meant to be committed). Untracked files here block sync-merged.sh's
+# rebase (skips on any dirty git status), so leftover scratch from a crashed
+# cycle silently stalls the loop's own sync until someone notices and cleans
+# up by hand. A real, reusable driver should be renamed without the `_` and
+# committed properly instead.
+scripts/qa/_debug-*.mjs
+scripts/qa/_fav-*.mjs
+scripts/qa/_probe-*.mjs
+scripts/qa/_reset-*.mjs
+scripts/qa/_tmp-*.mjs
