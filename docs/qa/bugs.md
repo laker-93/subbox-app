@@ -79,6 +79,57 @@ reflects hover-visibility, not favorited state, so it never signals success/fail
 the `star.view`/`unstar.view` network listener instead, as this writeup did.
 Issue: https://github.com/laker-93/subbox-app/issues/53
 
+**2026-07-31 update — driver fixed, candidate fix investigated and reverted (unverified).**
+Found this worktree dirty at cycle start again: an uncommitted candidate fix in
+`app-menu.tsx`'s `handleLogOff` (adds `queryClient.removeQueries()`, matching the pattern
+already used in `edit-server-form.tsx:195`) plus 5 leftover `[QA-DEBUG]` `console.log`
+statements across `item-list-infinite-loader.ts`/`item-list-paginated-loader.ts`/
+`favorite-column.tsx`/`navidrome-normalize.ts`/`subsonic-normalize.ts`, and 7 untracked
+`_probe-*.mjs` scratch scripts, all dated 2026-07-31 with no journal trace — another crashed
+cycle (the last two nightly runs both failed with `API Error: Connection closed mid-response`
+/ immediate `Execution error`, unrelated to this repo). Reverted the debug logs and deleted the
+scratch probes.
+
+Root-caused **why the previous investigation's driver diagnostics were untrustworthy**: this
+driver's `hoverAndClickRowFavorite` used a manual `mouse.move`+`down`+`up` sequence to click the
+heart icon, which does **not** reliably register as a click on this Mantine `ActionIcon` (0/2
+live trials fired `onFavorite` or any network call, vs. reliable firing via Playwright's own
+`locator.click({force:true})`). **Fixed the driver** to use the real `.click()` API instead —
+verified via before/after `className` diffing that a click now visibly registers (Mantine's
+`mantine-active` pseudo-class toggles) while the button's actual favorited/muted styling never
+updates and no `star.view` request ever fires — this is now a clean, reliable repro of the
+original symptom (previously the driver's own unreliability was a confound risk).
+
+Investigated the candidate `app-menu.tsx` fix and could **not** verify it resolves the bug —
+reverted, not committed:
+- `forceFreshLogin()` (`ui-snapshot-shared.mjs`) only wipes the `store_authentication`
+  localStorage key directly and reloads — it never clicks the real "Log off" menu item, so it
+  never exercises `handleLogOff` at all. Testing the fix through `forceFreshLogin` was testing
+  nothing.
+- Re-tested through the **real** UI Log off (menu → "Log off" → re-login), confirming
+  `currentServer.id` does change across the cycle. Even so, the freshly-logged-in session's
+  favorite button showed `disabled=""` (i.e. `isMutatingFavorite: true`) **before any click
+  happened in the new session** — consistent with a stuck-forever mutation state surviving
+  logoff, which `queryClient.removeQueries()` (query cache only) would not fix, since
+  `useIsMutating`/the mutation cache is untouched by it. Not conclusively confirmed (would need
+  to inspect the live mutation cache, e.g. `queryClient.getMutationCache().getAll()`, to rule
+  out a test-sequencing artifact) — flagging as the strongest lead, not a proven mechanism.
+- Also found the staleness is **not only a cross-session artifact**: on a plain
+  `forceFreshLogin` + fresh login + first-ever `/library/songs` load (no logoff involved at
+  all), a row's `_serverId` was already observed not matching the live `currentServer.id`. This
+  rules out "only survives an old session" as the sole trigger and points at something in the
+  initial fetch/boot sequence itself, not just data outliving a server-identity change.
+
+**Next steps for whoever resumes:** (1) confirm/deny the stuck-mutation-cache theory directly
+via devtools/`getMutationCache()` after one deliberately-failed favorite mutation; if
+confirmed, the fix likely needs `queryClient.getMutationCache().clear()` (or similar) rather
+than (or in addition to) `removeQueries()`. (2) Trace the boot-time race between
+`useCurrentServer()` resolving and the first `getSongList`/`_serverId`-stamping fetch
+(`song-list-content.tsx`, `subsonic-controller.ts:887`) to explain the first-load case. Do
+**not** re-add debug `console.log`s to committed files for this — use a scratch `_probe-*.mjs`
+(gitignored via the untracked-file pattern, but still delete it before ending the cycle) or
+revert before committing, per the recurring crashed-cycle pattern above.
+
 <!-- One entry per bug. Include: date found, journey/route it showed up on,
      repro steps, evidence (screenshot path / console error), your hypothesis
      for root cause + which repo owns it, and an `Issue: <github url>` line
