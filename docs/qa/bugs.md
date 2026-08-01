@@ -161,7 +161,51 @@ Two findings:
   itself a confirmed root cause, just a previously-missing piece of the fetch path future
   tracing needs to account for. Did not attempt the stuck-mutation-cache item (1) this cycle —
   ran out of cycle budget after the loader-bypass finding.
-Issue #53 stays OPEN, unclaimed. No product code change; no pymix container touched.
+
+**2026-08-01 update #2 — attempted item (1), the stuck-mutation-cache theory, plus a broad clean
+repro sweep. Could not reproduce the original symptom at all this cycle (0/6).** Instrumented
+`create-favorite-mutation.ts`'s `mutationFn`/`onMutate`/`onError`/`onSuccess` with temporary
+`[QA-DEBUG]` `console.log`s and exposed the singleton `queryClient` as `window.__qaQueryClient`
+in `lib/react-query.ts` (both reverted before ending the cycle — `git status`/`git diff`
+confirmed clean). Built a scratch probe (`_probe-mutation-cache.mjs`, deleted, not committed)
+that reads `queryClient.getMutationCache().getAll()` directly before/after a row-heart click.
+
+- **Stuck-mutation-cache theory: ruled out.** 4/4 trials: mutation cache is `[]` before every
+  click, `onMutate` → `mutationFn` → real `star.view` HTTP 200 → `onSuccess` all fire in order,
+  and the cache shows exactly one `status:"success"` entry after — never a lingering `pending`
+  entry, on a fresh login every time. No evidence of a mutation getting stuck in-flight.
+- Ran the real `favorites-row-toggle.mjs` driver (add + remove) once more end to end: also
+  clean — add fires `star.view`→200 and the track appears on `/favorites`; remove fires
+  `unstar.view`→200 and the row's own icon class updates correctly. Directly confirmed
+  server-side via `docker exec navidrometest260526 sqlite3 /data/navidrome.db` against the
+  `annotation` table: the track's row was genuinely `starred=0` after removal — the earlier
+  "still present after a full re-navigation refetch" observation in that driver's own output is
+  **not a bug**: a follow-up probe (`_probe-favorites-staleness.mjs`, deleted) that waited past
+  the query layer's `staleTime: 10s` (`lib/react-query.ts:30`) before re-navigating showed the
+  row correctly disappears once a real refetch actually fires (`songListCalls` incremented, row
+  gone). The driver's original 4s-then-renav timing was still inside the 10s staleTime window,
+  so re-navigating within it served cached (pre-removal) data — expected caching behavior, not
+  the `#53` symptom.
+- Also tried a **plain session-resume** repro (no `forceFreshLogin`, matching one of the original
+  3 repro conditions) via two more scratch probes (`_probe-resume.mjs`/`_probe-resume2.mjs`,
+  deleted): resumed session loaded fine, `currentServerId` matched `serverList`'s single entry,
+  and a click fired a real `unstar.view`→200 with the icon class updating correctly. No
+  divergence.
+
+**Net: 6/6 trials clean this cycle (5 fresh-login, 1 resumed-session; covering both add and
+remove), across the two theories flagged as next steps by the two prior updates.** Both are now
+addressed with direct evidence (not stuck mutations, not a stale server-list) and neither
+reproduces. This is the same shape as the sibling issue #38's history (flaky 3/5-fail → later
+21/21 clean, closed not-reproducible) — but #38 needed 21 trials before that call was made, and
+this cycle's 6 is a real sample, not exhaustive. **Not closing #53 yet** — the original discovery
+cycle (2026-07-29) had 3/3 concrete repros with a direct `localStorage` dump showing a real
+`_serverId`/`serverList` mismatch, which is stronger evidence than "couldn't reproduce it today"
+outweighs on its own. Flagging for whoever resumes: a good next step is a much larger trial count
+(15-20+, matching the #38 bar) before considering a not-reproducible close, ideally varying
+account/library state further (the account has grown/changed multiple times since 07-29 per the
+pymix-qa journal's `test260526` recreation history, which may itself be why this has gotten
+harder to hit). No product code change. No pymix container touched.
+Issue #53 stays OPEN, unclaimed.
 
 <!-- One entry per bug. Include: date found, journey/route it showed up on,
      repro steps, evidence (screenshot path / console error), your hypothesis
