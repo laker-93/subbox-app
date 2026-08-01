@@ -130,6 +130,39 @@ than (or in addition to) `removeQueries()`. (2) Trace the boot-time race between
 (gitignored via the untracked-file pattern, but still delete it before ending the cycle) or
 revert before committing, per the recurring crashed-cycle pattern above.
 
+**2026-08-01 update — attempted the item (2) boot-race trace, found a real (but so-far
+inconclusive) new mechanism, no fix.** Instrumented `auth.store.ts`'s `setCurrentServer` +
+`persist`'s `merge`, and both `item-list-infinite-loader.ts`/`item-list-paginated-loader.ts`'s
+`queryFn`, with temporary timestamped `console.log`s (all reverted before ending the cycle —
+`git diff` confirmed clean). Ran a scratch Electron probe (`_probe-boot-race.mjs`, deleted
+before ending the cycle, not committed) through `forceFreshLogin` + real login + navigation to
+`/library/songs`, capturing console + network events.
+
+Two findings:
+- On this account/build, the `setCurrentServer`/`persist.merge` ordering showed no race: a
+  fresh login always reused the SAME server id as the just-wiped session (via
+  `findExistingServerId`'s `getRememberedLogin()` fallback — `forceFreshLogin` only clears the
+  `store_authentication` key, not the separate remembered-login pointer, so this is expected
+  re-login behavior, not a bug). `currentServer.id` and `serverList` were consistent at every
+  checkpoint in 2/2 trials — did not reproduce the first-load `_serverId` mismatch this way.
+- More useful: **neither instrumented loader's `queryFn` ever fired** for the first
+  `/library/songs` page, despite real song rows rendering and exactly one
+  `/api/song?...&_start=0` network request firing. Root cause: `getOptimizedListCount`
+  (`src/renderer/api/utils-list-count.ts:60-68`), called from `songsQueries.listCount` (and the
+  albums/artists equivalents), fetches the first page itself and does
+  `client.setQueryData(pageQueryKey, pageResult)` directly — priming the exact query-cache entry
+  the paginated/infinite loader's own `useQuery`/`fetchQuery` will look for, so that hook's
+  `queryFn` never runs for page 1 (cache already fresh). This wasn't previously documented and
+  explains why instrumenting only the loader's `queryFn` (as both this and a prior cycle did)
+  systematically misses page-1 activity — **any future boot-race trace on this bug needs to
+  additionally instrument `getOptimizedListCount`**, not just the loader hooks, or it will look
+  like nothing fetched at all when something did. In the two live trials run this cycle, this
+  path used the correct, live `serverId` (traced closure, no observed divergence) — so it isn't
+  itself a confirmed root cause, just a previously-missing piece of the fetch path future
+  tracing needs to account for. Did not attempt the stuck-mutation-cache item (1) this cycle —
+  ran out of cycle budget after the loader-bypass finding.
+Issue #53 stays OPEN, unclaimed. No product code change; no pymix container touched.
+
 <!-- One entry per bug. Include: date found, journey/route it showed up on,
      repro steps, evidence (screenshot path / console error), your hypothesis
      for root cause + which repo owns it, and an `Issue: <github url>` line
