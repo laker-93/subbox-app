@@ -66,7 +66,18 @@ export const RequestInviteModal = () => {
     };
 
     return (
-        <Modal handlers={handlers} opened={opened} size="sm" withCloseButton={false}>
+        <Modal
+            handlers={handlers}
+            opened={opened}
+            size="sm"
+            withCloseButton={false}
+            // Above Mantine's default modal layer (200), because this one is opened from
+            // *inside* another modal — the Invite Token caption in Create Account. At the
+            // same z-index the winner is whichever portal is later in the DOM, and this
+            // modal loses: it mounts at app boot, while the auth modal's portal is only
+            // created when it first opens. It rendered behind, unreachable.
+            zIndex={400}
+        >
             {/* Keyed on `opened` so each visit starts from a clean form rather than the
                 previous submission's success or error state. */}
             <RequestInviteForm key={String(opened)} onDone={closeInviteRequest} source={source} />
