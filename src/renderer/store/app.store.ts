@@ -31,6 +31,8 @@ export interface AppSlice extends AppState {
         setShowTimeRemaining: (enabled: boolean) => void;
         setSideBar: (options: Partial<SidebarProps>) => void;
         setTitleBar: (options: Partial<TitlebarProps>) => void;
+        setWishlistSort: (sortBy: WishlistSortBy, sortOrder: SortOrder) => void;
+        setWishlistStatusFilter: (statusFilter: WishlistStatusFilter) => void;
     };
 }
 
@@ -61,12 +63,27 @@ export interface AppState {
     showTimeRemaining: boolean;
     sidebar: SidebarProps;
     titlebar: TitlebarProps;
+    wishlistSort: {
+        sortBy: WishlistSortBy;
+        sortOrder: SortOrder;
+    };
+    wishlistStatusFilter: WishlistStatusFilter;
 }
 
 export interface GlobalExpandedState {
     item: ItemListStateItem;
     itemType: LibraryItem;
 }
+
+export type WishlistSortBy = 'album' | 'artist' | 'createdAt' | 'status' | 'title';
+
+export type WishlistStatusFilter =
+    | 'all'
+    | 'available'
+    | 'downloaded'
+    | 'ignored'
+    | 'inbox'
+    | 'wishlist';
 
 type CommandPaletteProps = {
     close: () => void;
@@ -190,6 +207,16 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                             state.titlebar = { ...state.titlebar, ...options };
                         });
                     },
+                    setWishlistSort: (sortBy, sortOrder) => {
+                        set((state) => {
+                            state.wishlistSort = { sortBy, sortOrder };
+                        });
+                    },
+                    setWishlistStatusFilter: (statusFilter) => {
+                        set((state) => {
+                            state.wishlistStatusFilter = statusFilter;
+                        });
+                    },
                 },
                 albumArtistDetailFavoriteSongsSort: {
                     sortBy: SongListSort.ID,
@@ -248,6 +275,11 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                     backgroundColor: '#000000',
                     outOfView: false,
                 },
+                wishlistSort: {
+                    sortBy: 'createdAt',
+                    sortOrder: SortOrder.DESC,
+                },
+                wishlistStatusFilter: 'all',
             })),
             { name: 'store_app' },
         ),
@@ -308,6 +340,10 @@ export const usePageSidebar = (key: string): [boolean, (value: boolean) => void]
 export const useGlobalExpanded = () => useAppStore((state) => state.globalExpanded);
 
 export const useSetGlobalExpanded = () => useAppStore((state) => state.actions.setGlobalExpanded);
+
+export const useWishlistSort = () => useAppStore((state) => state.wishlistSort);
+
+export const useWishlistStatusFilter = () => useAppStore((state) => state.wishlistStatusFilter);
 
 export const useGlobalExpandedState = () => {
     const globalExpanded = useGlobalExpanded();
