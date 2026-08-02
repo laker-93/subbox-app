@@ -309,3 +309,54 @@ YouTube link (Rick Astley — Never Gonna Give You Up), blurred the field —
 badge/tooltip matches server verbatim) and Part 2 (bulk mark-downloaded + bulk
 delete, one PATCH/DELETE per selected row) pass cleanly. typecheck + lint clean
 on the one changed file.
+
+### Row-level favorite heart icon (list views) silently no-ops — `item._serverId` doesn't match the live server — CLOSED NOT-REPRODUCIBLE
+
+Logged: 2026-07-29 (issue #53). Closed as not-reproducible: 2026-08-02, after 5 investigation
+cycles and 21/21 clean trials.
+Issue: https://github.com/laker-93/subbox-app/issues/53 (closed not-reproducible)
+
+**Original discovery (2026-07-29).** Clicking the row's own inline heart icon (table list,
+distinct from the player-bar `FavoriteButton`) did nothing: no state change, no toast, no
+network request. Root-caused as far as: `getServerById(item._serverId)` returned `undefined`
+because the row's `_serverId` didn't match the single entry in the live `serverList` (confirmed
+via a direct `localStorage['store_authentication']` dump) — `createFavorite`/`deleteFavorite`
+throw before any HTTP call. 3/3 concrete repros this cycle, evidence real and not fabricated.
+
+**2026-07-31 — driver fixed, candidate fix reverted (unverified).** Found the click
+simulation itself was flaky (manual `mouse.move`+`down`+`up` doesn't reliably register on the
+Mantine `ActionIcon` — 0/2 trials fired anything); replaced with Playwright's real `.click()`
+API. An uncommitted candidate fix (`app-menu.tsx`'s `handleLogOff` adding
+`queryClient.removeQueries()`) was found and investigated but could not be verified — the test
+harness used (`forceFreshLogin`) never exercises the real logoff code path at all — and was
+reverted, not committed. Found the staleness isn't only a cross-session artifact: also seen on
+a plain first-ever `/library/songs` load.
+
+**2026-08-01 — boot-race trace, no root cause pinned.** Instrumented `auth.store.ts`
+(`setCurrentServer`, `persist.merge`) and both item-list loader hooks' `queryFn`. Found no
+ordering race in `setCurrentServer`/`persist.merge` (2/2 trials consistent). Separately
+discovered `getOptimizedListCount` (`utils-list-count.ts:60-68`) primes the query cache
+directly via `client.setQueryData`, bypassing the loader hooks' own `queryFn` for page 1 —
+useful for any future boot-sequence trace in this codebase (instrument that function too, not
+just the loader hooks), though it wasn't itself the culprit.
+
+**2026-08-01 (later) — stuck-mutation-cache theory ruled out, broad sweep clean (6/6).**
+Instrumented `create-favorite-mutation.ts`'s full lifecycle and inspected
+`queryClient.getMutationCache().getAll()` directly: 4/4 trials showed a clean
+`onMutate → mutationFn → onSuccess` sequence, never a lingering `pending` entry — theory ruled
+out. A further 6/6 clean sweep (4 fresh-login probes + 1 full add/remove driver run + 1
+resumed-session probe) all fired real `star.view`/`unstar.view` calls correctly. Also
+confirmed the driver's own "row still present after re-navigation" observation was not a bug
+— just the query layer's 10s `staleTime` window, verified server-side via
+`docker exec navidrometest260526 sqlite3` against the `annotation` table.
+
+**2026-08-02 — final sweep, closed not-reproducible.** Ran 15 more trials via a dedicated
+`_probe-fav-trial-sweep.mjs` (scratch, deleted, not committed), mixing fresh-login (10) and
+resumed-session (5), each a fresh Electron launch + real click on an unfavorited row's heart
+icon, listening for the `star.view` network response. **15/15 clean** — every trial fired the
+network call correctly. Combined with the prior cycle's 6/6, that's **21/21 clean total**,
+matching the exact trial-count bar sibling issue #38 used before its own not-reproducible
+close. Closed issue #53 with a summary comment cross-referencing both ruled-out theories (so
+a future resurfacing doesn't need to re-investigate them) and the original 3/3 concrete
+evidence (so it isn't mistaken for a fabricated report if it resurfaces). No product code
+change across the whole investigation. No pymix container touched.
