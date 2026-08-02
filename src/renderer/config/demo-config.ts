@@ -21,6 +21,22 @@ const password = import.meta.env.VITE_DEMO_PASSWORD as string | undefined;
 
 export const DEMO_USERNAME = 'demo';
 
+/**
+ * Whose Navidrome container the demo login browses.
+ *
+ * In production this is `demoadmin`: `demo` is a restricted, non-admin Navidrome user
+ * living *inside* demoadmin's container rather than owning one, so there is no
+ * `navidrome{demo}` host to resolve and its URL has to be pinned to demoadmin's.
+ *
+ * That topology is a property of how the demo account is deployed, not of the string
+ * "demo", so it's configurable. A dev stack has no demoadmin; pointing this at an
+ * ordinary local account (which does own a container) is what makes the demo login —
+ * and every demo-mode surface hanging off it — reviewable locally. Defaults to
+ * `demoadmin`, so production and staging builds are unaffected by its absence.
+ */
+export const DEMO_NAVIDROME_USERNAME =
+    (import.meta.env.VITE_DEMO_NAVIDROME_USER as string | undefined) || 'demoadmin';
+
 export const demoConfig = {
     password: password ?? '',
     username: DEMO_USERNAME,
