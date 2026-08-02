@@ -419,16 +419,35 @@ export function WebPlayer() {
     const player1Url = useSongUrl(player1, num === 1, transcode);
     const player2Url = useSongUrl(player2, num === 2, transcode);
 
+    // The AudioContext is constructed on mount (see audio-players.tsx), which is
+    // outside any user gesture, so browsers hand it back suspended. A suspended
+    // context swallows playback silently: the <audio> element reports playing and
+    // buffers the whole track, but never advances past 0:00 and no error fires.
+    const resumeWebAudio = useCallback(async () => {
+        // Only 'suspended' can be resumed — calling resume() on a closed context throws.
+        if (webAudio?.context.state !== 'suspended') return;
+
+        try {
+            await webAudio.context.resume();
+        } catch (error) {
+            console.error('Error resuming audio context', error);
+        }
+    }, [webAudio]);
+
     const handlePlayer1Start = useCallback(
         async (player: ReactPlayer) => {
-            if (!webAudio || player1Source) return;
+            if (!webAudio) return;
+
+            // Resume before the player1Source guard below, not after. The first
+            // onReady fires for the silent EMPTY_SOURCE placeholder, when there is
+            // no player1Url yet to resume for — but it still creates the source
+            // node. Every later real track then hit that guard and returned before
+            // ever resuming, leaving the context suspended for the whole session.
             if (player1Url) {
-                // This should fire once, only if the source is real (meaning we
-                // saw the dummy source) and the context is not ready
-                if (webAudio.context.state !== 'running') {
-                    await webAudio.context.resume();
-                }
+                await resumeWebAudio();
             }
+
+            if (player1Source) return;
 
             const internal = player.getInternalPlayer() as HTMLMediaElement | undefined;
             if (internal) {
@@ -438,17 +457,18 @@ export function WebPlayer() {
                 setPlayer1Source(source);
             }
         },
-        [player1Source, player1Url, webAudio],
+        [player1Source, player1Url, resumeWebAudio, webAudio],
     );
 
     const handlePlayer2Start = useCallback(
         async (player: ReactPlayer) => {
-            if (!webAudio || player2Source) return;
+            if (!webAudio) return;
+
             if (player2Url) {
-                if (webAudio.context.state !== 'running') {
-                    await webAudio.context.resume();
-                }
+                await resumeWebAudio();
             }
+
+            if (player2Source) return;
 
             const internal = player.getInternalPlayer() as HTMLMediaElement | undefined;
             if (internal) {
@@ -458,8 +478,18 @@ export function WebPlayer() {
                 setPlayer2Source(source);
             }
         },
-        [player2Source, player2Url, webAudio],
+        [player2Source, player2Url, resumeWebAudio, webAudio],
     );
+
+    // A restored queue supplies a real url on the very first onReady, before the
+    // user has interacted at all — and browsers refuse to resume a context without
+    // a gesture, so that attempt is a no-op. Resume again once playback actually
+    // starts, by which point pressing play has granted activation.
+    useEffect(() => {
+        if (localPlayerStatus === PlayerStatus.PLAYING) {
+            resumeWebAudio();
+        }
+    }, [localPlayerStatus, resumeWebAudio]);
 
     const handleOnErrorPause = useCallback(() => {
         mediaPause();
