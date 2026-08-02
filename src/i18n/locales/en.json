@@ -544,7 +544,9 @@
             "openInLibrary": "go to track in library",
             "resolving": "resolving…",
             "trackNotFound": "couldn't find this track in your library yet — it may still be scanning",
+            "noStatusMatches": "no items match this status",
             "status": {
+                "all": "all",
                 "available": "available",
                 "downloaded": "downloaded",
                 "ignored": "ignored",
