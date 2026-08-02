@@ -684,11 +684,11 @@
         },
         "landing": {
             "createAccount": "create account",
-            "description": "a cloud-based music library management platform built for DJs. Upload, stream, sync, and manage your music collection across devices and DJ software.",
-            "featureCloudLibrary": "Upload and store your music collection in the cloud",
-            "featureMetadata": "Manage cue points, loops, and playlists with metadata-first syncing",
-            "featureStreaming": "Stream your library across desktop, web, and mobile",
-            "featureSync": "Sync and convert libraries between Serato, Rekordbox, and more"
+            "description": "Your DJ library, everywhere. Subbox streams your whole collection from the cloud — in any browser, on any device, with nothing to install.",
+            "featureCloudLibrary": "Your whole collection stored in the cloud, backed up and always with you",
+            "featureMetadata": "Cue points, loops and playlists come with it",
+            "featureStreaming": "Stream your library in a browser — desktop, laptop, phone, no install",
+            "featureSync": "Reads and writes Rekordbox and Serato libraries"
         },
         "itemDetail": {
             "copyPath": "copy path to clipboard",

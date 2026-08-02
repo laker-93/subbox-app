@@ -2,7 +2,10 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './landing-page.module.css';
 
+import logo from '/@/renderer/assets/icons/256x256.png';
+import screenshot from '/@/renderer/assets/landing-library-preview.png';
 import { urlConfig } from '/@/renderer/config/url-config';
+import { openInviteRequest } from '/@/renderer/features/invite/store/invite-request-store';
 import { Button } from '/@/shared/components/button/button';
 import { Stack } from '/@/shared/components/stack/stack';
 
@@ -25,58 +28,63 @@ export const LandingPage = ({
     return (
         <div className={styles['fs-landing-page-container']}>
             <div className={styles['fs-landing-page-content']}>
+                <img alt="Subbox" className={styles['fs-landing-page-logo']} src={logo} />
                 <h1 className={styles['fs-landing-page-title']}>Subbox</h1>
                 <p className={styles['fs-landing-page-description']}>
+                    {/* No sentenceCase here: it lower-cases everything after the first
+                        word, which turns "DJ library" into "dj library". */}
                     {t('page.landing.description', {
                         defaultValue:
-                            'A cloud-based music library management platform built for DJs. Upload, stream, sync, and manage your music collection across devices and DJ software.',
-                        postProcess: 'sentenceCase',
+                            'Your DJ library, everywhere. Subbox streams your whole collection from the cloud — in any browser, on any device, with nothing to install.',
                     })}
                 </p>
+
+                {/* A single screenshot sells this better than the bullets below it — a
+                    music app whose landing page shows no product makes "Try the demo" a
+                    blind click. */}
+                <img
+                    alt={t('page.landing.screenshotAlt', {
+                        defaultValue: 'The Subbox library, streaming in the browser',
+                    })}
+                    className={styles['fs-landing-page-screenshot']}
+                    loading="lazy"
+                    src={screenshot}
+                />
+
                 <div className={styles['fs-landing-page-features']}>
                     <div className={styles['fs-landing-page-feature']}>
                         <span className={styles['fs-landing-page-feature-dot']} />
-                        {t('page.landing.featureCloudLibrary', {
-                            defaultValue: 'Upload and store your music collection in the cloud',
+                        {t('page.landing.featureStreaming', {
+                            defaultValue:
+                                'Stream your library in a browser — desktop, laptop, phone, no install',
                         })}
                     </div>
                     <div className={styles['fs-landing-page-feature']}>
                         <span className={styles['fs-landing-page-feature-dot']} />
-                        {t('page.landing.featureSync', {
+                        {t('page.landing.featureCloudLibrary', {
                             defaultValue:
-                                'Sync and convert libraries between Serato, Rekordbox, and more',
+                                'Your whole collection stored in the cloud, backed up and always with you',
                         })}
                     </div>
                     <div className={styles['fs-landing-page-feature']}>
                         <span className={styles['fs-landing-page-feature-dot']} />
                         {t('page.landing.featureMetadata', {
-                            defaultValue: 'Manage cue points, loops, and playlists',
+                            defaultValue: 'Cue points, loops and playlists come with it',
                         })}
                     </div>
                     <div className={styles['fs-landing-page-feature']}>
                         <span className={styles['fs-landing-page-feature-dot']} />
-                        {t('page.landing.featureStreaming', {
-                            defaultValue: 'Stream your library across desktop, web, and mobile',
+                        {t('page.landing.featureSync', {
+                            defaultValue: 'Reads and writes Rekordbox and Serato libraries',
                         })}
                     </div>
                 </div>
-                <Stack className={styles['fs-landing-page-enter-button']} gap="md">
-                    <Button
-                        component="a"
-                        fullWidth
-                        href={urlConfig.discord}
-                        rel="noopener noreferrer"
-                        size="lg"
-                        style={{ border: '1px solid var(--theme-colors-primary)' }}
-                        target="_blank"
-                        variant="default"
-                    >
-                        {t('common.joinTheCommunity', {
-                            defaultValue: 'Join the Community',
-                            postProcess: 'titleCase',
-                        })}
-                    </Button>
-                    {onTryDemo && (
+
+                {/* One primary action. Everything else is deliberately quieter: four
+                    equal-weight buttons was choice paralysis at the exact moment we want
+                    one obvious next step. */}
+                <Stack className={styles['fs-landing-page-enter-button']} gap="sm">
+                    {onTryDemo ? (
                         <>
                             <Button
                                 fullWidth
@@ -96,26 +104,64 @@ export const LandingPage = ({
                                         'No sign-up needed — explore a sample library instantly.',
                                 })}
                             </p>
+                            <Button fullWidth onClick={onLogin} size="md" variant="default">
+                                {t('common.login', {
+                                    defaultValue: 'Login',
+                                    postProcess: 'titleCase',
+                                })}
+                            </Button>
                         </>
+                    ) : (
+                        // Desktop/self-hosted builds have no demo account, so Login is
+                        // the primary action rather than leaving the page with none.
+                        <Button fullWidth onClick={onLogin} size="lg" variant="filled">
+                            {t('common.login', { defaultValue: 'Login', postProcess: 'titleCase' })}
+                        </Button>
                     )}
-                    <Button
-                        fullWidth
-                        onClick={onLogin}
-                        size="lg"
-                        variant={onTryDemo ? 'default' : 'filled'}
+                </Stack>
+
+                <p className={styles['fs-landing-page-beta']}>
+                    {t('page.landing.privateBeta', {
+                        defaultValue: 'Subbox is in private beta — spots are limited.',
+                    })}{' '}
+                    <button
+                        className={styles['fs-landing-page-link']}
+                        onClick={() => openInviteRequest('landing')}
+                        type="button"
                     >
-                        {t('common.login', {
-                            defaultValue: 'Login',
-                            postProcess: 'titleCase',
+                        {t('page.invite.cta', {
+                            defaultValue: 'Request an invite',
+                            postProcess: 'sentenceCase',
                         })}
-                    </Button>
-                    <Button fullWidth onClick={onCreateAccount} size="lg" variant="default">
+                    </button>
+                </p>
+
+                <div className={styles['fs-landing-page-secondary-links']}>
+                    <button
+                        className={styles['fs-landing-page-link']}
+                        onClick={onCreateAccount}
+                        type="button"
+                    >
                         {t('page.landing.createAccount', {
                             defaultValue: 'Create account',
-                            postProcess: 'titleCase',
+                            postProcess: 'sentenceCase',
                         })}
-                    </Button>
-                </Stack>
+                    </button>
+                    <span className={styles['fs-landing-page-link-separator']}>·</span>
+                    {/* Demoted from the page's first and most prominent action: it sent a
+                        first-time visitor off-site before they'd seen anything. */}
+                    <a
+                        className={styles['fs-landing-page-link']}
+                        href={urlConfig.discord}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                    >
+                        {t('common.joinTheCommunity', {
+                            defaultValue: 'Join the community',
+                            postProcess: 'sentenceCase',
+                        })}
+                    </a>
+                </div>
             </div>
         </div>
     );

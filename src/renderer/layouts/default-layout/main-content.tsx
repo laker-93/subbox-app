@@ -8,6 +8,7 @@ import styles from './main-content.module.css';
 
 import { ExpandedListContainer } from '/@/renderer/components/item-list/expanded-list-container';
 import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list-item';
+import { DemoBanner } from '/@/renderer/features/invite/components/demo-banner';
 import { ModeToggle } from '/@/renderer/features/sync/components/mode-toggle';
 import { SyncModePlaceholder } from '/@/renderer/features/sync/components/sync-mode-placeholder';
 import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-screen-overlay';
@@ -240,6 +241,9 @@ function MainContentBody() {
     return (
         <div className={styles.mainContentBody}>
             <ModeToggle />
+            {/* Above the scroll container, not inside it: the demo ask has to stay
+                visible while someone browses, which is the whole point of showing it. */}
+            <DemoBanner />
             <div className={styles.mainContentBodyScroll}>
                 {appMode === 'sync' ? (
                     <SyncModePlaceholder />

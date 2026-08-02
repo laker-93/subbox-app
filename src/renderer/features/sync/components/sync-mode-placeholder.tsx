@@ -1,6 +1,8 @@
 import isElectron from 'is-electron';
 import { Suspense, useState } from 'react';
 
+import { useIsDemoSession } from '/@/renderer/config/demo-config';
+import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import { SyncDownload } from '/@/renderer/features/sync/components/sync-download';
 import { SyncExternalDrive } from '/@/renderer/features/sync/components/sync-external-drive';
 import { SyncRekordbox } from '/@/renderer/features/sync/components/sync-rekordbox';
@@ -8,6 +10,7 @@ import { SyncWatch } from '/@/renderer/features/sync/components/sync-watch';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
+import { Icon } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Text } from '/@/shared/components/text/text';
 
@@ -15,16 +18,26 @@ type SyncTab = 'download' | 'external-drive' | 'upload' | 'watch';
 
 export const SyncModePlaceholder = () => {
     const electron = isElectron();
+    const isDemo = useIsDemoSession();
     const [tab, setTab] = useState<SyncTab>('upload');
+
+    // Upload and Watch both write to the library, which pymix blocks for `demo`
+    // (`require_uploader`). Marking the tabs up front is the point: the user should see
+    // that these are locked before picking files, not after.
+    const lockedTooltip =
+        'Uploading needs your own Subbox library — the demo is read-only. Request an invite to get one.';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <Group gap="xs" p="sm" style={{ borderBottom: '1px solid var(--theme-border-color)' }}>
                 <Button
+                    leftSection={isDemo ? <Icon icon="lock" size="sm" /> : undefined}
                     onClick={() => setTab('upload')}
                     size="sm"
                     tooltip={{
-                        label: 'Add music to Subbox from a Rekordbox XML export — pick the playlists you want and upload the tracks to your cloud library.',
+                        label: isDemo
+                            ? lockedTooltip
+                            : 'Add music to Subbox from a Rekordbox XML export — pick the playlists you want and upload the tracks to your cloud library.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
@@ -47,10 +60,13 @@ export const SyncModePlaceholder = () => {
                     Download
                 </Button>
                 <Button
+                    leftSection={isDemo ? <Icon icon="lock" size="sm" /> : undefined}
                     onClick={() => setTab('watch')}
                     size="sm"
                     tooltip={{
-                        label: 'Watch a local folder — any new audio files you drop in are uploaded to your Subbox library automatically.',
+                        label: isDemo
+                            ? lockedTooltip
+                            : 'Watch a local folder — any new audio files you drop in are uploaded to your Subbox library automatically.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
@@ -76,8 +92,16 @@ export const SyncModePlaceholder = () => {
                 )}
             </Group>
             <div style={{ flex: 1, overflow: 'hidden' }}>
+                {/* The demo lock is checked before the desktop-only notice: both are true
+                    for a demo user on the web, but only one of them is something they can
+                    act on. */}
                 {tab === 'upload' &&
-                    (electron ? (
+                    (isDemo ? (
+                        <InviteLockedPanel
+                            description="Uploading a Rekordbox library writes to your collection, and the demo library is shared and read-only. Your own Subbox library imports your playlists, cue points and all."
+                            title="Rekordbox upload needs your own library"
+                        />
+                    ) : electron ? (
                         <SyncRekordbox />
                     ) : (
                         <Center style={{ height: '100%' }}>
@@ -98,7 +122,12 @@ export const SyncModePlaceholder = () => {
                     </Suspense>
                 )}
                 {tab === 'watch' &&
-                    (electron ? (
+                    (isDemo ? (
+                        <InviteLockedPanel
+                            description="Watching a folder uploads whatever lands in it, and the demo library is shared and read-only. With your own library, new tracks appear in Subbox the moment you save them."
+                            title="Folder watching needs your own library"
+                        />
+                    ) : electron ? (
                         <SyncWatch />
                     ) : (
                         <Center style={{ height: '100%' }}>

@@ -15,6 +15,8 @@
  * When the variable is unset the demo button simply doesn't render, so desktop and
  * self-hosted builds are unaffected.
  */
+import { useAuthStore } from '/@/renderer/store/auth.store';
+
 const password = import.meta.env.VITE_DEMO_PASSWORD as string | undefined;
 
 export const DEMO_USERNAME = 'demo';
@@ -25,3 +27,21 @@ export const demoConfig = {
 };
 
 export const isDemoLoginEnabled = Boolean(password);
+
+/**
+ * Whether the signed-in session is the public demo login.
+ *
+ * Everything demo-aware in the UI keys off this rather than re-deriving it, so there is
+ * one definition of "in demo mode" to change if the demo account is ever renamed.
+ *
+ * Both `name` (what was typed at login) and `username` (what Navidrome echoed back) are
+ * checked: they agree today — `demo` is a real Navidrome user inside demoadmin's
+ * container — but they are populated from different sources in `authenticateServices`,
+ * and a demo session mis-detected as a real one silently drops every conversion prompt
+ * in the funnel.
+ */
+export const isDemoServer = (server?: null | { name?: string; username?: string }): boolean =>
+    server?.username === DEMO_USERNAME || server?.name === DEMO_USERNAME;
+
+export const useIsDemoSession = (): boolean =>
+    useAuthStore((state) => isDemoServer(state.currentServer));

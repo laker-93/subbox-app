@@ -2,8 +2,9 @@ import isElectron from 'is-electron';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
+import { isUploadForbidden, PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
+import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import { useCurrentServerWithCredential } from '/@/renderer/store';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
@@ -60,6 +61,7 @@ type SyncStep =
     | 'parsing'
     | 'preview'
     | 'storage-exceeded'
+    | 'upload-forbidden'
     | 'uploading';
 
 interface UploadProgress {
@@ -272,10 +274,21 @@ export const SyncRekordbox = () => {
                 setStep('importing');
                 setImportProgress(null);
             } catch (importErr: any) {
+                // A refused write is an account limit, not a failure — say so instead of
+                // showing "Import Failed" over something that was never going to work.
+                if (isUploadForbidden(importErr)) {
+                    setStep('upload-forbidden');
+                    return;
+                }
                 setError(importErr?.message || 'Import failed');
                 setStep('done');
             }
         } catch (err: any) {
+            if (isUploadForbidden(err)) {
+                setStep('upload-forbidden');
+                return;
+            }
+
             const msg = err?.message || 'Upload failed';
             const storagePrefix = 'STORAGE_LIMIT_EXCEEDED:';
             const storagePrefixIdx = msg.indexOf(storagePrefix);
@@ -609,6 +622,16 @@ export const SyncRekordbox = () => {
                     </Text>
                 </Stack>
             </Center>
+        );
+    }
+
+    // ── Upload refused (account can't write to a library) ──────────────────
+    if (step === 'upload-forbidden') {
+        return (
+            <InviteLockedPanel
+                description="Uploading a Rekordbox library writes to your collection, and this account can't. Your own Subbox library imports your playlists, cue points and all."
+                title="Rekordbox upload needs your own library"
+            />
         );
     }
 

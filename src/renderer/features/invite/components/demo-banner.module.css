@@ -1,0 +1,33 @@
+.fs-demo-banner {
+    /* Sticky is a no-op in the desktop layout (the banner sits above the scroll
+       container, not in it) and pins it to the top on mobile, where it is a child of
+       the scrolling <main>. One rule covers both, so the background must be opaque. */
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: color-mix(in srgb, var(--theme-colors-primary) 12%, var(--theme-colors-background));
+    border-bottom: 1px solid color-mix(in srgb, var(--theme-colors-primary) 35%, transparent);
+}
+
+.fs-demo-banner-text {
+    flex: 1;
+    min-width: 0;
+    color: var(--theme-colors-text-primary);
+}
+
+@media (width < 600px) {
+    .fs-demo-banner {
+        gap: 0.5rem;
+        align-items: flex-start;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .fs-demo-banner-text {
+        font-size: 0.75rem;
+    }
+}
