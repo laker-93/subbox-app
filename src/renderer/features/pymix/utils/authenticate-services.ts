@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid/non-secure';
 
 import { api } from '/@/renderer/api';
 import { FilebrowserController } from '/@/renderer/api/filebrowser/filebrowser-controller';
+import { DEMO_USERNAME } from '/@/renderer/config/demo-config';
 import { getNavidromeUrl, urlConfig } from '/@/renderer/config/url-config';
 import { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 import { ServerType } from '/@/shared/types/types';
@@ -12,7 +13,6 @@ import { ServerType } from '/@/shared/types/types';
 // Filebrowser is unaffected: 'demo' has its own (unscoped) Filebrowser account,
 // since Filebrowser only matters for Sync -> Download, which requires a separate
 // demoadmin pymix login anyway.
-const DEMO_USERNAME = 'demo';
 const DEMO_ACCOUNT_USERNAME = 'demoadmin';
 
 /**

@@ -12,6 +12,15 @@ RUN pnpm install --ignore-scripts
 # Copy code and build with cached modules
 COPY . .
 ARG BUILD_MODE=production
+
+# Password for the public `demo` trial account, baked into the bundle at build time
+# so the landing page can offer a one-click demo. Kept out of the repo's env files
+# because this repo is public; supplied from a repository secret instead. Left empty,
+# the demo button simply doesn't render. Only the built assets are copied into the
+# final stage, so this never reaches the runtime image's environment.
+ARG VITE_DEMO_PASSWORD=""
+ENV VITE_DEMO_PASSWORD=$VITE_DEMO_PASSWORD
+
 RUN if [ "$BUILD_MODE" = "production" ]; then \
       pnpm run build:web; \
     else \
