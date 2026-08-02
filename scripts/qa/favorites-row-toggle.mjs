@@ -59,14 +59,43 @@ async function readTitles(page) {
 // (use-row-interaction-delegate.ts), so hovering ANY cell in the row reveals the
 // hover-only heart icon in every other cell of that same row, same as a real user
 // mousing over any part of the row.
-async function hoverAndClickRowFavorite(page, row) {
-    const cell = row.locator(':scope > div').first();
+//
+// The list itself is a `react-window` virtualized `Grid` (item-table-list.tsx), which
+// recycles a fixed DOM node pool across scroll positions rather than mounting a fresh
+// node per data row. A `Locator` captured *before* scrolling can therefore end up
+// pointing at a DOM node that virtualization has since reassigned to a *different* data
+// row by the time of the click (confirmed live: a captured "Copy 2" row's heart click
+// actually starred "Copy 3" server-side after `scrollIntoView` ran) — the click always
+// lands wherever that pooled node scrolled to, not on the original row. A real user
+// never hits this: their scroll and their click both act on the same synchronously
+// re-rendered view, so what's visually under the cursor always matches what gets
+// clicked. To avoid this driver-only staleness, re-locate the row by its expected title
+// AFTER scrolling settles, and interact with that freshly-resolved row/cell/heart, not
+// the pre-scroll locator.
+async function hoverAndClickRowFavorite(page, row, expectedTitle) {
+    let cell = row.locator(':scope > div').first();
     // Center the row in the scroll container rather than top-aligning it (the default
     // for scrollIntoViewIfNeeded) — top alignment can still land it underneath the
     // sticky page toolbar, which floats above the scroll area rather than being part
     // of its scrollable content.
     await cell.evaluate((el) => el.scrollIntoView({ behavior: 'instant', block: 'center' }));
     await page.waitForTimeout(200);
+
+    // Re-resolve the row post-scroll: virtualization may have recycled the DOM node
+    // this locator was bound to onto a different data row during the scroll.
+    const freshRows = await dataRows(page);
+    let freshRow = null;
+    for (const r of freshRows) {
+        const text = (await r.innerText().catch(() => '')).split('\n')[1];
+        if (text === expectedTitle) {
+            freshRow = r;
+            break;
+        }
+    }
+    if (!freshRow) throw new Error(`row for "${expectedTitle}" not found after scroll-settle (virtualization recycle?)`);
+    row = freshRow;
+    cell = row.locator(':scope > div').first();
+
     let box = await cell.boundingBox();
     if (!box) throw new Error('row cell has no bounding box even after scrollIntoView(center)');
     if (box.y < 150) {
@@ -79,6 +108,12 @@ async function hoverAndClickRowFavorite(page, row) {
     }
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.waitForTimeout(300);
+    // Re-verify identity one more time right before the click — the extra scroll/wheel
+    // fallback above is itself another scroll event that could trigger another recycle.
+    const titleNow = (await row.innerText().catch(() => '')).split('\n')[1];
+    if (titleNow !== expectedTitle) {
+        throw new Error(`row identity drifted right before click: expected "${expectedTitle}", now showing "${titleNow}"`);
+    }
     const heart = row.locator('button').last();
     const heartBox = await heart.boundingBox();
     if (!heartBox) throw new Error('heart icon has no bounding box even after row hover');
@@ -177,7 +212,7 @@ async function main() {
     // a real user's mouse-over reveals it, so hover before clicking rather than
     // force-clicking an invisible element.
     await shot(page, 'before-add');
-    await hoverAndClickRowFavorite(page, targetRow);
+    await hoverAndClickRowFavorite(page, targetRow, targetTitle);
     await page.waitForTimeout(1500);
     await shot(page, 'after-add-songs-page');
     log('clicked row heart icon on /library/songs to add favorite');
@@ -222,7 +257,7 @@ async function main() {
     const buttonDiag = await removeRow.evaluate((el) => Array.from(el.querySelectorAll('button')).map((b) => ({ aria: b.getAttribute('aria-label'), cls: b.className, svg: b.querySelector('svg')?.outerHTML?.slice(0, 200) })));
     log('DIAG buttons in removeRow:', JSON.stringify(buttonDiag));
 
-    await hoverAndClickRowFavorite(page, removeRow);
+    await hoverAndClickRowFavorite(page, removeRow, targetTitle);
     log('clicked row heart icon on /favorites to REMOVE favorite (no navigation)');
     await page.waitForTimeout(1500);
 

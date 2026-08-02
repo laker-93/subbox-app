@@ -73,15 +73,38 @@ whether it correlates with system load or a specific build.
 Coverage: **Songs list render + play — verified. Favorites toggle round-trip —
 verified** (both add and remove reliably update the UI as of this re-check).
 
-## Row-level favorite toggle (table list) — separate code path, OPEN bug (issue #53)
+## Row-level favorite toggle (table list) — separate code path, verified working (2026-08-02)
 
 Not to be confused with the player-bar `FavoriteButton` above. The **table list's own
 inline heart icon** (`USER_FAVORITE` column, `favorite-column.tsx`, visible on
 `/library/songs` and `/favorites` row-hover) is a different component/data path
-(`item._serverId` off the row's own list-query data, not `currentSong`). Confirmed
-2026-07-29: clicking it silently no-ops — `getServerById(item._serverId)` returns
-undefined because the row's `_serverId` doesn't match the live `serverList`, so the
-create/delete-favorite mutation throws before any network call, with no toast and no
-visible feedback. Root cause of the `_serverId` mismatch itself not pinned down (see
-`bugs.md` OPEN entry + issue #53 for full evidence). Driver:
-`scripts/qa/favorites-row-toggle.mjs`.
+(`item._serverId` off the row's own list-query data, not `currentSong`). A 2026-07-29
+finding claimed this silently no-oped (`_serverId` mismatch); tracked as issue #53.
+Six follow-up cycles (2026-07-30..2026-08-02) ran 21/21 clean fresh-launch trials via
+a dedicated sweep and could not reproduce it — **issue #53 closed not-reproducible.**
+
+**Re-verified live 2026-08-02** via `scripts/qa/favorites-row-toggle.mjs` (add on
+`/library/songs`, remove on `/favorites` itself, no navigation): both the add and
+remove clicks fired the correct `star.view`/`unstar.view` request and produced the
+correct server-side state (`annotation.starred` confirmed via direct sqlite query
+against `navidrometest260526`), on the exact intended track — row-level toggle works
+correctly on both pages.
+
+**Driver bug found and fixed along the way (not a product bug).** The songs/favorites
+table is a `react-window`-virtualized `Grid` (`item-table-list.tsx`). The driver used
+to capture a row `Locator` *before* scrolling it into view, then click that same stale
+locator — but virtualization recycles DOM nodes across scroll positions, so the
+click could land on a different track than the one whose title was read (confirmed:
+one run starred "…Copy 3" when the intended target, read pre-scroll, was "…Copy 2").
+A real user never hits this — their scroll and click are always synchronized to the
+same render. Fixed by re-locating the row by expected title after the scroll settles,
+and re-verifying identity immediately before the click; a mismatch now throws loudly
+instead of silently clicking the wrong row.
+
+**One caveat, not a bug:** immediately after a remove (within React Query's 10s
+`staleTime`), re-navigating away and back to `/favorites` can still show the
+just-removed row — confirmed via network trace that the re-navigation served cached
+data with **no** `GET /api/song?...starred=true` request at all. Waiting past 10s
+before re-navigating does trigger a real refetch and the row correctly disappears.
+Same caching design as the delete-track staleness note in `ux-notes.md`, not specific
+to favorites.

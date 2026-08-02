@@ -132,7 +132,7 @@ naturally passes through it.
 - [x] `[upstream]` Library — songs — list render + play-from-list: `features/songs-browse-and-play.md` (player-bar favorite toggle verified both directions; issue #38 closed not-reproducible)
 - [x] `[upstream]` Library — genres — grid → detail → album/track toggle → play: `features/genres-browse.md`
 - [ ] `[upstream]` Library — folders (`/library/folders`)
-- [ ] `[upstream]` Favorites (`/favorites`) — list *rendering* verified (tail of songs journey); the player-bar toggle is now verified reliable both directions (issue #38 closed not-reproducible), but the `/favorites` page's own add/remove toggle UI, likely a different code path, is still untested.
+- [x] `[upstream]` Favorites (`/favorites`) — row-level add/remove toggle (own code path from the player-bar button, issue #53) verified live 2026-08-02: `features/songs-browse-and-play.md` (found+fixed a virtualization-staleness bug in the driver itself, not the product; surfaced a real ux-note on unfavorite-from-`/favorites` list staleness)
 - [x] `[mixed]` Playlists — add-to-playlist + sync-download: `features/playlist-add-and-download.md`
 - [x] `[subbox]` Delete a track — `DELETE {pymix}/track` by `subbox_id`: `features/delete-track.md` (fixed false-success toast #18/#19; do **not** hand-roll `beet remove` — that's the no-`subboxid` fallback only)
 - [x] `[upstream]` Now playing queue — tail of albums journey: `features/albums-browse-and-play.md` (NB `/playing` is a dead orphaned route, not a bug)

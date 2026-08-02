@@ -18,6 +18,44 @@ future cycle re-investigating; the archive has the detail if ever needed.
      find confusing/awkward and why, evidence (screenshot path), and whether
      you think it's a safe small fix or needs a design call. -->
 
+### Un-favoriting a track from the `/favorites` page itself leaves it listed (heart flips, row stays) until a real refetch
+
+Added: 2026-08-02. Route `/favorites`, row-level heart icon (`favorite-column.tsx`).
+Driver `scripts/qa/favorites-row-toggle.mjs`. Account `test260526`. Found while
+closing out the "`[upstream]` Favorites (`/favorites`)" coverage row.
+
+**What a user sees.** Click a favorited row's own heart icon on the `/favorites`
+page itself (not the player bar) to unfavorite it. The heart icon correctly flips
+to hollow/unfilled immediately — but **the row itself stays in the list**,
+sitting there unfavorited, for as long as ~10s+ (React Query's `staleTime`) even
+after navigating away and back. Verified server-side truth is correct throughout
+(`annotation.starred=0` in Navidrome's DB right after the click) — this is purely
+a stale client list, not a failed unfavorite. Add-then-remove-then-recheck (no
+nav) still shows the row after 4s; only a re-navigation *after* the 10s window
+triggers a real `GET /api/song?...&starred=true` refetch that correctly drops it
+(confirmed via request tracing — the too-soon re-navigation issues **no** network
+request at all, purely cache-served).
+
+**Root cause.** `applyFavoriteOptimisticUpdates`'s `SONG` branch
+(`favorite-optimistic-updates.ts:539-559`) patches every cached `songs.list` query
+(`exact: false`, so it matches the `/favorites` page's own `starred=true`-filtered
+query too) by flipping `userFavorite` on the matching item **in place** — it never
+removes the item from the array. That's the right behavior for a generic songs
+list (an unfavorited song should stay visible there, just with an unfilled heart),
+but `/favorites` is itself server-filtered to only-starred items, so leaving the
+now-unfavorited item *in* that specific cached array is exactly the one context
+where the optimistic update should remove it instead of patching it.
+
+**Why not fixed this cycle.** Same shape as the existing "deleted track stays
+visible" note below: fixing it means making the optimistic updater
+context-aware (distinguish "the generic song list" from "the starred-only list"
+by inspecting the query's filter params) or giving the `/favorites` route its own
+client-side `userFavorite` filter — either is a deliberate design decision about
+how a shared, upstream-inherited mutation helper (used by every favoritable item
+type, not just songs) should special-case one filtered view, not a small
+same-shape patch. Logged, not fixed; no `qa-bug` issue (friction/design call, per
+policy).
+
 ### Landing page advertises Serato sync, but the client has no Serato UI at all
 
 Added: 2026-07-23. Route: pre-login landing page (`features/home/components/landing-page.tsx:37-40`).
