@@ -7,11 +7,19 @@ import { Button } from '/@/shared/components/button/button';
 import { Stack } from '/@/shared/components/stack/stack';
 
 interface LandingPageProps {
+    /** Omitted when no demo account is configured for this build — the button then doesn't render. */
+    demoLoading?: boolean;
     onCreateAccount: () => void;
     onLogin: () => void;
+    onTryDemo?: () => void;
 }
 
-export const LandingPage = ({ onCreateAccount, onLogin }: LandingPageProps) => {
+export const LandingPage = ({
+    demoLoading,
+    onCreateAccount,
+    onLogin,
+    onTryDemo,
+}: LandingPageProps) => {
     const { t } = useTranslation();
 
     return (
@@ -68,7 +76,34 @@ export const LandingPage = ({ onCreateAccount, onLogin }: LandingPageProps) => {
                             postProcess: 'titleCase',
                         })}
                     </Button>
-                    <Button fullWidth onClick={onLogin} size="lg" variant="filled">
+                    {onTryDemo && (
+                        <>
+                            <Button
+                                fullWidth
+                                loading={demoLoading}
+                                onClick={onTryDemo}
+                                size="lg"
+                                variant="filled"
+                            >
+                                {t('page.landing.tryDemo', {
+                                    defaultValue: 'Try the demo',
+                                    postProcess: 'titleCase',
+                                })}
+                            </Button>
+                            <p className={styles['fs-landing-page-demo-hint']}>
+                                {t('page.landing.tryDemoHint', {
+                                    defaultValue:
+                                        'No sign-up needed — explore a sample library instantly.',
+                                })}
+                            </p>
+                        </>
+                    )}
+                    <Button
+                        fullWidth
+                        onClick={onLogin}
+                        size="lg"
+                        variant={onTryDemo ? 'default' : 'filled'}
+                    >
                         {t('common.login', {
                             defaultValue: 'Login',
                             postProcess: 'titleCase',
