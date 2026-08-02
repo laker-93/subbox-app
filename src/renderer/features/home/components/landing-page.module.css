@@ -66,3 +66,10 @@
 .fs-landing-page-enter-button {
     margin-top: 1rem;
 }
+
+.fs-landing-page-demo-hint {
+    margin: -0.5rem 0 0;
+    font-size: 0.8rem;
+    color: var(--theme-colors-text-secondary);
+    text-align: center;
+}
