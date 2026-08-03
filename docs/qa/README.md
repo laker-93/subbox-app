@@ -124,14 +124,18 @@ naturally passes through it.
 <!-- Checked rows are compacted to one line — the detail lives in the linked
      features/*.md (ground truth). Keep new [x] rows to a single line too. -->
 
-- [ ] `[upstream]` Login / servers (`/login`, `/servers`)
-- [ ] `[upstream]` Home / explore (`/`, `/explore`)
+- [x] `[upstream]` Login / servers (`/login`, `/servers`) — classic upstream manual-server-entry
+      flow, not subbox's real login path and unreachable via any UI link: `features/login-servers-home-explore-folders.md`
+      (found `/login`'s logged-out state is a dead-end raw-JSON-dump page; `/servers` unmounted, 404s gracefully)
+- [x] `[upstream]` Home / explore (`/`, `/explore`) — Home verified working; `/explore` is a dead
+      enum value, never mounted: `features/login-servers-home-explore-folders.md`
 - [x] `[upstream]` Library — albums — grid → detail → play → Now Playing: `features/albums-browse-and-play.md`
 - [x] `[upstream]` Library — artists — grid → album-artist detail → discography/top-songs → play: `features/artists-browse.md` (role-only-artist friction in ux-notes)
 - [ ] `[upstream]` Library — album artists (`/library/album-artists`, detail)
 - [x] `[upstream]` Library — songs — list render + play-from-list: `features/songs-browse-and-play.md` (player-bar favorite toggle verified both directions; issue #38 closed not-reproducible)
 - [x] `[upstream]` Library — genres — grid → detail → album/track toggle → play: `features/genres-browse.md`
-- [ ] `[upstream]` Library — folders (`/library/folders`)
+- [x] `[upstream]` Library — folders (`/library/folders`) — root list + double-click descend into
+      a subfolder verified live: `features/login-servers-home-explore-folders.md`
 - [x] `[upstream]` Favorites (`/favorites`) — row-level add/remove toggle (own code path from the player-bar button, issue #53) verified live 2026-08-02: `features/songs-browse-and-play.md` (found+fixed a virtualization-staleness bug in the driver itself, not the product; surfaced a real ux-note on unfavorite-from-`/favorites` list staleness)
 - [x] `[mixed]` Playlists — add-to-playlist + sync-download: `features/playlist-add-and-download.md`
 - [x] `[subbox]` Delete a track — `DELETE {pymix}/track` by `subbox_id`: `features/delete-track.md` (fixed false-success toast #18/#19; do **not** hand-roll `beet remove` — that's the no-`subboxid` fallback only)

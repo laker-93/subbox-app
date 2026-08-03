@@ -20,6 +20,54 @@ future cycle re-investigating; the archive has the detail if ever needed.
      Step 1½). Remove an entry (move to FIXED) once actually fixed and verified,
      don't just mark it done. -->
 
+### (reachable-but-broken dead end, NOT user-reachable in practice — no issue filed by design) `/login`'s logged-out state dumps raw internal JSON with no way back
+
+Added: 2026-08-03. Found while closing out the README's "Login / servers" coverage
+row (`features/login-servers-home-explore-folders.md`).
+
+**Observation.** `LoginRoute` (`features/login/routes/login-route.tsx`) is mounted
+as a **sibling** of `AuthenticationOutlet`/`AppOutlet` in `app-router.tsx`, not
+nested inside them — so it renders unconditionally on `/login`, bypassing the real
+subbox auth gate (`AppOutlet`'s `!currentServer` → `LandingPage`+`PymixAuthModal`)
+entirely. It's the old upstream-Feishin `SERVER_LOCK` single-server-kiosk login
+form, which requires `window.SERVER_TYPE`/`window.SERVER_URL` (build-time config a
+subbox build never sets). With `currentServer` set it correctly bounces to Home
+(`<Navigate to={AppRoute.HOME}>`, verified live, no bug) — but logged-out, it
+renders a bare "An error occurred / No server selected" page that dumps its raw
+config-validity array as JSON straight onto the screen, with no link back to the
+real landing page.
+
+**Why NOT filed / fixed.** `grep -rn "AppRoute.LOGIN\b" src/renderer` → zero hits
+outside `routes.ts`/`app-router.tsx` — nothing in the app ever navigates here
+(`to={AppRoute.LOGIN}` or similar), so no real user's click path reaches it; only
+a manually-typed/bookmarked URL would. Same class as the already-logged
+`/action-required` dead code: fixing it means either wiring `SERVER_LOCK` config
+into subbox builds (a deployment/feature decision) or deleting the classic
+login flow outright (multi-file cleanup, and the authenticated-redirect branch is
+live-correct and would need preserving) — outside the small-fix bar. No `qa-bug`
+issue by design.
+
+### (latent, NOT user-reachable — no issue filed by design) `AppRoute.EXPLORE` (`/explore`) and `AppRoute.SERVERS` (`/servers`) are unmounted dead routes
+
+Added: 2026-08-03. Found while closing out the README's "Home / explore" and
+"Login / servers" coverage rows (`features/login-servers-home-explore-folders.md`).
+
+**Observation.** Both `AppRoute.EXPLORE` and `AppRoute.SERVERS` exist only as enum
+values in `routes.ts` — `grep -rn "AppRoute.EXPLORE\|ExploreRoute\|'/explore'"` and
+the equivalent for `SERVERS` each return zero hits elsewhere in `src/renderer`, and
+neither has a `<Route path={...}>` in `app-router.tsx` (unlike `HOME`, mounted
+twice — index and `/`). Hash-navigating to either live renders the app's own
+`InvalidRoute` 404 ("Unable to route request") gracefully, inside full app chrome
+— not a crash, just confirms no such screen exists. Home's own "Explore from your
+library" carousel section appears to be where the Explore concept actually lives
+today.
+
+**Why NOT filed / fixed.** No live symptom (nothing links to either route, and the
+404 fallback already handles a stray/typed URL correctly) — same class as
+`/action-required`. Deleting two unused enum values is a trivial-looking but
+still-a-cleanup-call change, not a bug fix; left alone. No `qa-bug` issue by
+design.
+
 ### (latent, NOT user-reachable — no issue filed by design) `/action-required` route + its entire component tree are dead code
 
 Added: 2026-07-25. Found while closing out the `[mixed]` "Action required /
