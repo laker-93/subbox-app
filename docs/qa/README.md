@@ -131,7 +131,7 @@ naturally passes through it.
       enum value, never mounted: `features/login-servers-home-explore-folders.md`
 - [x] `[upstream]` Library — albums — grid → detail → play → Now Playing: `features/albums-browse-and-play.md`
 - [x] `[upstream]` Library — artists — grid → album-artist detail → discography/top-songs → play: `features/artists-browse.md` (role-only-artist friction in ux-notes)
-- [ ] `[upstream]` Library — album artists (`/library/album-artists`, detail)
+- [x] `[upstream]` Library — album artists — grid → detail → songs/favorite-songs/top-songs/discography → play, driven via the dedicated nav item (not an Artists-card click): `features/album-artists-browse.md` (no bugs — clean because this index excludes role-only artists)
 - [x] `[upstream]` Library — songs — list render + play-from-list: `features/songs-browse-and-play.md` (player-bar favorite toggle verified both directions; issue #38 closed not-reproducible)
 - [x] `[upstream]` Library — genres — grid → detail → album/track toggle → play: `features/genres-browse.md`
 - [x] `[upstream]` Library — folders (`/library/folders`) — root list + double-click descend into
