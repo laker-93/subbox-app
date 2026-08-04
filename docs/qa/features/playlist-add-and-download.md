@@ -6,6 +6,29 @@ directive (sub-steps 4 & 5). This is the "sort into a playlist, then download
 missing tracks to my local folder" half of a real user's flow, exercised against
 test account `test260526`.
 
+**Regression-swept 2026-08-04, no regression.** The original fixture below (the
+`qa-scratch`/`Import Probe 2026-07-09` track + "QA Import Playlist 0709") no
+longer exists — `test260526`'s Navidrome container was recreated from scratch on
+2026-07-25 for pymix#41 (per-user volume namespacing), which discarded all
+pre-existing playlists/library state. Re-drove the whole journey against a fresh
+throwaway fixture instead: added an existing library track (Burial — "UK", off
+the current "QA Load Test 01" playlist/album `Untrue`) to a brand-new playlist
+"QA Regression 0804" via the same add-to-playlist-smoke.mjs flow, then ran
+sync-smoke.mjs against it. Confirmed identical behavior to the original writeup:
+Preview correctly showed `Missing (1)`/`Already Present (0)` before download,
+"Download Complete — 1 track exported." after, the file landed at
+`subbox-dev/music/Burial/Untrue/12 - Burial - UK.2.mp3` **byte-exact to the
+server copy** (485414 bytes both sides, confirmed via direct
+`navidrometest260526` sqlite query), a `SUBBOX_ID` tag frame is present in the
+downloaded file (`strings | grep -i subbox`), the shared prod `subbox/music`
+folder stayed untouched (970 files, unchanged) confirming dev/prod isolation
+still holds, and a second Preview run correctly flipped to `Missing (0)`/
+`Already Present (1)`. The same cosmetic `502` console error from the original
+writeup recurred (did not block plan generation or download, same as before).
+Scratch playlist + downloaded file cleaned up afterward (deleted from
+`navidrometest260526` directly + `rm -rf` the local folder) — no lasting fixture
+left behind this time, unlike the original.
+
 ## Setup / fixtures
 
 - Scratch track imported earlier via the watch-dir import (see
