@@ -63,6 +63,12 @@ const beetsImportProgress = z.object({
     n_tracks_processed: z.number(),
     n_tracks_to_process: z.number(),
     percentage_complete: z.number(),
+    // Which of the import's three passes the server is on, and that pass's own
+    // n/total (laker-93/pymix#51). Optional so an older pymix — or a job row
+    // created before its migration — still parses.
+    phase: z.string().nullish(),
+    phase_n_processed: z.number().optional(),
+    phase_n_total: z.number().optional(),
     reason: z.string(),
     result: z.boolean(),
 });

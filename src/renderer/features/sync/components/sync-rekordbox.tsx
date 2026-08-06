@@ -20,14 +20,31 @@ import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 
 const ipc = isElectron() ? window.api.ipc : null;
 
+type ImportPhase = 'applying_metadata' | 'complete' | 'importing_audio' | 'mapping_ids';
+
 interface ImportProgress {
     in_progress: boolean;
     n_tracks_processed: number;
     n_tracks_to_process: number;
     percentage_complete: number;
+    // Which pass of the import the server is on, and how far through it is. An
+    // import is three passes, and only the first shows up in the track count the
+    // percentage used to be derived from -- so the bar read a frozen 100% for the
+    // whole tail (laker-93/pymix#51). Optional: a server predating that fix, or an
+    // import job created before it, sends neither.
+    phase?: ImportPhase | null;
+    phase_n_processed?: number;
+    phase_n_total?: number;
     reason: string;
     result: boolean;
 }
+
+const IMPORT_PHASE_LABELS: Record<ImportPhase, string> = {
+    applying_metadata: 'Applying cue points and metadata...',
+    complete: 'Finishing up...',
+    importing_audio: 'Importing into library...',
+    mapping_ids: 'Linking tracks to your library...',
+};
 
 interface PlaylistPreview {
     name: string;
@@ -560,13 +577,23 @@ export const SyncRekordbox = () => {
         const processed = importProgress?.n_tracks_processed ?? 0;
         const total = importProgress?.n_tracks_to_process ?? 0;
 
+        const phase = importProgress?.phase ?? 'importing_audio';
+        const title = IMPORT_PHASE_LABELS[phase] ?? IMPORT_PHASE_LABELS.importing_audio;
+        // The audio phase counts tracks landing in the library; the later passes
+        // count their own work, so show whichever the current phase is about.
+        const phaseTotal = importProgress?.phase_n_total ?? 0;
+        const counts =
+            phase === 'importing_audio' || phaseTotal === 0
+                ? `${processed} / ${total} tracks`
+                : `${importProgress?.phase_n_processed ?? 0} / ${phaseTotal} tracks`;
+
         return (
             <Center style={{ height: '100%' }}>
                 <Stack align="center" gap="md" maw={400}>
                     <Spinner />
-                    <TextTitle order={4}>Importing into library...</TextTitle>
+                    <TextTitle order={4}>{title}</TextTitle>
                     <Text size="sm">
-                        {processed} / {total} tracks ({Math.round(pct)}%)
+                        {counts} ({Math.round(pct)}%)
                     </Text>
                     <Text c="dimmed" size="xs" ta="center">
                         This may take a while for large libraries.
