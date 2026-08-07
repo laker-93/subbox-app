@@ -10,6 +10,11 @@ music-server `ControllerEndpoint` abstraction, the subbox-specific services
 (pymix/filebrowser), state, routing, styling, build targets, and the add-a-feature
 walkthroughs all live there. Env-driven settings (web/Docker) are in `docs/ENV_SETTINGS.md`.
 
+`docs/qa/` holds the continuous-UX loop's journals — `features/*.md` records behaviour
+that was **actually driven and verified**, so it's the best answer to "what is this flow
+supposed to do?"; `bugs.md` / `ux-notes.md` say what's known-broken. Check them before
+re-investigating a flow. The loop itself is documented in `../subbox-workspace/docs/qa.md`.
+
 ## Invariants (get these wrong and the build or a future merge breaks)
 
 - **pnpm only** — never npm/yarn (there is a `pnpm-lock.yaml`).
