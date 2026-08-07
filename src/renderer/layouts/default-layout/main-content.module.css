@@ -67,20 +67,3 @@
     min-height: 0;
     overflow: auto;
 }
-
-.mode-toggle-bar {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: flex-end;
-    padding: var(--theme-spacing-xs) var(--theme-spacing-md);
-    -webkit-app-region: drag;
-
-    &:has(> :nth-child(2)) {
-        justify-content: space-between;
-    }
-
-    & > * {
-        -webkit-app-region: no-drag;
-    }
-}

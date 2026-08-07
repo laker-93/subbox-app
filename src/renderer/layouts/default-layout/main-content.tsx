@@ -1,7 +1,6 @@
 import clsx from 'clsx';
 import { motion } from 'motion/react';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Outlet } from 'react-router';
 import { shallow } from 'zustand/shallow';
 
@@ -9,8 +8,8 @@ import styles from './main-content.module.css';
 
 import { ExpandedListContainer } from '/@/renderer/components/item-list/expanded-list-container';
 import { ExpandedListItem } from '/@/renderer/components/item-list/expanded-list-item';
+import { ModeToggle } from '/@/renderer/features/sync/components/mode-toggle';
 import { SyncModePlaceholder } from '/@/renderer/features/sync/components/sync-mode-placeholder';
-import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import { FullScreenOverlay } from '/@/renderer/layouts/default-layout/full-screen-overlay';
 import { FullScreenVisualizerOverlay } from '/@/renderer/layouts/default-layout/full-screen-visualizer-overlay';
 import { LeftSidebar } from '/@/renderer/layouts/default-layout/left-sidebar';
@@ -23,14 +22,8 @@ import {
     useSideQueueLayout,
     useSideQueueType,
 } from '/@/renderer/store';
-import { AppMode } from '/@/renderer/store/app.store';
 import { constrainRightSidebarWidth, constrainSidebarWidth } from '/@/renderer/utils';
-import { Button } from '/@/shared/components/button/button';
-import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
-import { Icon } from '/@/shared/components/icon/icon';
-import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { Spinner } from '/@/shared/components/spinner/spinner';
-import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 
 const MINIMUM_SIDEBAR_WIDTH = 260;
 
@@ -257,78 +250,6 @@ function MainContentBody() {
                 )}
             </div>
             {appMode === 'library' && <GlobalExpandedPanel />}
-        </div>
-    );
-}
-
-function ModeToggle() {
-    const { t } = useTranslation();
-    const appMode = useAppMode();
-    const { setAppMode } = useAppStoreActions();
-
-    return (
-        <div className={styles.modeToggleBar}>
-            {appMode === 'sync' && (
-                <DropdownMenu position="bottom-start">
-                    <DropdownMenu.Target>
-                        <Button p="0">
-                            <Icon icon="menu" size="lg" />
-                        </Button>
-                    </DropdownMenu.Target>
-                    <DropdownMenu.Dropdown>
-                        <AppMenu />
-                    </DropdownMenu.Dropdown>
-                </DropdownMenu>
-            )}
-            <SegmentedControl
-                data={[
-                    {
-                        label: (
-                            <Tooltip
-                                label={t('page.modeToggle.libraryTooltip', {
-                                    defaultValue:
-                                        'Browse and play the music already in your Subbox library.',
-                                })}
-                                multiline
-                                openDelay={300}
-                                w={260}
-                            >
-                                <span>
-                                    {t('page.sidebar.library', {
-                                        defaultValue: 'Library',
-                                        postProcess: 'titleCase',
-                                    })}
-                                </span>
-                            </Tooltip>
-                        ),
-                        value: 'library',
-                    },
-                    {
-                        label: (
-                            <Tooltip
-                                label={t('page.modeToggle.syncTooltip', {
-                                    defaultValue:
-                                        'Move music between Rekordbox and Subbox — upload tracks to your library or download playlists (with Rekordbox XML) to use elsewhere.',
-                                })}
-                                multiline
-                                openDelay={300}
-                                w={260}
-                            >
-                                <span>
-                                    {t('page.sidebar.sync', {
-                                        defaultValue: 'Sync',
-                                        postProcess: 'titleCase',
-                                    })}
-                                </span>
-                            </Tooltip>
-                        ),
-                        value: 'sync',
-                    },
-                ]}
-                onChange={(value) => setAppMode(value as AppMode)}
-                size="xs"
-                value={appMode}
-            />
         </div>
     );
 }
