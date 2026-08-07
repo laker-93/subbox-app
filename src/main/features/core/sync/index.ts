@@ -18,7 +18,7 @@ import {
     extractPlaylists,
     ParsedPlaylist,
     ParsedTrack,
-    sanitizeName,
+    sanitizePathSegment,
 } from '/@/main/features/core/sync/rekordbox-xml';
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
@@ -45,6 +45,10 @@ export interface UploadProgress {
 }
 
 export interface UploadResult {
+    /** Tracks the XML lists but that can never be uploaded, because their tags leave
+     *  nothing to match on (see `trackEligibility`). Excluded from `totalTracksInXml`,
+     *  and from the preview count, so they are reported separately or not at all. */
+    dropped: Array<{ reason: string; trackName: string }>;
     /** Tracks whose upload failed server-side (e.g. a TUS create rejection) rather
      *  than being skipped for a known local reason (missing file, already uploaded). */
     failed: Array<{ reason: string; trackName: string }>;
@@ -81,6 +85,10 @@ interface PymixAuth {
      */
     refresh(): Promise<null | string>;
 }
+
+type TrackEligibility =
+    | { cleanName: string; key: string; uploadable: true }
+    | { reason: string; uploadable: false };
 
 /**
  * Build a filebrowser auth helper that can silently re-login when its short-lived
@@ -186,6 +194,20 @@ function createPymixAuth(args: {
 }
 
 /**
+ * Best human-readable identifier for a track being reported as dropped: its tags when it
+ * has usable ones, otherwise the filename — for a track dropped precisely *because* its
+ * tags are unusable, the filename is all the user has left to find it by.
+ */
+function describeTrack(track: ParsedTrack): string {
+    const artist = track.artist?.trim();
+    const name = track.name?.trim();
+    if (artist && name) return `${artist} - ${name}`;
+    if (name) return name;
+    if (track.location) return path.basename(track.location);
+    return artist ? `${artist} - (untitled)` : '(untitled)';
+}
+
+/**
  * Issue a filebrowser request that refreshes the token once on a 401 and retries —
  * the same self-healing behaviour `createFbAuth`'s doc comment promises.
  */
@@ -222,21 +244,48 @@ function sendSessionExpired(event: Electron.IpcMainEvent | Electron.IpcMainInvok
     event.sender.send('sync:session-expired');
 }
 
-// ── Parse XML → return playlist previews ───────────────────────────────────
-
 /**
- * Dedup key for a track, in the same scheme as the upload-time `trackMap` below.
- * Tracks missing a name or artist are skipped there too, so this returns null for them
- * rather than a key, so callers can drop them from both the count and the dedup set.
+ * The single rule for whether a track can be uploaded at all, shared by the preview
+ * count and the upload loop below so the number the user approves at Preview is the
+ * number that actually gets processed.
+ *
+ * These two used to be written out separately and had drifted: the preview skipped only
+ * the missing-name/artist case, and without trimming, so whitespace-only titles and
+ * titles that collapse to nothing were counted on the screen the user consented from and
+ * then dropped at upload time with nothing in the UI to account for them.
+ *
+ * Rejections carry a reason so the completion screen can name what did not make it,
+ * rather than only showing a total that happens to be lower than expected.
  */
-function trackDedupKey(track: ParsedTrack): null | string {
-    if (!track.name || !track.artist) return null;
+function trackEligibility(track: ParsedTrack): TrackEligibility {
+    // Trim first: a whitespace-only Name (e.g. "  ") is truthy so it slips past a
+    // plain falsy check, then extractTrackName reduces it to null — which we'd send
+    // as title:null and pymix's /sync/match_tracks rejects with a 422 that fails the
+    // *whole* batch.
+    if (!track.name?.trim() || !track.artist?.trim()) {
+        return { reason: 'no title or artist in the XML', uploadable: false };
+    }
+
     const cleanName = extractTrackName(track.name, track.artist, track.album ?? undefined);
-    return `${track.artist} - ${cleanName}`;
+    // extractTrackName can still return null when the title is entirely the
+    // artist/album text; such a track has nothing to match on, so drop it rather
+    // than poison the batch.
+    if (!cleanName) {
+        return { reason: 'title is only the artist/album name', uploadable: false };
+    }
+
+    // Keyed on the raw artist rather than the trimmed one: pymix echoes back the artist
+    // we send to /sync/match_tracks verbatim, and `trackKeyToTrack` below is rebuilt
+    // from that echo, so the two spellings have to agree.
+    return { cleanName, key: `${track.artist} - ${cleanName}`, uploadable: true };
 }
 
 function trackKeysForPlaylist(pl: { tracks: ParsedTrack[] }): string[] {
-    return pl.tracks.map(trackDedupKey).filter((key): key is string => key !== null);
+    return pl.tracks.reduce<string[]>((keys, track) => {
+        const eligibility = trackEligibility(track);
+        if (eligibility.uploadable) keys.push(eligibility.key);
+        return keys;
+    }, []);
 }
 
 /**
@@ -259,20 +308,28 @@ async function withPymixAuth<T>(
     }
 }
 
+// ── Parse XML → return playlist previews ───────────────────────────────────
+
 ipcMain.handle(
     'sync:parse-rekordbox-xml',
     async (_event, xmlPath: string): Promise<PlaylistPreview[]> => {
         const result = extractPlaylists(xmlPath);
         const previews: PlaylistPreview[] = [];
 
+        // Count only what the upload would actually take. The raw XML entry count
+        // (pl.trackCount) would otherwise promise tracks trackEligibility rejects.
+        const buildPreview = (
+            name: string,
+            playlistPath: string[],
+            tracks: ParsedTrack[],
+        ): PlaylistPreview => {
+            const trackKeys = trackKeysForPlaylist({ tracks });
+            return { name, path: playlistPath, trackCount: trackKeys.length, trackKeys };
+        };
+
         // Collect top-level playlists
         for (const pl of result.playlists) {
-            previews.push({
-                name: pl.name,
-                path: [],
-                trackCount: pl.trackCount,
-                trackKeys: trackKeysForPlaylist(pl),
-            });
+            previews.push(buildPreview(pl.name, [], pl.tracks));
         }
 
         // Recursively collect from folders
@@ -282,12 +339,7 @@ ipcMain.handle(
         ) {
             const currentPath = [...parentPath, folder.name];
             for (const pl of folder.playlists) {
-                previews.push({
-                    name: pl.name,
-                    path: currentPath,
-                    trackCount: pl.trackCount,
-                    trackKeys: trackKeysForPlaylist(pl),
-                });
+                previews.push(buildPreview(pl.name, currentPath, pl.tracks));
             }
             for (const sub of folder.subfolders) {
                 collectFromFolder(sub, currentPath);
@@ -301,12 +353,7 @@ ipcMain.handle(
         // Add a synthetic entry for tracks not in any playlist
         const orphanTracks = collectTracksNotInAnyPlaylist(result);
         if (orphanTracks.length > 0) {
-            previews.push({
-                name: NOPLAYLIST_NAME,
-                path: [],
-                trackCount: orphanTracks.length,
-                trackKeys: trackKeysForPlaylist({ tracks: orphanTracks }),
-            });
+            previews.push(buildPreview(NOPLAYLIST_NAME, [], orphanTracks));
         }
 
         return previews;
@@ -414,29 +461,31 @@ ipcMain.handle(
         const selectedNames = new Set(playlistNames);
         const selectedPlaylists = collectPlaylistsByName(result, selectedNames);
 
-        // Deduplicate tracks across selected playlists
+        // Deduplicate tracks across selected playlists, applying the same eligibility
+        // rule the preview counted with. Anything rejected is recorded rather than
+        // silently skipped, so the completion screen can say which tracks were left out
+        // and why instead of just reporting a smaller number than the user expected.
         const trackMap = new Map<string, ParsedTrack>();
+        const droppedTracks: Array<{ reason: string; trackName: string }> = [];
+        const seenDropped = new Set<string>();
         for (const pl of selectedPlaylists) {
             for (const track of pl.tracks) {
-                // Skip tracks with no usable name/artist. Trim first: a
-                // whitespace-only Name (e.g. "  ") is truthy so it slips past a
-                // plain falsy check, then extractTrackName reduces it to null —
-                // which we'd send as title:null and pymix's /sync/match_tracks
-                // rejects with a 422 that fails the *whole* batch.
-                if (!track.name?.trim() || !track.artist?.trim()) continue;
-                const cleanName = extractTrackName(
-                    track.name,
-                    track.artist,
-                    track.album ?? undefined,
-                );
-                // extractTrackName can still return null when the title is
-                // entirely the artist/album text; such a track has nothing to
-                // match on, so drop it rather than poison the batch.
-                if (!cleanName) continue;
-                track.cleanName = cleanName;
-                const key = `${track.artist} - ${cleanName}`;
-                if (!trackMap.has(key)) {
-                    trackMap.set(key, track);
+                const eligibility = trackEligibility(track);
+
+                if (!eligibility.uploadable) {
+                    // A track can sit in several selected playlists — report it once.
+                    const trackName = describeTrack(track);
+                    const dedupKey = `${trackName} :: ${eligibility.reason}`;
+                    if (!seenDropped.has(dedupKey)) {
+                        seenDropped.add(dedupKey);
+                        droppedTracks.push({ reason: eligibility.reason, trackName });
+                    }
+                    continue;
+                }
+
+                track.cleanName = eligibility.cleanName;
+                if (!trackMap.has(eligibility.key)) {
+                    trackMap.set(eligibility.key, track);
                 }
             }
         }
@@ -446,6 +495,12 @@ ipcMain.handle(
         console.log(
             `[sync] XML parsed: ${totalTracks} unique tracks across ${selectedPlaylists.length} selected playlist(s)`,
         );
+        if (droppedTracks.length > 0) {
+            console.warn(`[sync] ${droppedTracks.length} track(s) dropped before upload:`);
+            for (const { reason, trackName } of droppedTracks) {
+                console.warn(`[sync]   ${trackName} — ${reason}`);
+            }
+        }
 
         const sendProgress = (progress: UploadProgress) => {
             event.sender.send('sync:upload-progress', progress);
@@ -602,17 +657,18 @@ ipcMain.handle(
             // Sanitize each path component so characters like '%' don't reach
             // filebrowser's TUS endpoint, which double-unescapes the path and 400s
             // on an invalid URL escape (e.g. album "99.9%" → ".../99.9%/..." →
-            // "invalid URL escape"). sanitizeName strips the same character set
-            // already used for playlist/folder names. The file extension is a
-            // controlled value (path.extname) so it's left as-is. This is the same
-            // value sent to /sync/map_meta below, so server-side tagging still matches.
-            // Album is optional in Rekordbox exports (white labels, promos, single-track
-            // downloads) — sanitizeName(undefined) is '', which would otherwise collapse
-            // to an empty path component ("Artist//Title.mp3") that filebrowser 404s on.
+            // "invalid URL escape"), and so no component starts with a dot, which
+            // would make a hidden directory that beets refuses to import. The file
+            // extension is a controlled value (path.extname) so it's left as-is. This
+            // is the same value sent to /sync/map_meta below, so server-side tagging
+            // still matches. Album is optional in Rekordbox exports (white labels,
+            // promos, single-track downloads) — sanitizePathSegment(undefined) is '',
+            // which would otherwise collapse to an empty path component
+            // ("Artist//Title.mp3") that filebrowser 404s on.
             const stagingPath = [
-                sanitizeName(track.artist),
-                sanitizeName(track.album) || 'Unknown Album',
-                `${sanitizeName(track.cleanName)}${track.fileExtension}`,
+                sanitizePathSegment(track.artist),
+                sanitizePathSegment(track.album) || 'Unknown Album',
+                `${sanitizePathSegment(track.cleanName)}${track.fileExtension}`,
             ].join('/');
             uploadableTracks.push({ stagingPath, track, trackName });
 
@@ -789,6 +845,7 @@ ipcMain.handle(
         });
 
         return {
+            dropped: droppedTracks,
             failed: failedTracks.map(({ reason, trackName }) => ({ reason, trackName })),
             skipped: skippedCount,
             totalTracksInXml: totalTracks,
