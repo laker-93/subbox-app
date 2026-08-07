@@ -9,7 +9,10 @@ import { ContextMenuController } from '/@/renderer/features/context-menu/context
 import { FullScreenVisualizer } from '/@/renderer/features/player/components/full-screen-visualizer';
 import { MobileFullscreenPlayer } from '/@/renderer/features/player/components/mobile-fullscreen-player';
 import { MobileSidebar } from '/@/renderer/features/sidebar/components/mobile-sidebar';
+import { MobileSyncPlaceholder } from '/@/renderer/features/sync/components/mobile-sync-placeholder';
+import { ModeToggle } from '/@/renderer/features/sync/components/mode-toggle';
 import { PlayerBar } from '/@/renderer/layouts/default-layout/player-bar';
+import { useAppMode } from '/@/renderer/store';
 import { useFullScreenPlayerStore } from '/@/renderer/store';
 import { useWindowSettings } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
@@ -34,6 +37,7 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
         visualizerExpanded: isFullScreenVisualizerExpanded,
     } = useFullScreenPlayerStore();
     const { windowBarStyle } = useWindowSettings();
+    const appMode = useAppMode();
 
     return (
         <>
@@ -54,7 +58,8 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                     variant="subtle"
                 />
                 <main className={styles.mainContent}>
-                    <Outlet />
+                    <ModeToggle withAppMenu={false} />
+                    {appMode === 'sync' ? <MobileSyncPlaceholder /> : <Outlet />}
                 </main>
                 <PlayerBar />
             </div>
