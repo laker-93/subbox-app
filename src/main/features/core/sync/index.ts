@@ -18,7 +18,7 @@ import {
     extractPlaylists,
     ParsedPlaylist,
     ParsedTrack,
-    sanitizeName,
+    sanitizePathSegment,
 } from '/@/main/features/core/sync/rekordbox-xml';
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
@@ -602,17 +602,18 @@ ipcMain.handle(
             // Sanitize each path component so characters like '%' don't reach
             // filebrowser's TUS endpoint, which double-unescapes the path and 400s
             // on an invalid URL escape (e.g. album "99.9%" → ".../99.9%/..." →
-            // "invalid URL escape"). sanitizeName strips the same character set
-            // already used for playlist/folder names. The file extension is a
-            // controlled value (path.extname) so it's left as-is. This is the same
-            // value sent to /sync/map_meta below, so server-side tagging still matches.
-            // Album is optional in Rekordbox exports (white labels, promos, single-track
-            // downloads) — sanitizeName(undefined) is '', which would otherwise collapse
-            // to an empty path component ("Artist//Title.mp3") that filebrowser 404s on.
+            // "invalid URL escape"), and so no component starts with a dot, which
+            // would make a hidden directory that beets refuses to import. The file
+            // extension is a controlled value (path.extname) so it's left as-is. This
+            // is the same value sent to /sync/map_meta below, so server-side tagging
+            // still matches. Album is optional in Rekordbox exports (white labels,
+            // promos, single-track downloads) — sanitizePathSegment(undefined) is '',
+            // which would otherwise collapse to an empty path component
+            // ("Artist//Title.mp3") that filebrowser 404s on.
             const stagingPath = [
-                sanitizeName(track.artist),
-                sanitizeName(track.album) || 'Unknown Album',
-                `${sanitizeName(track.cleanName)}${track.fileExtension}`,
+                sanitizePathSegment(track.artist),
+                sanitizePathSegment(track.album) || 'Unknown Album',
+                `${sanitizePathSegment(track.cleanName)}${track.fileExtension}`,
             ].join('/');
             uploadableTracks.push({ stagingPath, track, trackName });
 
