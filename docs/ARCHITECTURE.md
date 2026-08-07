@@ -75,8 +75,10 @@ remote music server (HTTP)
 1. Add the method signature to `ControllerEndpoint` (and the `*Args`/`*Response` types) in
    `domain-types.ts`. Make it optional (`?:`) if not all servers can support it.
 2. Implement it in each `*-controller.ts` (or only the relevant ones, if optional).
-3. Wrap it in a React Query hook under `features/<domain>/queries/` (reads) or `mutations/`
-   (writes), calling `api.controller.<method>`.
+3. Wrap it in a React Query hook, calling `api.controller.<method>`. Placement varies by
+   feature — `features/<domain>/api/` and `features/<domain>/hooks/` for reads,
+   `mutations/` for writes. (There is no `queries/` directory; older notes claiming one
+   are wrong.)
 4. Add query keys in `src/renderer/api/query-keys.ts` for cache invalidation.
 
 See `src/renderer/features/sharing/mutations/share-item-mutation.ts` for a minimal mutation
@@ -89,20 +91,31 @@ music-server controller (they are not in `endpoints`):
 
 | Service | Code | Purpose |
 |---|---|---|
-| **pymix** | `src/renderer/api/pymix/`, `src/shared/api/pymix/pymix-types.ts` | DJ mix backend: login, import, track matching, rekordbox/Serato export jobs, sync plans, storage checks. Schemas are Zod (`pymixType._parameters.*`). |
-| **filebrowser** | `src/renderer/api/filebrowser/` | Browse/access the user's file storage. |
+| **pymix** | `src/renderer/api/pymix/{pymix-api,pymix-controller}.ts`, `src/shared/api/pymix/pymix-types.ts` | DJ mix backend: login, import, track matching, rekordbox/Serato export jobs, sync plans, wishlist, storage checks. Schemas are Zod (`pymixType._parameters.*`). |
+| **filebrowser** | `src/renderer/api/filebrowser/` | The user's file storage. Now used mainly for **auth + uploads**; produced zips/XML are downloaded back through pymix's `/sync/download/{filename}` instead, so they ride the pymix session. |
 
-UI for these is under `src/renderer/features/{pymix,sync,sharing}/`. `sync` covers rekordbox XML
-(`src/main/features/core/sync/`), external drive, and watch-dir flows.
+UI for these is under `src/renderer/features/{pymix,sync,sharing,wishlist}/`:
 
-When extending these: add the endpoint to the `*-api.ts` (HTTP client) and `*-controller.ts`
-(typed wrapper), define request/response Zod schemas in the shared `*-types.ts`, then build the
-React Query hook + UI.
+- `pymix/` — the auth modal and `authenticate-services.ts` (which servers a login wires up).
+- `sync/` — rekordbox XML (parsing/upload driven from the main process,
+  `src/main/features/core/sync/`, TUS to filebrowser), external drive, download, and
+  watch-dir flows. These components call `PymixController` directly rather than through hooks.
+- `wishlist/` — the fullest React Query example: one hook per endpoint in `hooks/use-*.ts`.
+
+Auth for pymix is a **`session_id` cookie**; requests must be sent with credentials.
+A 401 means the cookie lapsed and the interceptor should refresh and replay — don't
+treat it as a logout.
+
+When extending these: add the endpoint to `pymix-api.ts` (HTTP client) and
+`pymix-controller.ts` (typed wrapper), define request/response Zod schemas in the shared
+`pymix-types.ts`, then build the hook + UI. A pymix response-shape change is a runtime
+break here even if it typechecks — see `../subbox-workspace/docs/integration.md`.
 
 ## 4. State management
 
-- **Server-state / caching**: TanStack React Query. Hooks live in `features/*/queries` and
-  `features/*/mutations`. Cache keys are centralised in `src/renderer/api/query-keys.ts`.
+- **Server-state / caching**: TanStack React Query. Hooks live in `features/*/api`,
+  `features/*/hooks` and `features/*/mutations` — match whichever the feature you're in
+  already uses. Cache keys are centralised in `src/renderer/api/query-keys.ts`.
 - **Client-state**: Zustand stores in `src/renderer/store/`:
   - `auth.store.ts` — current server + credentials (drives `controller.ts` adapter selection).
   - `player.store.ts` — queue, current track, play state.
