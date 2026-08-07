@@ -70,6 +70,10 @@ interface UploadProgress {
     uploaded: number;
 }
 
+/** The completion screen is a narrow column; beyond this the full list is in the
+ *  main-process log rather than pushing the "Sync Another Library" button off-screen. */
+const MAX_LISTED_DROPPED = 5;
+
 function playlistKey(pl: PlaylistPreview): string {
     return [...pl.path, pl.name].join('/');
 }
@@ -86,7 +90,12 @@ export const SyncRekordbox = () => {
     const [progress, setProgress] = useState<null | UploadProgress>(null);
     const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
     const [jobId, setJobId] = useState<null | string>(null);
+    // `dropped` holds tracks the XML lists that could never be uploaded — their tags
+    // leave nothing to match on. They are counted in neither totalTracksInXml nor the
+    // preview badge, so the completion screen names them rather than letting them
+    // vanish into a gap between two numbers.
     const [uploadResult, setUploadResult] = useState<null | {
+        dropped?: Array<{ reason: string; trackName: string }>;
         failed?: Array<{ reason: string; trackName: string }>;
         skipped: number;
         totalTracksInXml?: number;
@@ -186,7 +195,7 @@ export const SyncRekordbox = () => {
                     xmlPath,
                 });
 
-                setUploadResult({ failed: [], skipped: 0, uploaded: 0 });
+                setUploadResult({ dropped: [], failed: [], skipped: 0, uploaded: 0 });
             } else {
                 // Pre-flight storage check (renderer-side, works for both Electron and web)
                 try {
@@ -742,6 +751,35 @@ export const SyncRekordbox = () => {
                                     </Text>
                                 )}
                             </>
+                        )}
+                        {/* Outside the branch above: a run can upload nothing and still
+                            have dropped tracks, and "everything is already up to date"
+                            would be wrong without this qualifying it. */}
+                        {uploadResult.dropped && uploadResult.dropped.length > 0 && (
+                            <Stack align="center" gap={2}>
+                                <Text c="dimmed" size="sm">
+                                    {uploadResult.dropped.length}{' '}
+                                    {uploadResult.dropped.length === 1 ? 'track' : 'tracks'} in the
+                                    XML could not be uploaded (missing or unusable title)
+                                </Text>
+                                {uploadResult.dropped.slice(0, MAX_LISTED_DROPPED).map((d) => (
+                                    <Text
+                                        c="dimmed"
+                                        // Main dedupes on name + reason, so the same
+                                        // name can legitimately appear twice.
+                                        key={`${d.trackName}:${d.reason}`}
+                                        size="xs"
+                                        ta="center"
+                                    >
+                                        {d.trackName}: {d.reason}
+                                    </Text>
+                                ))}
+                                {uploadResult.dropped.length > MAX_LISTED_DROPPED && (
+                                    <Text c="dimmed" size="xs" ta="center">
+                                        …and {uploadResult.dropped.length - MAX_LISTED_DROPPED} more
+                                    </Text>
+                                )}
+                            </Stack>
                         )}
                     </Stack>
                 )}

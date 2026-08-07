@@ -102,6 +102,26 @@ export function sanitizeName(name: null | string): string {
     return (name || '').replace(/[/\\?%*:|"<>]/g, '-');
 }
 
+/**
+ * Sanitize one component of a staging *path*, as opposed to a playlist/folder name.
+ *
+ * Everything sanitizeName strips, plus any leading dots: beets ignores hidden paths by
+ * default (`ignore: ['.*', ...]` with `ignore_hidden: yes`), so an artist or album named
+ * e.g. ".geom" becomes a hidden staging directory whose tracks upload perfectly, are
+ * copied into the staging dir, and are then silently never imported — no beet.log entry,
+ * no error, just a completion screen whose imported count is quietly short.
+ *
+ * Kept separate from sanitizeName rather than folded into it: sanitizeName also names
+ * playlists and folders, which are display values passed on to pymix and not paths, and
+ * those must not be silently renamed just because they start with a dot.
+ *
+ * '_' matches the `replace: '^\.': _` rule beets applies to its own output paths, so the
+ * staging tree and the library tree agree on what a dot-prefixed name becomes.
+ */
+export function sanitizePathSegment(name: null | string): string {
+    return sanitizeName(name).replace(/^\.+/, '_');
+}
+
 function parseNodes<T, R>(nodes: Node[], callback: (node: T) => R): R[] {
     return Array.from(nodes as T[]).map(callback);
 }
