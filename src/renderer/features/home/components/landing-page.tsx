@@ -1,13 +1,17 @@
 import { useTranslation } from 'react-i18next';
 
+// The Subbox app icon — the same artwork electron-builder ships as the desktop
+// icon (`assets/icons/icon.png`). `src/renderer/assets/icons/` still holds the
+// upstream Feishin icons; don't import the logo from there.
+import logo from '../../../../../assets/icons/512x512.png';
 import styles from './landing-page.module.css';
 
-import logo from '/@/renderer/assets/icons/256x256.png';
 import screenshot from '/@/renderer/assets/landing-library-preview.png';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { openInviteRequest } from '/@/renderer/features/invite/store/invite-request-store';
 import { Button } from '/@/shared/components/button/button';
 import { Stack } from '/@/shared/components/stack/stack';
+import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 
 interface LandingPageProps {
     /** Omitted when no demo account is configured for this build — the button then doesn't render. */
@@ -27,9 +31,9 @@ export const LandingPage = ({
 
     return (
         <div className={styles['fs-landing-page-container']}>
-            {/* Two columns from 900px up. Stacked, this page ran 946px tall — taller than
-                most laptop viewports — and `body` is `overflow: hidden`, so everything
-                below the fold was clipped with no way to scroll to it. */}
+            {/* Two columns from 900px up. Stacked, this page ran taller than most laptop
+                viewports — and `body` is `overflow: hidden`, so everything below the fold
+                was clipped with no way to scroll to it. */}
             <div className={styles['fs-landing-page-content']}>
                 <div className={styles['fs-landing-page-copy']}>
                     <div className={styles['fs-landing-page-header']}>
@@ -38,28 +42,23 @@ export const LandingPage = ({
                         <h1 className={styles['fs-landing-page-title']}>Subbox</h1>
                     </div>
 
-                    <p className={styles['fs-landing-page-description']}>
+                    <p className={styles['fs-landing-page-tagline']}>
                         {/* No sentenceCase here: it lower-cases everything after the first
                             word, which turns "DJ library" into "dj library". */}
-                        {t('page.landing.description', {
-                            defaultValue:
-                                'Your DJ library, everywhere. Subbox streams your whole collection from the cloud — in any browser, on any device, with nothing to install.',
+                        {t('page.landing.tagline', {
+                            defaultValue: 'Your DJ library, everywhere.',
                         })}
                     </p>
 
+                    {/* Three claims, each saying something the others don't. The previous
+                        version also carried a paragraph and a fourth bullet that restated
+                        "stream from the cloud, nothing to install" three times over. */}
                     <div className={styles['fs-landing-page-features']}>
                         <div className={styles['fs-landing-page-feature']}>
                             <span className={styles['fs-landing-page-feature-dot']} />
                             {t('page.landing.featureStreaming', {
                                 defaultValue:
-                                    'Stream your library in a browser — desktop, laptop, phone, no install',
-                            })}
-                        </div>
-                        <div className={styles['fs-landing-page-feature']}>
-                            <span className={styles['fs-landing-page-feature-dot']} />
-                            {t('page.landing.featureCloudLibrary', {
-                                defaultValue:
-                                    'Your whole collection stored in the cloud, backed up and always with you',
+                                    'Your whole collection lives in the cloud — streamed to any browser, nothing to install',
                             })}
                         </div>
                         <div className={styles['fs-landing-page-feature']}>
@@ -82,24 +81,31 @@ export const LandingPage = ({
                     <Stack className={styles['fs-landing-page-enter-button']} gap="sm">
                         {onTryDemo ? (
                             <>
-                                <Button
-                                    fullWidth
-                                    loading={demoLoading}
-                                    onClick={onTryDemo}
-                                    size="lg"
-                                    variant="filled"
-                                >
-                                    {t('page.landing.tryDemo', {
-                                        defaultValue: 'Try the demo',
-                                        postProcess: 'titleCase',
-                                    })}
-                                </Button>
-                                <p className={styles['fs-landing-page-demo-hint']}>
-                                    {t('page.landing.tryDemoHint', {
+                                {/* The caveats live in a tooltip rather than a line of text
+                                    under the button: they matter once you're considering the
+                                    click, and as body copy they were just another row. */}
+                                <Tooltip
+                                    events={{ focus: true, hover: true, touch: true }}
+                                    label={t('page.landing.tryDemoHint', {
                                         defaultValue:
-                                            'No sign-up needed — explore a sample library instantly.',
+                                            'No sign-up needed — explore a sample library instantly. The library is a random collection of license-free music.',
                                     })}
-                                </p>
+                                    openDelay={200}
+                                    position="bottom"
+                                    w={280}
+                                >
+                                    <Button
+                                        fullWidth
+                                        loading={demoLoading}
+                                        onClick={onTryDemo}
+                                        size="lg"
+                                        variant="filled"
+                                    >
+                                        {t('page.landing.tryDemo', {
+                                            defaultValue: 'Try the demo',
+                                        })}
+                                    </Button>
+                                </Tooltip>
                                 <Button fullWidth onClick={onLogin} size="md" variant="default">
                                     {t('common.login', {
                                         defaultValue: 'Login',
@@ -119,8 +125,8 @@ export const LandingPage = ({
                         )}
                     </Stack>
 
-                    {/* Grouped so the three quiet lines read as one footer block rather
-                        than three more competing rows. */}
+                    {/* Grouped so the quiet lines read as one footer block rather than as
+                        more rows competing for attention. */}
                     <div className={styles['fs-landing-page-footer']}>
                         <p className={styles['fs-landing-page-beta']}>
                             {t('page.landing.privateBeta', {

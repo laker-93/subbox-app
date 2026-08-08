@@ -684,11 +684,10 @@
         },
         "landing": {
             "createAccount": "create account",
-            "description": "Your DJ library, everywhere. Subbox streams your whole collection from the cloud — in any browser, on any device, with nothing to install.",
-            "featureCloudLibrary": "Your whole collection stored in the cloud, backed up and always with you",
             "featureMetadata": "Cue points, loops and playlists come with it",
-            "featureStreaming": "Stream your library in a browser — desktop, laptop, phone, no install",
-            "featureSync": "Reads and writes Rekordbox and Serato libraries"
+            "featureStreaming": "Your whole collection lives in the cloud — streamed to any browser, nothing to install",
+            "featureSync": "Reads and writes Rekordbox and Serato libraries",
+            "tagline": "Your DJ library, everywhere."
         },
         "itemDetail": {
             "copyPath": "copy path to clipboard",
