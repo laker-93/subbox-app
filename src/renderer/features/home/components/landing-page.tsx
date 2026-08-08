@@ -182,7 +182,7 @@ export const LandingPage = ({
                     <img
                         alt={t('page.landing.screenshotAlt', {
                             defaultValue:
-                                'A Subbox playlist open in the browser, with each track’s artwork, genre and BPM',
+                                'The Subbox home screen in a browser, playlists in the sidebar and a track playing',
                         })}
                         className={styles['fs-landing-page-screenshot']}
                         loading="lazy"
