@@ -1,10 +1,16 @@
 .fs-landing-page-container {
     display: flex;
     flex-direction: column;
-    gap: 2rem;
     align-items: center;
-    justify-content: center;
-    min-height: 100vh;
+
+    /* `safe` matters: with a plain `center`, content taller than the viewport
+       overflows equally in both directions and the top half becomes unreachable. */
+    justify-content: safe center;
+
+    /* A fixed height, not min-height. `body` is `overflow: hidden`, so a container
+       that grows past the viewport is simply clipped — its own `overflow-y` never
+       engages and the bottom of the page cannot be scrolled to. */
+    height: 100dvh;
     padding: 2rem;
     overflow-y: auto;
     text-align: center;
@@ -12,23 +18,37 @@
 }
 
 .fs-landing-page-content {
+    display: grid;
+    gap: 1.25rem;
+    align-items: center;
+    width: 100%;
+    max-width: 560px;
+}
+
+.fs-landing-page-copy {
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
     align-items: center;
-    max-width: 560px;
+}
+
+.fs-landing-page-header {
+    display: flex;
+    gap: 0.875rem;
+    align-items: center;
 }
 
 .fs-landing-page-logo {
-    width: 96px;
-    height: 96px;
-    border-radius: 16px;
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
 }
 
 .fs-landing-page-title {
     margin: 0;
-    font-size: 2.5rem;
+    font-size: 2.25rem;
     font-weight: 700;
+    line-height: 1.1;
     color: var(--theme-colors-text-primary);
 }
 
@@ -39,7 +59,12 @@
     color: var(--theme-colors-text-secondary);
 }
 
+.fs-landing-page-preview {
+    width: 100%;
+}
+
 .fs-landing-page-screenshot {
+    display: block;
     width: 100%;
     height: auto;
     border: 1px solid var(--theme-colors-border);
@@ -52,15 +77,18 @@
     flex-direction: column;
     gap: 0.75rem;
     width: 100%;
-    padding: 0.5rem 0;
     text-align: left;
 }
 
 .fs-landing-page-feature {
     display: flex;
     gap: 0.75rem;
-    align-items: center;
+
+    /* Not `center`: a bullet that wraps to two lines would hang its dot between
+       them instead of against the first line. */
+    align-items: flex-start;
     font-size: 0.9rem;
+    line-height: 1.5;
     color: var(--theme-colors-text-secondary);
 }
 
@@ -68,13 +96,15 @@
     flex-shrink: 0;
     width: 6px;
     height: 6px;
+
+    /* Centres the dot on the first line: (0.9rem × 1.5 − 6px) / 2. */
+    margin-top: 0.48rem;
     background: var(--theme-colors-primary);
     border-radius: 50%;
 }
 
 .fs-landing-page-enter-button {
     width: 100%;
-    margin-top: 0.5rem;
 }
 
 .fs-landing-page-demo-hint {
@@ -82,6 +112,15 @@
     font-size: 0.8rem;
     color: var(--theme-colors-text-secondary);
     text-align: center;
+}
+
+/* The quiet lines sit closer to each other than to the buttons above them, so they
+   read as one footer rather than as two more rows competing for attention. */
+.fs-landing-page-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    align-items: center;
 }
 
 .fs-landing-page-beta {
@@ -116,4 +155,33 @@
 
 .fs-landing-page-link-separator {
     color: var(--theme-colors-text-secondary);
+}
+
+/* Side by side once there's width for it. Stacked, the same content is ~950px tall
+   and pushes the CTAs off a laptop screen; split in two it's ~500px and the whole
+   page — screenshot, buttons, invite and account links — fits without scrolling. */
+@media (width >= 900px) {
+    .fs-landing-page-content {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 3rem;
+        max-width: 1040px;
+        text-align: left;
+    }
+
+    .fs-landing-page-copy {
+        gap: 1.5rem;
+        align-items: flex-start;
+    }
+
+    .fs-landing-page-title {
+        font-size: 2.5rem;
+    }
+
+    .fs-landing-page-demo-hint {
+        text-align: left;
+    }
+
+    .fs-landing-page-footer {
+        align-items: flex-start;
+    }
 }
