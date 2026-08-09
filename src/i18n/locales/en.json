@@ -684,10 +684,9 @@
         },
         "landing": {
             "createAccount": "create account",
-            "featureMetadata": "Cue points, loops and playlists come with it",
-            "featureStreaming": "Your whole collection lives in the cloud — streamed to any browser, nothing to install",
-            "featureSync": "Reads and writes Rekordbox and Serato libraries",
-            "tagline": "Your DJ library, everywhere."
+            "featureMetadata": "Stream from any device",
+            "featureStreaming": "Sync your collection to the cloud",
+            "tagline": "Your DJ library on any device."
         },
         "itemDetail": {
             "copyPath": "copy path to clipboard",

@@ -46,7 +46,7 @@ export const LandingPage = ({
                         {/* No sentenceCase here: it lower-cases everything after the first
                             word, which turns "DJ library" into "dj library". */}
                         {t('page.landing.tagline', {
-                            defaultValue: 'Your DJ library, everywhere.',
+                            defaultValue: 'Your DJ library on any device.',
                         })}
                     </p>
 
@@ -58,19 +58,13 @@ export const LandingPage = ({
                             <span className={styles['fs-landing-page-feature-dot']} />
                             {t('page.landing.featureStreaming', {
                                 defaultValue:
-                                    'Your whole collection lives in the cloud — streamed to any browser, nothing to install',
+                                    'Sync your collection to the cloud',
                             })}
                         </div>
                         <div className={styles['fs-landing-page-feature']}>
                             <span className={styles['fs-landing-page-feature-dot']} />
                             {t('page.landing.featureMetadata', {
-                                defaultValue: 'Cue points, loops and playlists come with it',
-                            })}
-                        </div>
-                        <div className={styles['fs-landing-page-feature']}>
-                            <span className={styles['fs-landing-page-feature-dot']} />
-                            {t('page.landing.featureSync', {
-                                defaultValue: 'Reads and writes Rekordbox and Serato libraries',
+                                defaultValue: 'Stream and manage from any device',
                             })}
                         </div>
                     </div>
@@ -130,7 +124,7 @@ export const LandingPage = ({
                     <div className={styles['fs-landing-page-footer']}>
                         <p className={styles['fs-landing-page-beta']}>
                             {t('page.landing.privateBeta', {
-                                defaultValue: 'Subbox is in private beta — spots are limited.',
+                                defaultValue: 'Subbox is in private beta.',
                             })}{' '}
                             <button
                                 className={styles['fs-landing-page-link']}
