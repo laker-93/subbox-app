@@ -1364,6 +1364,20 @@ export interface WatchProgress {
 let watchInterval: null | ReturnType<typeof setInterval> = null;
 /** SUBBOX_IDs confirmed present on the server — avoids redundant presence checks. */
 const knownPresentIds = new Set<string>();
+/**
+ * SUBBOX_IDs a poll pass is uploading right now. Marked *before* the upload
+ * starts, whereas knownPresentIds is only marked once it finishes — so without
+ * this a second pass sees an in-flight file as still missing on the server and
+ * re-sends the same bytes. Belt-and-braces behind the re-entrancy guard below.
+ */
+const inFlightUploadIds = new Set<string>();
+/**
+ * Bumped by every `sync:start-watch`. A poll pass captures the value it started
+ * under and stops as soon as it no longer matches, so restarting the watcher
+ * (auto-resume on launch, or the Start Watching button) can't leave the
+ * previous watcher's pass uploading — and reporting progress — alongside it.
+ */
+let watchGeneration = 0;
 
 // True while a bulk download (download-playlists) is streaming from the same
 // host the watch poller uploads to. The poller checks this and skips its cycle,
@@ -1685,17 +1699,29 @@ ipcMain.handle(
             watchDir,
         } = args;
 
-        // Stop any existing watcher
+        // Stop any existing watcher. Bumping the generation also retires any poll
+        // pass it still has in flight — clearInterval alone can't stop one.
         if (watchInterval) {
             clearInterval(watchInterval);
             watchInterval = null;
         }
+        const generation = ++watchGeneration;
+        /** False once a later `sync:start-watch` has superseded this watcher. */
+        const isCurrent = () => generation === watchGeneration;
+
+        // The retired pass stops at its next file boundary; wait it out so the two
+        // watchers never upload at once (and so it can't repopulate the sets we
+        // are about to clear). Its errors are handled inside pollAndUpload.
+        if (inFlightPoll) await inFlightPoll.catch(() => {});
+
         // Clear cached presence so a fresh startup check runs immediately
         knownPresentIds.clear();
+        inFlightUploadIds.clear();
 
         const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
 
         const sendProgress = (progress: WatchProgress) => {
+            if (!isCurrent()) return;
             event.sender.send('sync:watch-progress', progress);
         };
 
@@ -1752,6 +1778,7 @@ ipcMain.handle(
             // the same host contend with the download stream and can drop it
             // mid-transfer. The next tick resumes once the download clears the flag.
             if (watchPaused) return;
+            if (!isCurrent()) return;
             try {
                 sendProgress({ currentFile: '', phase: 'scanning', total: 0, uploaded: 0 });
 
@@ -1776,10 +1803,15 @@ ipcMain.handle(
                     return;
                 }
 
+                // A file is accounted for once it is confirmed on the server or is
+                // already being uploaded — either way this pass must not re-send it.
+                const isAccountedFor = (filePath: string) => {
+                    const id = fileIdMap.get(filePath)!;
+                    return knownPresentIds.has(id) || inFlightUploadIds.has(id);
+                };
+
                 // Step 2: Only check presence for IDs not already confirmed on the server
-                const uncheckedFiles = validFiles.filter(
-                    (f) => !knownPresentIds.has(fileIdMap.get(f)!),
-                );
+                const uncheckedFiles = validFiles.filter((f) => !isAccountedFor(f));
 
                 if (uncheckedFiles.length > 0) {
                     // The cookie is routinely absent here — this poller outlives any
@@ -1801,9 +1833,7 @@ ipcMain.handle(
                     }
                 }
 
-                const missingFiles = validFiles.filter(
-                    (f) => !knownPresentIds.has(fileIdMap.get(f)!),
-                );
+                const missingFiles = validFiles.filter((f) => !isAccountedFor(f));
                 if (missingFiles.length === 0) {
                     sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
                     return;
@@ -1812,7 +1842,11 @@ ipcMain.handle(
                 // Step 3: Upload missing files
                 let uploaded = 0;
                 for (const filePath of missingFiles) {
+                    // A newer watcher has taken over — leave the rest to it.
+                    if (!isCurrent()) return;
+
                     const fileName = path.basename(filePath);
+                    const subboxId = fileIdMap.get(filePath)!;
                     const resourcePath = `${filebrowserUrl}/api/resources/watch/${encodeURIComponent(fileName)}?override=false`;
                     const fileContents = fs.readFileSync(filePath);
 
@@ -1823,30 +1857,35 @@ ipcMain.handle(
                         uploaded,
                     });
 
+                    inFlightUploadIds.add(subboxId);
                     try {
-                        await fbRequest({
-                            data: fileContents,
-                            headers: { 'Content-Type': 'application/octet-stream' },
-                            method: 'POST',
-                            url: resourcePath,
-                        });
-                    } catch (err) {
-                        if (axios.isAxiosError(err) && err.response?.status === 409) {
-                            // Already on server — count as uploaded
-                        } else {
-                            console.error(`Failed to upload ${fileName}:`, err);
-                            sendProgress({
-                                currentFile: fileName,
-                                phase: 'error',
-                                total: missingFiles.length,
-                                uploaded,
+                        try {
+                            await fbRequest({
+                                data: fileContents,
+                                headers: { 'Content-Type': 'application/octet-stream' },
+                                method: 'POST',
+                                url: resourcePath,
                             });
-                            continue;
+                        } catch (err) {
+                            if (axios.isAxiosError(err) && err.response?.status === 409) {
+                                // Already on server — count as uploaded
+                            } else {
+                                console.error(`Failed to upload ${fileName}:`, err);
+                                sendProgress({
+                                    currentFile: fileName,
+                                    phase: 'error',
+                                    total: missingFiles.length,
+                                    uploaded,
+                                });
+                                continue;
+                            }
                         }
-                    }
 
-                    knownPresentIds.add(fileIdMap.get(filePath)!);
-                    uploaded++;
+                        knownPresentIds.add(subboxId);
+                        uploaded++;
+                    } finally {
+                        inFlightUploadIds.delete(subboxId);
+                    }
                 }
 
                 sendProgress({
@@ -1864,6 +1903,7 @@ ipcMain.handle(
                 // creds). Transient errors (network, 5xx) must not log the user out.
                 const status = axios.isAxiosError(err) ? err.response?.status : undefined;
                 if (status === 401 || status === 403) {
+                    if (!isCurrent()) return;
                     if (watchInterval) {
                         clearInterval(watchInterval);
                         watchInterval = null;
@@ -1880,17 +1920,27 @@ ipcMain.handle(
         // Run a poll cycle, tracking it as the in-flight poll so a concurrent
         // download can await it before streaming.
         const runPoll = (): Promise<void> => {
-            inFlightPoll = pollAndUpload().finally(() => {
-                inFlightPoll = null;
+            // Only clear the marker if it still points at this pass — a retired
+            // watcher's pass finishing must not erase the live one's, which would
+            // let the interval guard below wave a second pass through.
+            const poll: Promise<void> = pollAndUpload().finally(() => {
+                if (inFlightPoll === poll) inFlightPoll = null;
             });
-            return inFlightPoll;
+            inFlightPoll = poll;
+            return poll;
         };
 
         // Run immediately on start
         await runPoll();
 
-        // Then poll at interval
+        // Then poll at interval. Skip the tick while a pass is still running: a
+        // batch that outlasts the interval would otherwise have the next pass
+        // stack on top of it, and since a file is only added to knownPresentIds
+        // *after* its upload finishes, the overlapping pass sees it as still
+        // missing and re-uploads it. Left unguarded that compounds — more passes,
+        // more contention, 502s, retries — and never converges.
         watchInterval = setInterval(() => {
+            if (inFlightPoll) return;
             runPoll().catch(console.error);
         }, pollIntervalMs);
     },
@@ -1901,7 +1951,11 @@ ipcMain.handle('sync:stop-watch', async (): Promise<void> => {
         clearInterval(watchInterval);
         watchInterval = null;
     }
+    // Retire any pass still in flight — it stops at its next file boundary
+    // rather than uploading on after the user pressed Stop Watching.
+    watchGeneration++;
     knownPresentIds.clear();
+    inFlightUploadIds.clear();
 });
 
 // ── External drive comparison ───────────────────────────────────────────────
