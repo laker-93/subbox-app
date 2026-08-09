@@ -102,11 +102,11 @@ export const LandingPage = ({
                                         variant="filled"
                                     >
                                         {t('page.landing.tryDemo', {
-                                            defaultValue: 'Try the demo',
+                                            defaultValue: 'demo',
                                         })}
                                     </Button>
                                 </Tooltip>
-                                <Button fullWidth onClick={onLogin} size="md" variant="default">
+                                <Button fullWidth onClick={onLogin} size="lg" variant="default">
                                     {t('common.login', {
                                         defaultValue: 'Login',
                                         postProcess: 'titleCase',
