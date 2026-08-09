@@ -36,7 +36,7 @@ const useSourceIntro = (source: InviteRequestSource): string => {
         case 'blockedAction':
             return t('page.invite.introBlockedAction', {
                 defaultValue:
-                    'Uploading your own music needs your own Subbox library — the demo is read-only.',
+                    'Uploading your own music needs your own Sub-box library — the demo is read-only.',
             });
         case 'createAccount':
             return t('page.invite.introCreateAccount', {

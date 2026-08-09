@@ -40,13 +40,13 @@ export const InviteLockedPanel = ({ description, title }: InviteLockedPanelProps
                     {description ??
                         t('page.invite.lockedDescription', {
                             defaultValue:
-                                "You're signed in to the shared demo library, which is read-only. Your own Subbox library gives you uploads, imports and sync.",
+                                "You're signed in to the shared demo library, which is read-only. Your own Sub-box library gives you uploads, imports and sync.",
                         })}
                 </Text>
                 <Text c="dimmed" size="sm" ta="center">
                     {t('page.invite.lockedBeta', {
                         defaultValue:
-                            'Subbox is in private beta — request an invite and we’ll get you set up.',
+                            'Sub-box is in private beta — request an invite and we’ll get you set up.',
                     })}
                 </Text>
                 <Button

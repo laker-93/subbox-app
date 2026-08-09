@@ -41,7 +41,7 @@ export const ModeToggle = ({ withAppMenu = true }: ModeToggleProps) => {
                             <Tooltip
                                 label={t('page.modeToggle.libraryTooltip', {
                                     defaultValue:
-                                        'Browse and play the music already in your Subbox library.',
+                                        'Browse and play the music already in your Sub-box library.',
                                 })}
                                 multiline
                                 openDelay={300}
@@ -62,7 +62,7 @@ export const ModeToggle = ({ withAppMenu = true }: ModeToggleProps) => {
                             <Tooltip
                                 label={t('page.modeToggle.syncTooltip', {
                                     defaultValue:
-                                        'Move music between Rekordbox and Subbox — upload tracks to your library or download playlists (with Rekordbox XML) to use elsewhere.',
+                                        'Move music between Rekordbox and Sub-box — upload tracks to your library or download playlists (with Rekordbox XML) to use elsewhere.',
                                 })}
                                 multiline
                                 openDelay={300}

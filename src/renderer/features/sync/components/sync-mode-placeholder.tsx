@@ -25,7 +25,7 @@ export const SyncModePlaceholder = () => {
     // (`require_uploader`). Marking the tabs up front is the point: the user should see
     // that these are locked before picking files, not after.
     const lockedTooltip =
-        'Uploading needs your own Subbox library — the demo is read-only. Request an invite to get one.';
+        'Uploading needs your own Sub-box library — the demo is read-only. Request an invite to get one.';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -37,7 +37,7 @@ export const SyncModePlaceholder = () => {
                     tooltip={{
                         label: isDemo
                             ? lockedTooltip
-                            : 'Add music to Subbox from a Rekordbox XML export — pick the playlists you want and upload the tracks to your cloud library.',
+                            : 'Add music to Sub-box from a Rekordbox XML export — pick the playlists you want and upload the tracks to your cloud library.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
@@ -50,7 +50,7 @@ export const SyncModePlaceholder = () => {
                     onClick={() => setTab('download')}
                     size="sm"
                     tooltip={{
-                        label: 'Download playlists from your Subbox library to this device. Optionally include a Rekordbox XML so you can import them straight back into Rekordbox.',
+                        label: 'Download playlists from your Sub-box library to this device. Optionally include a Rekordbox XML so you can import them straight back into Rekordbox.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
@@ -66,7 +66,7 @@ export const SyncModePlaceholder = () => {
                     tooltip={{
                         label: isDemo
                             ? lockedTooltip
-                            : 'Watch a local folder — any new audio files you drop in are uploaded to your Subbox library automatically.',
+                            : 'Watch a local folder — any new audio files you drop in are uploaded to your Sub-box library automatically.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
@@ -98,7 +98,7 @@ export const SyncModePlaceholder = () => {
                 {tab === 'upload' &&
                     (isDemo ? (
                         <InviteLockedPanel
-                            description="Uploading a Rekordbox library writes to your collection, and the demo library is shared and read-only. Your own Subbox library imports your playlists, cue points and all."
+                            description="Uploading a Rekordbox library writes to your collection, and the demo library is shared and read-only. Your own Sub-box library imports your playlists, cue points and all."
                             title="Rekordbox upload needs your own library"
                         />
                     ) : electron ? (
@@ -124,7 +124,7 @@ export const SyncModePlaceholder = () => {
                 {tab === 'watch' &&
                     (isDemo ? (
                         <InviteLockedPanel
-                            description="Watching a folder uploads whatever lands in it, and the demo library is shared and read-only. With your own library, new tracks appear in Subbox the moment you save them."
+                            description="Watching a folder uploads whatever lands in it, and the demo library is shared and read-only. With your own library, new tracks appear in Sub-box the moment you save them."
                             title="Folder watching needs your own library"
                         />
                     ) : electron ? (

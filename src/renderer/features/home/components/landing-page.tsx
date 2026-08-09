@@ -37,9 +37,9 @@ export const LandingPage = ({
             <div className={styles['fs-landing-page-content']}>
                 <div className={styles['fs-landing-page-copy']}>
                     <div className={styles['fs-landing-page-header']}>
-                        {/* Decorative: the wordmark beside it already says "Subbox". */}
+                        {/* Decorative: the wordmark beside it already says "Sub-box". */}
                         <img alt="" className={styles['fs-landing-page-logo']} src={logo} />
-                        <h1 className={styles['fs-landing-page-title']}>Subbox</h1>
+                        <h1 className={styles['fs-landing-page-title']}>Sub-box</h1>
                     </div>
 
                     <p className={styles['fs-landing-page-tagline']}>
@@ -82,7 +82,7 @@ export const LandingPage = ({
                                     events={{ focus: true, hover: true, touch: true }}
                                     label={t('page.landing.tryDemoHint', {
                                         defaultValue:
-                                            'No sign-up needed — explore a sample library instantly. The library is a random collection of license-free music.',
+                                            'explore a sample collection of license-free music.',
                                     })}
                                     openDelay={200}
                                     position="bottom"
@@ -97,12 +97,13 @@ export const LandingPage = ({
                                     >
                                         {t('page.landing.tryDemo', {
                                             defaultValue: 'demo',
+                                            postProcess: 'titleCase',
                                         })}
                                     </Button>
                                 </Tooltip>
                                 <Button fullWidth onClick={onLogin} size="lg" variant="default">
                                     {t('common.login', {
-                                        defaultValue: 'Login',
+                                        defaultValue: 'login',
                                         postProcess: 'titleCase',
                                     })}
                                 </Button>
@@ -124,7 +125,7 @@ export const LandingPage = ({
                     <div className={styles['fs-landing-page-footer']}>
                         <p className={styles['fs-landing-page-beta']}>
                             {t('page.landing.privateBeta', {
-                                defaultValue: 'Subbox is in private beta.',
+                                defaultValue: 'Sub-box is in private beta.',
                             })}{' '}
                             <button
                                 className={styles['fs-landing-page-link']}
@@ -176,7 +177,7 @@ export const LandingPage = ({
                     <img
                         alt={t('page.landing.screenshotAlt', {
                             defaultValue:
-                                'The Subbox home screen in a browser, playlists in the sidebar and a track playing',
+                                'The Sub-box home screen in a browser, playlists in the sidebar and a track playing',
                         })}
                         className={styles['fs-landing-page-screenshot']}
                         loading="lazy"

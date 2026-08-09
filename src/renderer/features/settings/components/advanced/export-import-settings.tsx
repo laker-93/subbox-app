@@ -14,7 +14,7 @@ export const ExportImportSettings = memo(() => {
     const settingForExport = useSettingsForExport();
 
     const onExportSettings = useCallback(() => {
-        const settingsFile = new File([JSON.stringify(settingForExport)], 'subbox-settings.json', {
+        const settingsFile = new File([JSON.stringify(settingForExport)], 'sub-box-settings.json', {
             type: 'application/json',
         });
 

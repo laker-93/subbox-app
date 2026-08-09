@@ -282,7 +282,7 @@ function CreateAccountView({
                         way to obtain a value, so the user simply leaves. */}
                     <Text c="dimmed" size="xs">
                         {t('page.landing.inviteTokenHint', {
-                            defaultValue: 'Subbox is in private beta. No token?',
+                            defaultValue: 'Sub-box is in private beta. No token?',
                         })}{' '}
                         <Text
                             c="blue"

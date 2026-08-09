@@ -450,7 +450,7 @@ const createTray = () => {
         }
     });
 
-    tray.setToolTip('Subbox');
+    tray.setToolTip('Sub-box');
     tray.setContextMenu(contextMenu);
 };
 

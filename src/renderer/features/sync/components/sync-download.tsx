@@ -356,7 +356,7 @@ export const SyncDownload = () => {
                     <TextTitle order={3}>Download Playlists</TextTitle>
                     <Text c="dimmed" size="sm">
                         Select playlists from your cloud library to preview a download plan. This
-                        lets you sync from Subbox back into your DJ software — download the tracks
+                        lets you sync from Sub-box back into your DJ software — download the tracks
                         plus a Rekordbox XML and import your playlists straight into Rekordbox.
                     </Text>
                     <Group gap="xs">
@@ -381,18 +381,18 @@ export const SyncDownload = () => {
                     handlers={rekordboxHelpHandlers}
                     opened={rekordboxHelpOpened}
                     size="lg"
-                    title="Syncing from Subbox to Rekordbox"
+                    title="Syncing from Sub-box to Rekordbox"
                 >
                     <Stack gap="lg">
                         <Text size="sm">
-                            Move your Subbox playlists back into Rekordbox by downloading the tracks
+                            Move your Sub-box playlists back into Rekordbox by downloading the tracks
                             with a Rekordbox XML, then importing that XML into your collection.
                         </Text>
                         <Stack gap="md">
                             <Stack gap="xs">
                                 <TextTitle order={5}>1. Select your playlists</TextTitle>
                                 <Text size="sm">
-                                    Tick the playlists from your Subbox cloud library that you want
+                                    Tick the playlists from your Sub-box cloud library that you want
                                     to bring into Rekordbox, then click Preview Download to see the
                                     plan.
                                 </Text>

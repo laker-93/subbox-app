@@ -384,7 +384,7 @@ export const SyncRekordbox = () => {
                     <Text c="dimmed" size="sm" ta="center">
                         {t('page.sync.rekordbox.description', {
                             defaultValue:
-                                'Select your Rekordbox XML export file to preview and upload playlists to your Subbox cloud library.',
+                                'Select your Rekordbox XML export file to preview and upload playlists to your Sub-box cloud library.',
                         })}
                     </Text>
                     {error && (
@@ -398,7 +398,7 @@ export const SyncRekordbox = () => {
                         tooltip={{
                             label: t('page.sync.rekordbox.selectXmlTooltip', {
                                 defaultValue:
-                                    'In Rekordbox, go to File → Export Collection in xml format, then choose that .xml file here. Subbox reads your playlists and tracks from it.',
+                                    'In Rekordbox, go to File → Export Collection in xml format, then choose that .xml file here. Sub-box reads your playlists and tracks from it.',
                             }),
                             multiline: true,
                             openDelay: 300,
@@ -537,7 +537,7 @@ export const SyncRekordbox = () => {
                     tooltip={{
                         label: metadataOnly
                             ? 'Send the selected playlists’ track info to your library without uploading any audio files.'
-                            : 'Upload the selected playlists and their audio files to your Subbox cloud library, then import them so they appear in your collection.',
+                            : 'Upload the selected playlists and their audio files to your Sub-box cloud library, then import them so they appear in your collection.',
                         multiline: true,
                         openDelay: 300,
                         w: 300,
@@ -629,7 +629,7 @@ export const SyncRekordbox = () => {
     if (step === 'upload-forbidden') {
         return (
             <InviteLockedPanel
-                description="Uploading a Rekordbox library writes to your collection, and this account can't. Your own Subbox library imports your playlists, cue points and all."
+                description="Uploading a Rekordbox library writes to your collection, and this account can't. Your own Sub-box library imports your playlists, cue points and all."
                 title="Rekordbox upload needs your own library"
             />
         );
@@ -669,7 +669,7 @@ export const SyncRekordbox = () => {
                         >
                             Discord community
                         </Text>{' '}
-                        and request an upgrade from the Subbox team.
+                        and request an upgrade from the Sub-box team.
                     </Text>
                     {currentMB !== null && maxMB !== null && (
                         <Text size="sm" ta="center">
