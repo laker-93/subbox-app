@@ -9,6 +9,9 @@ files:
     - 'package.json'
 extraResources:
     - assets/**
+    # GPL-3.0 requires the license text to accompany the distributed binary.
+    - LICENSE
+    - NOTICE
 asarUnpack:
     - resources/**
 win:
