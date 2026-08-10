@@ -2,6 +2,11 @@
 
 # Subbox
 
+Subbox is a self-hosted music player built for DJs. It connects to your Navidrome,
+Jellyfin, or Subsonic-compatible server and adds DJ-focused workflows on top: library
+and playlist sync with Rekordbox and Serato, a wishlist for tracks you want to add to
+your crate, and sharing tools for sending picks to other people.
+
   <p align="center">
     <a href="https://github.com/laker-93/subbox-app/blob/development/LICENSE">
       <img src="https://img.shields.io/github/license/laker-93/subbox-app?style=flat-square&color=brightgreen"
@@ -27,11 +32,10 @@ music player by [jeffvli](https://github.com/jeffvli) (itself a rewrite of
 GNU General Public License v3.0, and Subbox remains licensed under the GPL-3.0 —
 see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-Subbox has been modified from the original since 2024. It adds DJ-workflow features
-(Rekordbox/Serato library and playlist sync via the pymix API, wishlist and sharing
-surfaces) and is not affiliated with or endorsed by the Feishin project. Please report
-issues with Subbox to [this repository](https://github.com/laker-93/subbox-app/issues),
-**not** to the Feishin maintainers.
+Subbox has been modified from the original since 2024 and is not affiliated with or
+endorsed by the Feishin project. Please report issues with Subbox to
+[this repository](https://github.com/laker-93/subbox-app/issues), **not** to the
+Feishin maintainers.
 
 ## Features
 
