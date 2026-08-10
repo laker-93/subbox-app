@@ -3,33 +3,35 @@
 # Subbox
 
   <p align="center">
-    <a href="https://github.com/jeffvli/subbox/blob/main/LICENSE">
-      <img src="https://img.shields.io/github/license/jeffvli/subbox?style=flat-square&color=brightgreen"
+    <a href="https://github.com/laker-93/subbox-app/blob/development/LICENSE">
+      <img src="https://img.shields.io/github/license/laker-93/subbox-app?style=flat-square&color=brightgreen"
       alt="License">
     </a>
-      <a href="https://github.com/jeffvli/subbox/releases">
-      <img src="https://img.shields.io/github/v/release/jeffvli/subbox?style=flat-square&color=blue"
+      <a href="https://github.com/laker-93/subbox-app/releases">
+      <img src="https://img.shields.io/github/v/release/laker-93/subbox-app?style=flat-square&color=blue"
       alt="Release">
     </a>
-    <a href="https://github.com/jeffvli/subbox/releases">
-      <img src="https://img.shields.io/github/downloads/jeffvli/subbox/total?style=flat-square&color=orange"
+    <a href="https://github.com/laker-93/subbox-app/releases">
+      <img src="https://img.shields.io/github/downloads/laker-93/subbox-app/total?style=flat-square&color=orange"
       alt="Downloads">
-    </a>
-  </p>
-  <p align="center">
-    <a href="https://discord.gg/FVKpcMDy5f">
-      <img src="https://img.shields.io/discord/922656312888811530?color=black&label=discord&logo=discord&logoColor=white"
-      alt="Discord">
-    </a>
-    <a href="https://matrix.to/#/#sonixd:matrix.org">
-      <img src="https://img.shields.io/matrix/sonixd:matrix.org?color=black&label=matrix&logo=matrix&logoColor=white"
-      alt="Matrix">
     </a>
   </p>
 
 ---
 
-Rewrite of [Sonixd](https://github.com/jeffvli/sonixd).
+## Attribution
+
+Subbox is a fork of [Feishin](https://github.com/jeffvli/feishin), a modern self-hosted
+music player by [jeffvli](https://github.com/jeffvli) (itself a rewrite of
+[Sonixd](https://github.com/jeffvli/sonixd)). Feishin is licensed under the
+GNU General Public License v3.0, and Subbox remains licensed under the GPL-3.0 —
+see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Subbox has been modified from the original since 2024. It adds DJ-workflow features
+(Rekordbox/Serato library and playlist sync via the pymix API, wishlist and sharing
+surfaces) and is not affiliated with or endorsed by the Feishin project. Please report
+issues with Subbox to [this repository](https://github.com/laker-93/subbox-app/issues),
+**not** to the Feishin maintainers.
 
 ## Features
 
@@ -39,7 +41,7 @@ Rewrite of [Sonixd](https://github.com/jeffvli/sonixd).
 - [x] Scrobble playback to your server
 - [x] Smart playlist editor (Navidrome)
 - [x] Synchronized and unsynchronized lyrics support
-- [ ] [Request a feature](https://github.com/jeffvli/subbox/issues) or [view taskboard](https://github.com/users/jeffvli/projects/5/views/1)
+- [ ] [Request a feature](https://github.com/laker-93/subbox-app/issues)
 
 ## Screenshots
 
@@ -49,11 +51,11 @@ Rewrite of [Sonixd](https://github.com/jeffvli/sonixd).
 
 ### Desktop (recommended)
 
-Download the [latest desktop client](https://github.com/jeffvli/subbox/releases). The desktop client is the recommended way to use Subbox. It supports both the MPV and web player backends, as well as includes built-in fetching for lyrics.
+Download the [latest desktop client](https://github.com/laker-93/subbox-app/releases). The desktop client is the recommended way to use Subbox. It supports both the MPV and web player backends, as well as includes built-in fetching for lyrics.
 
 #### macOS Notes
 
-If you're using a device running macOS 12 (Monterey) or higher, [check here](https://github.com/jeffvli/subbox/issues/104#issuecomment-1553914730) for instructions on how to remove the app from quarantine.
+If you're using a device running macOS 12 (Monterey) or higher, [check here](https://github.com/jeffvli/feishin/issues/104#issuecomment-1553914730) for instructions on how to remove the app from quarantine.
 
 For media keys to work, you will be prompted to allow Subbox to be a Trusted Accessibility Client. After allowing, you will need to restart Subbox for the privacy settings to take effect.
 
@@ -65,34 +67,34 @@ Simply run the installer like this:
 
 ```sh
 dir=/your/application/directory
-curl 'https://raw.githubusercontent.com/jeffvli/subbox/refs/heads/development/install-subbox-appimage' | sh -s -- "$dir"
+curl 'https://raw.githubusercontent.com/laker-93/subbox-app/refs/heads/development/install-subbox-appimage' | sh -s -- "$dir"
 ```
 
 The script also has an option to add launch arguments to run Subbox in native Wayland mode. Note that this is experimental in Electron and therefore not officially supported. If you want to use it, run this instead:
 
 ```sh
 dir=/your/application/directory
-curl 'https://raw.githubusercontent.com/jeffvli/subbox/refs/heads/development/install-subbox-appimage' | sh -s -- "$dir" wayland-native
+curl 'https://raw.githubusercontent.com/laker-93/subbox-app/refs/heads/development/install-subbox-appimage' | sh -s -- "$dir" wayland-native
 ```
 
 It also provides a simple uninstall routine, removing the downloaded files:
 
 ```sh
 dir=/your/application/directory
-curl 'https://raw.githubusercontent.com/jeffvli/subbox/refs/heads/development/install-subbox-appimage' | sh -s -- "$dir" remove
+curl 'https://raw.githubusercontent.com/laker-93/subbox-app/refs/heads/development/install-subbox-appimage' | sh -s -- "$dir" remove
 ```
 
 The entry should show up in your Application Launcher immediately. If it does not, simply log out, wait 10 seconds, and log back in. Your Desktop Environment may alternatively provide a way to reload entries.
 
 ### Web and Docker
 
-Visit [https://subbox.vercel.app](https://subbox.vercel.app) to use the hosted web version of Subbox. The web client only supports the web player backend.
-
-Subbox is also available as a Docker image. The images are hosted via `ghcr.io` and are available to view [here](https://github.com/jeffvli/subbox/pkgs/container/subbox). You can run the container using the following commands:
+Subbox is available as a Docker image, published to Docker Hub as
+[`laker93/player`](https://hub.docker.com/r/laker93/player). You can run the container
+using the following commands:
 
 ```bash
 # Run the latest version
-docker run --name subbox -p 9180:9180 ghcr.io/jeffvli/subbox:latest
+docker run --name subbox -p 9180:9180 laker93/player:latest
 
 # Build the image locally
 docker build -t subbox .
@@ -107,7 +109,7 @@ To install via Docker Compose, use the following snippet. This also works on Por
 services:
     subbox:
         container_name: subbox
-        image: 'ghcr.io/jeffvli/subbox:latest'
+        image: 'laker93/player:latest'
         restart: unless-stopped
         environment:
             - SERVER_NAME=jellyfin # pre-defined server name
@@ -215,4 +217,20 @@ This project uses [Weblate](https://hosted.weblate.org/projects/subbox/) for tra
 
 ## License
 
-[GNU General Public License v3.0 ©](https://github.com/jeffvli/subbox/blob/dev/LICENSE)
+Subbox — Copyright (C) 2024-2026 Luke Purnell
+Based on Feishin — Copyright (C) 2022-2024 jeffvli and the Feishin contributors.
+
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE) for more details.
+
+The Subbox backend service (`pymix`) is a separate program that communicates with this
+client over an HTTP API. It is not covered by this license — see its own repository.
+
+"Subbox" and the Subbox logo are trademarks of Luke Purnell. The GPL grants you rights
+to the code, not to the name or branding; forks must be distributed under a different
+name and logo.
