@@ -385,8 +385,9 @@ export const SyncDownload = () => {
                 >
                     <Stack gap="lg">
                         <Text size="sm">
-                            Move your Sub-box playlists back into Rekordbox by downloading the tracks
-                            with a Rekordbox XML, then importing that XML into your collection.
+                            Move your Sub-box playlists back into Rekordbox by downloading the
+                            tracks with a Rekordbox XML, then importing that XML into your
+                            collection.
                         </Text>
                         <Stack gap="md">
                             <Stack gap="xs">

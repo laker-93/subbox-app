@@ -57,8 +57,7 @@ export const LandingPage = ({
                         <div className={styles['fs-landing-page-feature']}>
                             <span className={styles['fs-landing-page-feature-dot']} />
                             {t('page.landing.featureStreaming', {
-                                defaultValue:
-                                    'Sync your collection to the cloud',
+                                defaultValue: 'Sync your collection to the cloud',
                             })}
                         </div>
                         <div className={styles['fs-landing-page-feature']}>
