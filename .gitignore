@@ -6,4 +6,9 @@ out
 *.log*
 release
 .env.ui-snapshot.local*
+# Vite's per-developer overrides (e.g. .env.development.local). These hold local
+# credentials — VITE_DEMO_PASSWORD — so they must never be committed. The
+# `.example` companion is tracked deliberately.
+.env.*.local
+!.env.development.local.example
 .ui-snapshots

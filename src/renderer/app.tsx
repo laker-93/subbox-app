@@ -10,6 +10,7 @@ import isElectron from 'is-electron';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import i18n from '/@/i18n/i18n';
+import { RequestInviteModal } from '/@/renderer/features/invite/components/request-invite-modal';
 import { openSettingsModal } from '/@/renderer/features/settings/utils/open-settings-modal';
 import { WebAudioContext } from '/@/renderer/features/player/context/webaudio-context';
 import { useCheckForUpdates } from '/@/renderer/hooks/use-check-for-updates';
@@ -167,6 +168,10 @@ export const App = () => {
                     <AppRouter />
                 </PlayerProvider>
             </WebAudioContext.Provider>
+            {/* Mounted at the root because every leg of the invite funnel opens it — the
+                landing page and auth modal (logged out) and the demo banner and blocked
+                sync actions (logged in) live on opposite sides of the auth boundary. */}
+            <RequestInviteModal />
             <Suspense fallback={null}>
                 <UpdateAvailableDialog />
             </Suspense>

@@ -6,6 +6,7 @@ import { Outlet } from 'react-router';
 import styles from './mobile-layout.module.css';
 
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import { DemoBanner } from '/@/renderer/features/invite/components/demo-banner';
 import { FullScreenVisualizer } from '/@/renderer/features/player/components/full-screen-visualizer';
 import { MobileFullscreenPlayer } from '/@/renderer/features/player/components/mobile-fullscreen-player';
 import { MobileSidebar } from '/@/renderer/features/sidebar/components/mobile-sidebar';
@@ -59,6 +60,8 @@ export const MobileLayout = ({ shell }: MobileLayoutProps) => {
                 />
                 <main className={styles.mainContent}>
                     <ModeToggle withAppMenu={false} />
+                    {/* Sticks to the top of the scroll container — see demo-banner.module.css. */}
+                    <DemoBanner />
                     {appMode === 'sync' ? <MobileSyncPlaceholder /> : <Outlet />}
                 </main>
                 <PlayerBar />

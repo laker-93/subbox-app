@@ -27,7 +27,7 @@ export const MobileSyncPlaceholder = () => {
                 <Text c="dimmed" size="sm" ta="center">
                     {t('page.modeToggle.mobileSyncDescription', {
                         defaultValue:
-                            'Uploading, downloading, and watching folders work best with more room. Widen this window or open Subbox on a desktop to use Sync.',
+                            'Uploading, downloading, and watching folders work best with more room. Widen this window or open Sub-box on a desktop to use Sync.',
                     })}
                 </Text>
                 <Button onClick={() => setAppMode('library')} size="sm" variant="default">

@@ -20,7 +20,7 @@ export const HelpModalContent = () => {
                 <Text c="dimmed" size="sm">
                     {t('page.help.gettingStartedDescription', {
                         defaultValue:
-                            'Subbox is a cloud-based music library management platform for DJs. After logging in, you can browse your music collection, manage playlists, and stream tracks.',
+                            'Sub-box is a cloud-based music library management platform for DJs. After logging in, you can browse your music collection, manage playlists, and stream tracks.',
                     })}
                 </Text>
             </Stack>
