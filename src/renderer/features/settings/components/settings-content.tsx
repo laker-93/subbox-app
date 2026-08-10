@@ -37,6 +37,12 @@ const AdvancedTab = lazy(() =>
     })),
 );
 
+const AboutTab = lazy(() =>
+    import('/@/renderer/features/settings/components/about/about-tab').then((module) => ({
+        default: module.AboutTab,
+    })),
+);
+
 export const SettingsContent = () => {
     const { t } = useTranslation();
     const currentTab = useSettingsStore((state) => state.tab);
@@ -70,6 +76,9 @@ export const SettingsContent = () => {
                         <Tabs.Tab value="advanced">
                             {t('page.setting.advanced', { postProcess: 'sentenceCase' })}
                         </Tabs.Tab>
+                        <Tabs.Tab value="about">
+                            {t('page.setting.aboutTab', { postProcess: 'sentenceCase' })}
+                        </Tabs.Tab>
                     </Tabs.List>
                     <Tabs.Panel value="general">
                         <Suspense fallback={<Spinner container />}>
@@ -96,6 +105,11 @@ export const SettingsContent = () => {
                     <Tabs.Panel value="advanced">
                         <Suspense fallback={<Spinner container />}>
                             <AdvancedTab />
+                        </Suspense>
+                    </Tabs.Panel>
+                    <Tabs.Panel value="about">
+                        <Suspense fallback={<Spinner container />}>
+                            <AboutTab />
                         </Suspense>
                     </Tabs.Panel>
                 </Tabs>

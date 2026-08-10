@@ -704,9 +704,14 @@
             "saveAsCollection": "save as collection"
         },
         "setting": {
+            "aboutTab": "about",
             "advanced": "advanced",
             "analytics": "analytics",
             "generalTab": "general",
+            "musicCredits": "music credits",
+            "musicCreditsDescription": "The demo library is Creative Commons licensed music from Jamendo. Each track links to its original release and to the licence it is offered under.",
+            "musicCreditsShowAll": "Show all ({{count}} more)",
+            "musicCreditsShowLess": "show less",
             "hotkeysTab": "hotkeys",
             "playbackTab": "playback",
             "windowTab": "window",
