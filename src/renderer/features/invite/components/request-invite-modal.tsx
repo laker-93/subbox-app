@@ -203,6 +203,14 @@ function RequestInviteForm({
                         {...form.getInputProps('email')}
                     />
                     <Select
+                        comboboxProps={{
+                            // This modal's own zIndex is bumped to 400 (see RequestInviteModal
+                            // above) to clear the Create Account modal it can open from on top
+                            // of. Mantine's default combobox popover z-index (300) sits below
+                            // that, so without this the dropdown opened correctly but rendered
+                            // *behind* the modal's own opaque body — invisible, unclickable.
+                            zIndex: 401,
+                        }}
                         data={[
                             { label: 'Rekordbox', value: 'rekordbox' },
                             { label: 'Serato', value: 'serato' },

@@ -34,3 +34,7 @@ re-investigating a flow. The loop itself is documented in `../subbox-workspace/d
   which a component uses before editing virtualized lists.
 - One codebase → three build targets (desktop/web/remote); web & remote have no main
   process, so `window.api` calls must degrade gracefully. See ARCHITECTURE.md §7.
+
+## Commit messages
+
+Do not add a `Co-Authored-By: Claude ...` trailer (or any Claude/Anthropic co-author line) to git commit messages.
