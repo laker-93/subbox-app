@@ -17,7 +17,7 @@ export default class MenuBuilder {
             label: 'Electron',
             submenu: [
                 {
-                    label: 'About Subbox',
+                    label: 'About Sub-box',
                     selector: 'orderFrontStandardAboutPanel:',
                 },
                 { type: 'separator' },
@@ -33,7 +33,7 @@ export default class MenuBuilder {
                 { type: 'separator' },
                 {
                     accelerator: 'Command+H',
-                    label: 'Hide Subbox',
+                    label: 'Hide Sub-box',
                     selector: 'hide:',
                 },
                 {

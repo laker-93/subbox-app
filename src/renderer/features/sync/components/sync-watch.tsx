@@ -118,7 +118,7 @@ export const SyncWatch = () => {
                         <Button
                             onClick={handleStartWatch}
                             tooltip={{
-                                label: 'Start watching this folder. New audio files added here will be uploaded to your Subbox library automatically while the app is open.',
+                                label: 'Start watching this folder. New audio files added here will be uploaded to your Sub-box library automatically while the app is open.',
                                 multiline: true,
                                 openDelay: 300,
                                 w: 280,

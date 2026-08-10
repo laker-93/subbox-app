@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
+import { openInviteRequest } from '/@/renderer/features/invite/store/invite-request-store';
 import { authenticateServices } from '/@/renderer/features/pymix/utils/authenticate-services';
 import {
     findExistingServerId,
@@ -277,6 +278,29 @@ function CreateAccountView({
                         variant="filled"
                         {...form.getInputProps('token')}
                     />
+                    {/* Without this the form is a wall: a required field with no stated
+                        way to obtain a value, so the user simply leaves. */}
+                    <Text c="dimmed" size="xs">
+                        {t('page.landing.inviteTokenHint', {
+                            defaultValue: 'Sub-box is in private beta. No token?',
+                        })}{' '}
+                        <Text
+                            c="blue"
+                            component="a"
+                            href="#"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                openInviteRequest('createAccount');
+                            }}
+                            size="xs"
+                            style={{ cursor: 'pointer' }}
+                        >
+                            {t('page.invite.cta', {
+                                defaultValue: 'Request an invite',
+                                postProcess: 'sentenceCase',
+                            })}
+                        </Text>
+                    </Text>
                 </Stack>
                 <Button disabled={isSubmitDisabled} fullWidth type="submit" variant="filled">
                     {t('common.create', { defaultValue: 'Create', postProcess: 'titleCase' })}{' '}

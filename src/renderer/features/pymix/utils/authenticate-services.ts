@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid/non-secure';
 
 import { api } from '/@/renderer/api';
 import { FilebrowserController } from '/@/renderer/api/filebrowser/filebrowser-controller';
-import { DEMO_USERNAME } from '/@/renderer/config/demo-config';
+import { DEMO_NAVIDROME_USERNAME, DEMO_USERNAME } from '/@/renderer/config/demo-config';
 import { getNavidromeUrl, urlConfig } from '/@/renderer/config/url-config';
 import { ServerListItemWithCredential } from '/@/shared/types/domain-types';
 import { ServerType } from '/@/shared/types/types';
@@ -10,10 +10,12 @@ import { ServerType } from '/@/shared/types/types';
 // The public demo login is a restricted, non-admin Navidrome user living inside
 // demoadmin's own container rather than a container of its own — 'demo' has no
 // navidrome{demo} to resolve to, so its Navidrome URL is pinned to demoadmin's.
+// Which account that is comes from DEMO_NAVIDROME_USERNAME (defaults to demoadmin,
+// overridable per-environment) so a dev stack, which has no demoadmin, can point the
+// demo login at a local account that does own a container.
 // Filebrowser is unaffected: 'demo' has its own (unscoped) Filebrowser account,
 // since Filebrowser only matters for Sync -> Download, which requires a separate
 // demoadmin pymix login anyway.
-const DEMO_ACCOUNT_USERNAME = 'demoadmin';
 
 /**
  * Authenticates with navidrome and filebrowser using the given credentials,
@@ -31,7 +33,7 @@ export const authenticateServices = async (args: {
     const { id, password, username } = args;
     const isDemo = username === DEMO_USERNAME;
 
-    const navidromeUrl = getNavidromeUrl(isDemo ? DEMO_ACCOUNT_USERNAME : username);
+    const navidromeUrl = getNavidromeUrl(isDemo ? DEMO_NAVIDROME_USERNAME : username);
 
     const [authData, fbToken] = await Promise.all([
         api.controller.authenticate(navidromeUrl, { password, username }, ServerType.NAVIDROME),

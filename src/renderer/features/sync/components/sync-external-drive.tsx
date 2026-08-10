@@ -287,7 +287,7 @@ export const SyncExternalDrive = () => {
                         Select a folder on an external drive, then choose playlists to compare
                         against. Missing tracks — those in your playlists but not on the drive —
                         will be shown as a preview. The drive folder is only used for this
-                        comparison: downloaded tracks are saved to your Subbox library, the same
+                        comparison: downloaded tracks are saved to your Sub-box library, the same
                         place regular playlist downloads go, ready to add to Rekordbox and export
                         back to the drive from there.
                     </Text>
@@ -481,7 +481,7 @@ export const SyncExternalDrive = () => {
                         {downloadResult
                             ? `${downloadResult.tracksExported} track${
                                   downloadResult.tracksExported === 1 ? '' : 's'
-                              } downloaded to your Subbox library.`
+                              } downloaded to your Sub-box library.`
                             : 'Download finished.'}
                     </Text>
                     {(downloadResult?.musicPath || downloadResult?.xmlPath) && (
@@ -823,7 +823,7 @@ export const SyncExternalDrive = () => {
                 onClick={handleDownload}
                 size="md"
                 tooltip={{
-                    label: 'Download the missing tracks into your Subbox library, ready to use (plus a Rekordbox XML if ticked above).',
+                    label: 'Download the missing tracks into your Sub-box library, ready to use (plus a Rekordbox XML if ticked above).',
                     multiline: true,
                     openDelay: 300,
                     w: 280,

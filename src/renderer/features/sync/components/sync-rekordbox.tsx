@@ -2,8 +2,9 @@ import isElectron from 'is-electron';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
+import { isUploadForbidden, PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
+import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import { useCurrentServerWithCredential } from '/@/renderer/store';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
@@ -60,6 +61,7 @@ type SyncStep =
     | 'parsing'
     | 'preview'
     | 'storage-exceeded'
+    | 'upload-forbidden'
     | 'uploading';
 
 interface UploadProgress {
@@ -272,10 +274,21 @@ export const SyncRekordbox = () => {
                 setStep('importing');
                 setImportProgress(null);
             } catch (importErr: any) {
+                // A refused write is an account limit, not a failure — say so instead of
+                // showing "Import Failed" over something that was never going to work.
+                if (isUploadForbidden(importErr)) {
+                    setStep('upload-forbidden');
+                    return;
+                }
                 setError(importErr?.message || 'Import failed');
                 setStep('done');
             }
         } catch (err: any) {
+            if (isUploadForbidden(err)) {
+                setStep('upload-forbidden');
+                return;
+            }
+
             const msg = err?.message || 'Upload failed';
             const storagePrefix = 'STORAGE_LIMIT_EXCEEDED:';
             const storagePrefixIdx = msg.indexOf(storagePrefix);
@@ -371,7 +384,7 @@ export const SyncRekordbox = () => {
                     <Text c="dimmed" size="sm" ta="center">
                         {t('page.sync.rekordbox.description', {
                             defaultValue:
-                                'Select your Rekordbox XML export file to preview and upload playlists to your Subbox cloud library.',
+                                'Select your Rekordbox XML export file to preview and upload playlists to your Sub-box cloud library.',
                         })}
                     </Text>
                     {error && (
@@ -385,7 +398,7 @@ export const SyncRekordbox = () => {
                         tooltip={{
                             label: t('page.sync.rekordbox.selectXmlTooltip', {
                                 defaultValue:
-                                    'In Rekordbox, go to File → Export Collection in xml format, then choose that .xml file here. Subbox reads your playlists and tracks from it.',
+                                    'In Rekordbox, go to File → Export Collection in xml format, then choose that .xml file here. Sub-box reads your playlists and tracks from it.',
                             }),
                             multiline: true,
                             openDelay: 300,
@@ -524,7 +537,7 @@ export const SyncRekordbox = () => {
                     tooltip={{
                         label: metadataOnly
                             ? 'Send the selected playlists’ track info to your library without uploading any audio files.'
-                            : 'Upload the selected playlists and their audio files to your Subbox cloud library, then import them so they appear in your collection.',
+                            : 'Upload the selected playlists and their audio files to your Sub-box cloud library, then import them so they appear in your collection.',
                         multiline: true,
                         openDelay: 300,
                         w: 300,
@@ -612,6 +625,16 @@ export const SyncRekordbox = () => {
         );
     }
 
+    // ── Upload refused (account can't write to a library) ──────────────────
+    if (step === 'upload-forbidden') {
+        return (
+            <InviteLockedPanel
+                description="Uploading a Rekordbox library writes to your collection, and this account can't. Your own Sub-box library imports your playlists, cue points and all."
+                title="Rekordbox upload needs your own library"
+            />
+        );
+    }
+
     // ── Storage Exceeded ───────────────────────────────────────────────────
     if (step === 'storage-exceeded') {
         const currentMB = storageInfo
@@ -646,7 +669,7 @@ export const SyncRekordbox = () => {
                         >
                             Discord community
                         </Text>{' '}
-                        and request an upgrade from the Subbox team.
+                        and request an upgrade from the Sub-box team.
                     </Text>
                     {currentMB !== null && maxMB !== null && (
                         <Text size="sm" ta="center">

@@ -148,7 +148,7 @@ export const DiscordSettings = memo(() => {
                     aria-label={t('setting.discordDisplayType')}
                     clearable={false}
                     data={[
-                        { label: 'Subbox', value: DiscordDisplayType.SUBBOX },
+                        { label: 'Sub-box', value: DiscordDisplayType.SUBBOX },
                         {
                             label: t('setting.discordDisplayType', {
                                 context: 'songname',

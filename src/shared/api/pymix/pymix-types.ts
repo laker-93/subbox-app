@@ -222,6 +222,21 @@ const isValidTokenParameters = z.object({
     token: z.string(),
 });
 
+/**
+ * Beta-invite capture. The one pymix write that carries no session — the caller is a
+ * prospective user with no account. `dj_software_other` is only meaningful alongside
+ * `other`; the server drops it otherwise.
+ */
+const inviteRequestParameters = z.object({
+    dj_software: z.enum(['rekordbox', 'serato', 'other']),
+    dj_software_other: z.string().optional(),
+    email: z.string(),
+});
+
+const inviteRequest = z.object({
+    status: z.string(),
+});
+
 const storageCheckParameters = z.object({
     uploadSizeBytes: z.number(),
 });
@@ -406,6 +421,7 @@ export const pymixType = {
         exportJob: rbExportParameters,
         import: importParameters,
         importProgress: importProgressParameters,
+        inviteRequest: inviteRequestParameters,
         isValidToken: isValidTokenParameters,
         login: loginParameters,
         matchTracks: matchTracksParameters,
@@ -431,6 +447,7 @@ export const pymixType = {
         error,
         exportJob,
         importJob,
+        inviteRequest,
         isValidToken,
         librarySize,
         login,

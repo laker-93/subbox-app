@@ -80,6 +80,21 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    // Unauthenticated: the caller is a prospective user with no session cookie, so this
+    // is the one contract entry that can't 401 — and must not, or the reauth interceptor
+    // below would try to refresh a session that never existed. 400 is the server's flat
+    // "we couldn't use that" (bad email / unknown dj_software); 429 is the per-IP cap.
+    inviteRequest: {
+        body: pymixType._parameters.inviteRequest,
+        method: 'POST',
+        path: 'invite-request',
+        responses: {
+            200: resultWithHeaders(pymixType._response.inviteRequest),
+            400: resultWithHeaders(pymixType._response.error),
+            429: resultWithHeaders(pymixType._response.error),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     login: {
         body: pymixType._parameters.login,
         method: 'POST',

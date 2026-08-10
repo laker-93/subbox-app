@@ -40,7 +40,7 @@ export const WishlistHeader = () => {
                         tooltip={{
                             label: t('page.wishlist.offlineWishlist.tooltip', {
                                 defaultValue:
-                                    'Capture tracks on the go using a linked Google Sheet — add a note, an artist and title, or a YouTube link from your phone, even offline, and Subbox pulls them into your wishlist.',
+                                    'Capture tracks on the go using a linked Google Sheet — add a note, an artist and title, or a YouTube link from your phone, even offline, and Sub-box pulls them into your wishlist.',
                             }),
                             multiline: true,
                             openDelay: 300,
@@ -61,7 +61,7 @@ export const WishlistHeader = () => {
                         tooltip={{
                             label: t('action.addToWishlistTooltip', {
                                 defaultValue:
-                                    'Add a track you want to your wishlist — paste a YouTube/streaming link or type an artist and title, and Subbox finds and adds it to your library.',
+                                    'Add a track you want to your wishlist — paste a YouTube/streaming link or type an artist and title, and Sub-box finds and adds it to your library.',
                             }),
                             multiline: true,
                             openDelay: 300,

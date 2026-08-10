@@ -24,6 +24,30 @@ type ImportProgressArgs = {
     query: z.infer<typeof pymixType._parameters.importProgress>;
 };
 
+type InviteRequestArgs = {
+    body: z.infer<typeof pymixType._parameters.inviteRequest>;
+};
+
+/**
+ * Thrown when pymix refuses a write because the caller can't upload — today that means
+ * the public `demo` login hitting `require_uploader`.
+ *
+ * A distinct type rather than a message match: the UI's job here is to say "locked", not
+ * "broken", and a generic Error would leave every call site guessing from a string.
+ */
+export class PymixUploadForbiddenError extends Error {
+    constructor(action: string) {
+        super(`This account cannot ${action}`);
+        this.name = 'PymixUploadForbiddenError';
+    }
+}
+
+export const isUploadForbidden = (err: unknown): boolean =>
+    err instanceof PymixUploadForbiddenError;
+
+/** Why an invite request failed, so the form can say something useful about each case. */
+export type InviteRequestFailure = 'failed' | 'invalid' | 'rateLimited';
+
 type LoginArgs = {
     body: z.infer<typeof pymixType._parameters.login>;
 };
@@ -105,6 +129,16 @@ type WishlistSetSheetArgs = {
 type WishlistUpdateArgs = {
     body: z.infer<typeof pymixType._parameters.wishlistUpdate>;
 };
+
+export class PymixInviteRequestError extends Error {
+    readonly reason: InviteRequestFailure;
+
+    constructor(reason: InviteRequestFailure) {
+        super(`Invite request failed: ${reason}`);
+        this.name = 'PymixInviteRequestError';
+        this.reason = reason;
+    }
+}
 
 export const PymixController = {
     checkStorage: async (args: PymixClientArgs & StorageCheckArgs) => {
@@ -200,6 +234,10 @@ export const PymixController = {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).import({ body });
 
+        if (res.status === 403) {
+            throw new PymixUploadForbiddenError('import music');
+        }
+
         if (res.status !== 200) {
             throw new Error('Failed to start import');
         }
@@ -233,6 +271,10 @@ export const PymixController = {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).matchTracks({ body });
 
+        if (res.status === 403) {
+            throw new PymixUploadForbiddenError('upload music');
+        }
+
         if (res.status !== 200) {
             throw new Error('Failed to match tracks');
         }
@@ -255,8 +297,40 @@ export const PymixController = {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).rbImport({ body });
 
+        if (res.status === 403) {
+            throw new PymixUploadForbiddenError('import a Rekordbox library');
+        }
+
         if (res.status !== 200) {
             throw new Error('Failed to import rekordbox');
+        }
+
+        return res.body.data;
+    },
+
+    /**
+     * Register interest in the private beta. Unauthenticated — the caller has no account,
+     * which is the point.
+     *
+     * Distinguishes the server's two rejections rather than throwing one generic error,
+     * because the form renders them differently: a 400 is the user's input (bad email)
+     * and belongs inline against the field, a 429 is the per-IP cap and is not their
+     * fault. Everything else is a generic failure.
+     */
+    requestInvite: async (args: InviteRequestArgs & PymixClientArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).inviteRequest({ body });
+
+        if (res.status === 400) {
+            throw new PymixInviteRequestError('invalid');
+        }
+
+        if (res.status === 429) {
+            throw new PymixInviteRequestError('rateLimited');
+        }
+
+        if (res.status !== 200) {
+            throw new PymixInviteRequestError('failed');
         }
 
         return res.body.data;
@@ -276,6 +350,10 @@ export const PymixController = {
     seratoImport: async (args: PymixClientArgs) => {
         const { baseUrl, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).seratoImport();
+
+        if (res.status === 403) {
+            throw new PymixUploadForbiddenError('import a Serato library');
+        }
 
         if (res.status !== 200) {
             throw new Error('Failed to import serato');
