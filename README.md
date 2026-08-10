@@ -2,10 +2,10 @@
 
 # Subbox
 
-Subbox is a self-hosted music player built for DJs. It connects to your Navidrome,
-Jellyfin, or Subsonic-compatible server and adds DJ-focused workflows on top: library
-and playlist sync with Rekordbox and Serato, a wishlist for tracks you want to add to
-your crate, and sharing tools for sending picks to other people.
+Subbox is a hosted music library and player built for DJs. Your collection lives in the
+cloud, and Subbox streams it to any device while keeping it in step with your DJ
+software: import from Rekordbox, pull playlists back down as files, keep a wishlist of
+tracks you want to add to your crate, and share picks with other people.
 
   <p align="center">
     <a href="https://github.com/laker-93/subbox-app/blob/development/LICENSE">
@@ -24,6 +24,22 @@ your crate, and sharing tools for sending picks to other people.
 
 ---
 
+## Subbox is a hosted service
+
+You don't run Subbox yourself. Sign in at **[www.sub-box.net](https://www.sub-box.net)**
+or from the desktop client, and your library, music server and storage are provisioned
+for you.
+
+Subbox is currently in **private beta**. On the landing page you can hit **Demo** to
+browse a sample collection of licence-free music, or **Request an invite** to get an
+account of your own.
+
+This repository contains the **client** only — the Electron desktop app plus the web and
+remote-control builds. The backend it talks to (the `pymix` service, together with the
+per-user music server and file storage it orchestrates) is a separate, closed service.
+There is no self-hosted deployment and no "bring your own server" mode: the client is
+built against Subbox's own service URLs, and its features depend on that backend.
+
 ## Attribution
 
 Subbox is a fork of [Feishin](https://github.com/jeffvli/feishin), a modern self-hosted
@@ -37,29 +53,55 @@ endorsed by the Feishin project. Please report issues with Subbox to
 [this repository](https://github.com/laker-93/subbox-app/issues), **not** to the
 Feishin maintainers.
 
+Because upstream is a self-hosted player, parts of the Feishin codebase — server
+management, the Jellyfin backend, self-hosting configuration — are inherited but not
+used by Subbox, and are not exposed to Subbox users.
+
 ## Features
 
-- [x] MPV player backend
-- [x] Web player backend
-- [x] Modern UI
-- [x] Scrobble playback to your server
-- [x] Smart playlist editor (Navidrome)
+- [x] Cloud library — upload your collection once, then stream it from anywhere
+- [x] Rekordbox import — add music to Subbox from a Rekordbox XML export _(desktop)_
+- [x] Rekordbox download — pick playlists and get the tracks plus an XML back _(desktop)_
+- [x] Watch folder and external-drive import _(desktop)_
+- [x] Wishlist — track the records you want, and see when they land in your library
+- [x] Sharing — send tracks and playlists to other people
+- [x] Auto DJ — keeps the queue topped up so playback never runs dry
+- [x] MPV and web player backends
+- [x] Smart playlist editor
 - [x] Synchronized and unsynchronized lyrics support
+- [x] Scrobble playback to your library
+- [ ] Serato import/export — supported by the backend, not yet surfaced in the app
 - [ ] [Request a feature](https://github.com/laker-93/subbox-app/issues)
 
-## Screenshots
+## Screenshot
 
-<a href="./media/preview_full_screen_player.png"><img src="./media/preview_full_screen_player.png" width="49.5%"/></a> <a href="./media/preview_album_artist_detail.png"><img src="./media/preview_album_artist_detail.png" width="49.5%"/></a> <a href="./media/preview_album_detail.png"><img src="./media/preview_album_detail.png" width="49.5%"/></a> <a href="./media/preview_smart_playlist.png"><img src="./media/preview_smart_playlist.png" width="49.5%"/></a>
+<a href="./src/renderer/assets/landing-library-preview.png"><img src="./src/renderer/assets/landing-library-preview.png" width="80%"/></a>
 
 ## Getting Started
 
-### Desktop (recommended)
+### Web
 
-Download the [latest desktop client](https://github.com/laker-93/subbox-app/releases). The desktop client is the recommended way to use Subbox. It supports both the MPV and web player backends, as well as includes built-in fetching for lyrics.
+Go to **[www.sub-box.net](https://www.sub-box.net)** — nothing to install. The web app
+covers browsing, playback, playlists, the wishlist and sharing.
+
+### Desktop
+
+Download the [latest desktop client](https://github.com/laker-93/subbox-app/releases).
+The desktop client is the recommended way to use Subbox: it adds the MPV player backend,
+built-in lyrics fetching, and the library-sync flows (Rekordbox upload and download,
+watch folders, external drives) that need access to your local filesystem and so cannot
+run in the browser.
+
+Sign in with your Subbox account — there is no server to configure.
 
 #### macOS Notes
 
-If you're using a device running macOS 12 (Monterey) or higher, [check here](https://github.com/jeffvli/feishin/issues/104#issuecomment-1553914730) for instructions on how to remove the app from quarantine.
+Builds are not notarized, so macOS will quarantine the app on first launch. Clear it
+with:
+
+```sh
+xattr -cr /Applications/Subbox.app
+```
 
 For media keys to work, you will be prompted to allow Subbox to be a Trusted Accessibility Client. After allowing, you will need to restart Subbox for the privacy settings to take effect.
 
@@ -90,86 +132,28 @@ curl 'https://raw.githubusercontent.com/laker-93/subbox-app/refs/heads/developme
 
 The entry should show up in your Application Launcher immediately. If it does not, simply log out, wait 10 seconds, and log back in. Your Desktop Environment may alternatively provide a way to reload entries.
 
-### Web and Docker
+### Playback backend (optional)
 
-Subbox is available as a Docker image, published to Docker Hub as
-[`laker93/player`](https://hub.docker.com/r/laker93/player). You can run the container
-using the following commands:
+The desktop client plays through the built-in web backend by default, so it works out of
+the box. If you'd rather use MPV, install it from [mpv.io](https://mpv.io/installation/)
+(or your package manager), then set the binary path and switch the playback type under
+Settings > Playback.
 
-```bash
-# Run the latest version
-docker run --name subbox -p 9180:9180 laker93/player:latest
-
-# Build the image locally
-docker build -t subbox .
-docker run --name subbox -p 9180:9180 subbox
-```
-
-#### Docker Compose
-
-To install via Docker Compose, use the following snippet. This also works on Portainer.
-
-```yaml
-services:
-    subbox:
-        container_name: subbox
-        image: 'laker93/player:latest'
-        restart: unless-stopped
-        environment:
-            - SERVER_NAME=jellyfin # pre-defined server name
-            - SERVER_LOCK=true # When true AND name/type/url are set, only username/password can be toggled
-            - SERVER_TYPE=jellyfin # the allowed types are: jellyfin, navidrome, subsonic. These values are case insensitive
-            - SERVER_URL= # http://address:port or https://address:port
-            - REMOTE_URL= # http://address or https://address
-            - LEGACY_AUTHENTICATION=false # When SERVER_LOCK is true, sets the legacy (plaintext) authentication flag for Subsonic/OpenSubsonic servers
-            - ANALYTICS_DISABLED=true # Set to true to disable Umami analytics tracking
-        ports:
-            - 9180:9180
-            # Alternatively, to restrict to only localhost, - 127.0.0.1:9180:8190
-```
-
-### Configuration
-
-1. Upon startup you will be greeted with a prompt to select the path to your MPV binary. If you do not have MPV installed, you can download it [here](https://mpv.io/installation/) or install it using any package manager supported by your OS. After inputting the path, restart the app.
-
-2. After restarting the app, you will be prompted to select a server. Click the `Open menu` button and select `Manage servers`. Click the `Add server` button in the popup and fill out all applicable details. You will need to enter the full URL to your server, including the protocol and port if applicable (e.g. `https://navidrome.my-server.com` or `http://192.168.0.1:4533`).
-
-- **Navidrome** - For the best experience, select "Save password" when creating the server and configure the `SessionTimeout` setting in your Navidrome config to a larger value (e.g. 72h).
-    - **Linux users** - The default password store uses `libsecret`. `kwallet4/5/6` are also supported, but must be explicitly set in Settings > Window > Passwords/secret store.
-
-3. _Optional_ - If you want to host Subbox on a subpath (not `/`), then pass in the following environment variable: `PUBLIC_PATH=PATH`. For example, to host on `/subbox`, pass in `PUBLIC_PATH=/subbox`.
-
-4. _Optional_ - To hard code the server url, pass the following environment variables: `SERVER_NAME`, `SERVER_TYPE` (one of `jellyfin` or `navidrome` or `subsonic`), `SERVER_URL`. To prevent users from changing these settings, pass `SERVER_LOCK=true`. This can only be set if all three of the previous values are set. When `SERVER_LOCK=true`, you can also set `LEGACY_AUTHENTICATION=true` or `LEGACY_AUTHENTICATION=false` to configure the legacy authentication flag for the server (only applicable for Subsonic/OpenSubsonic servers).
-
-5. _Optional_ - If your server uses a separate public-facing URL than what integrating applications use internally to communicate with your server, such as a separate Navidrome `ShareURL`, set `REMOTE_URL` to said public-facing URL.
- 
-6. _Optional_ - To disable Umami analytics tracking in the Docker/web version, set the environment variable `ANALYTICS_DISABLED=true`. When enabled, the analytics script will not be loaded and all tracking will be disabled.
-
-7. _Optional_ - App settings (theme, language, sidebar options, etc.) can be overridden with environment variables on first run. The variables use the `FS_` prefix (e.g. `FS_GENERAL_THEME=defaultDark`, `FS_GENERAL_LANGUAGE=de`). See [the settings environment variable documentation](docs/ENV_SETTINGS.md) for the full list.
+Linux users: the desktop client stores your saved password in `libsecret` by default.
+`kwallet4/5/6` are also supported, but must be explicitly set in
+Settings > Window > Passwords/secret store.
 
 ## FAQ
 
+### Can I self-host Subbox, or point it at my own Navidrome/Jellyfin/Subsonic server?
+
+No. Subbox is a hosted service: the client is built against Subbox's own backend, which
+is not distributed. The upstream Feishin project is the option if you want a player you
+run yourself against your own server.
+
 ### MPV is either not working or is rapidly switching between pause/play states
 
-First thing to do is check that your MPV binary path is correct. Navigate to the settings page and re-set the path and restart the app. If your issue still isn't resolved, try reinstalling MPV. Known working versions include `v0.35.x` and `v0.36.x`. `v0.34.x` is a known broken version.
-
-### What music servers does Subbox support?
-
-Subbox supports any music server that implements a [Navidrome](https://www.navidrome.org/), [Jellyfin](https://jellyfin.org/), or [OpenSubsonic compatible](https://opensubsonic.netlify.app/) API.
-
-- [Navidrome](https://github.com/navidrome/navidrome)
-- [Jellyfin](https://github.com/jellyfin/jellyfin)
-- [OpenSubsonic](https://opensubsonic.netlify.app/) compatible servers, such as...
-    - [Airsonic-Advanced](https://github.com/airsonic-advanced/airsonic-advanced)
-    - [Ampache](https://ampache.org)
-    - [Astiga](https://asti.ga/)
-    - [Funkwhale](https://www.funkwhale.audio/)
-    - [Gonic](https://github.com/sentriz/gonic)
-    - [LMS](https://github.com/epoupon/lms)
-    - [Nextcloud Music](https://apps.nextcloud.com/apps/music)
-    - [Supysonic](https://github.com/spl0k/supysonic)
-    - [Qm-Music](https://github.com/chenqimiao/qm-music)
-    - More (?)
+First thing to do is check that your MPV binary path is correct. Navigate to the settings page and re-set the path and restart the app. If your issue still isn't resolved, try reinstalling MPV. Known working versions include `v0.35.x` and `v0.36.x`. `v0.34.x` is a known broken version. You can also switch the playback type back to the web backend under Settings > Playback.
 
 ### I have the issue "The SUID sandbox helper binary was found, but is not configured correctly" on Linux
 
@@ -184,9 +168,18 @@ Ubuntu 24.04 specifically introduced breaking changes that affect how namespaces
 
 ## Development
 
-Built and tested using Node `v23.11.0`.
+Built and tested using Node `v23.11.0`. This project is built off of
+[electron-vite](https://github.com/alex8088/electron-vite).
 
-This project is built off of [electron-vite](https://github.com/alex8088/electron-vite)
+Start with [`CLAUDE.md`](CLAUDE.md) for the invariants (pnpm only, `pnpm lint` before
+finishing, `/@/` imports, fork discipline), then
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the process model, the music-server
+controller abstraction and the Subbox-specific services.
+
+The service URLs the client is built against live in `.env.development`, `.env.staging`
+and `.env.production`, and are baked in at build time — see
+[`docs/ENV_SETTINGS.md`](docs/ENV_SETTINGS.md) for the app settings that can additionally
+be overridden by environment variable on first run of a web build.
 
 - `pnpm run dev` - Start the development server
 - `pnpm run dev:watch` - Start the development server in watch mode (for main / preload HMR)
@@ -215,9 +208,15 @@ This project is built off of [electron-vite](https://github.com/alex8088/electro
 - `pnpm run lint:fix` - Lint the project and fix linting errors
 - `pnpm run i18next` - Generate i18n files
 
+The web build is deployed as the public `laker93/player` Docker image, one image per
+target environment (the URLs above are baked in at build time). That image exists to run
+Subbox's own web front end — on its own it is not a usable install, since it still needs
+the hosted backend.
+
 ## Translation
 
-This project uses [Weblate](https://hosted.weblate.org/projects/subbox/) for translations. If you would like to contribute, please visit the link and submit a translation.
+Translations live in `src/i18n/locales/`. To contribute one, edit or add a locale file
+and open a pull request; run `pnpm i18next` if you have added new strings.
 
 ## License
 
