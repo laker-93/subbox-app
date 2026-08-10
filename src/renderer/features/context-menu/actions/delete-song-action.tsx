@@ -2,6 +2,7 @@ import { closeAllModals, openModal } from '@mantine/modals';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useIsDemoSession } from '/@/renderer/config/demo-config';
 import { useDeleteSong } from '/@/renderer/features/songs/mutations/delete-song-mutation';
 import { useCurrentServerId } from '/@/renderer/store';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
@@ -109,6 +110,10 @@ const DeleteSongConfirm = ({ items, serverId }: DeleteSongConfirmProps) => {
 export const DeleteSongAction = ({ disabled, items }: DeleteSongActionProps) => {
     const { t } = useTranslation();
     const serverId = useCurrentServerId();
+    // pymix's DELETE /track 403s the `demo` account (only demoadmin's own session can
+    // delete from the shared library), so there's no point offering the action here —
+    // matches how upload/watch are hidden rather than left to fail, in sync-mode-placeholder.
+    const isDemo = useIsDemoSession();
 
     const openDeleteSongModal = useCallback(() => {
         if (items.length === 0 || !serverId) return;
@@ -119,7 +124,7 @@ export const DeleteSongAction = ({ disabled, items }: DeleteSongActionProps) => 
         });
     }, [items, serverId, t]);
 
-    if (items.length === 0) return null;
+    if (items.length === 0 || isDemo) return null;
 
     return (
         <ContextMenu.Item disabled={disabled} leftIcon="remove" onSelect={openDeleteSongModal}>
