@@ -1,0 +1,69 @@
+Subbox
+Copyright (C) 2024-2026 Luke Purnell
+
+This product is a derivative work of Feishin, a self-hosted music player.
+
+    Feishin
+    Copyright (C) 2022-2024 jeffvli and the Feishin contributors
+    https://github.com/jeffvli/feishin
+    Licensed under the GNU General Public License v3.0
+
+Feishin is itself a rewrite of Sonixd (https://github.com/jeffvli/sonixd),
+also by jeffvli and also licensed under the GPL-3.0.
+
+Subbox is licensed under the GNU General Public License v3.0. The full license
+text is in the LICENSE file distributed with this program.
+
+
+MODIFICATIONS
+-------------
+
+In accordance with section 5(a) of the GNU General Public License v3.0, this
+file records that Subbox is a modified version of Feishin, and the nature and
+dates of those modifications.
+
+Modified by Luke Purnell, from 2024 onwards. The principal changes are:
+
+  * Renamed the application from "Feishin" to "Subbox", with new branding,
+    icons, and landing page.
+
+  * Added integration with the pymix API — a separate backend service, not
+    part of this program — for converting music libraries and playlists
+    between DJ software (Rekordbox, Serato) and Subsonic/Navidrome.
+
+  * Added the Sync feature area: library upload, watch-directory uploading,
+    playlist download, and Rekordbox/Serato import and export.
+
+  * Added a wishlist feature (item management, link parsing, and reconciliation
+    against the user's library).
+
+  * Added track and playlist sharing surfaces.
+
+  * Added a file-browser integration and per-user container awareness for
+    Subbox's hosted deployment model.
+
+  * Added a demo-account mode that restricts write operations in the UI.
+
+  * Numerous consequential changes to routing, state stores, settings, and
+    build configuration to support the above.
+
+The complete, authoritative record of every modification is the git history of
+the Subbox repository:
+
+    https://github.com/laker-93/subbox-app
+
+Unmodified upstream Feishin code retains the copyright of its original authors.
+
+
+TRADEMARKS
+----------
+
+"Subbox" and the Subbox logo are trademarks of Luke Purnell and are not
+licensed under the GPL-3.0. The GNU General Public License grants rights to the
+source code; it does not grant rights to trade marks, names, or branding. If
+you distribute a modified version of this program, you must remove the Subbox
+name and logo and distribute it under a different name.
+
+"Feishin" and "Sonixd" are the names of the upstream projects. Subbox is not
+affiliated with, endorsed by, or supported by the Feishin project or its
+maintainers. Please do not report Subbox issues to them.
