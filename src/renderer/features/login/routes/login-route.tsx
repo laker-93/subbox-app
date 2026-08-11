@@ -15,6 +15,7 @@ import NavidromeIcon from '/@/renderer/features/servers/assets/navidrome.png';
 import SubsonicIcon from '/@/renderer/features/servers/assets/opensubsonic.png';
 import { IgnoreCorsSslSwitches } from '/@/renderer/features/servers/components/ignore-cors-ssl-switches';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
+import { LegalFooterLinks } from '/@/renderer/features/shared/components/legal-footer-links';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
@@ -280,6 +281,8 @@ const LoginRoute = () => {
                                     postProcess: 'titleCase',
                                 })}
                             </Button>
+
+                            <LegalFooterLinks />
                         </Stack>
                     </form>
                 </Paper>

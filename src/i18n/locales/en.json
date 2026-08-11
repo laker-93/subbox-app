@@ -64,6 +64,9 @@
     },
     "common": {
         "countSelected": "{{count}} selected",
+        "privacyNotice": "privacy notice",
+        "reportContent": "report content",
+        "termsOfService": "terms of service",
         "explicitStatus": "explicit status",
         "action_one": "action",
         "action_other": "actions",
@@ -708,6 +711,8 @@
             "advanced": "advanced",
             "analytics": "analytics",
             "generalTab": "general",
+            "legal": "legal",
+            "legalDescription": "The terms you use Subbox under, what we do with your data, and how to report unlawful content. These open in your browser.",
             "licence": "licence",
             "licenceDescription": "Subbox is free software. You may redistribute it and modify it under the terms of the GNU General Public License, version 3, as published by the Free Software Foundation. It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY — without even the implied warranty of merchantability or fitness for a particular purpose.",
             "licenceLinkFullText": "Full licence text (GNU GPL v3.0)",
