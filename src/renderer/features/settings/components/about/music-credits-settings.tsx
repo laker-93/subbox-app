@@ -11,6 +11,11 @@ import { Text } from '/@/shared/components/text/text';
  * The demo library is Creative Commons licensed. CC BY, BY-SA and BY-ND all
  * require attribution wherever the work is made available, so this list is a
  * licence obligation rather than a courtesy — see scripts/build-credits.mjs.
+ *
+ * The modification notice below is part of that obligation, not a footnote:
+ * part of the library is BY-ND, and every file carries an added `subbox_id`
+ * metadata tag, so the page states plainly that the audio is untouched and only
+ * metadata is written. Do not drop it when editing this component.
  */
 const COLLAPSED_COUNT = 8;
 
@@ -33,6 +38,9 @@ export const MusicCreditsSettings = () => {
                 </Text>
                 <Text isMuted size="sm">
                     {t('page.setting.musicCreditsDescription')}
+                </Text>
+                <Text isMuted size="sm">
+                    {t('page.setting.musicCreditsModificationNotice')}
                 </Text>
             </Stack>
 
