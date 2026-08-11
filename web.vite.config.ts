@@ -4,6 +4,8 @@ import { defineConfig, normalizePath } from 'vite';
 import { ViteEjsPlugin } from 'vite-plugin-ejs';
 import { VitePWA } from 'vite-plugin-pwa';
 
+import { licenceFiles } from './scripts/vite-plugin-licence-files';
+
 export default defineConfig({
     base: './',
     build: {
@@ -59,6 +61,7 @@ export default defineConfig({
     },
     plugins: [
         react(),
+        licenceFiles(__dirname),
         ViteEjsPlugin({
             root: normalizePath(path.resolve(__dirname, './src/renderer')),
             web: true,
