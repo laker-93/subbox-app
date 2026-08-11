@@ -4,6 +4,7 @@ import { defineConfig, normalizePath } from 'vite';
 import { ViteEjsPlugin } from 'vite-plugin-ejs';
 
 import { version } from './package.json';
+import { licenceFiles } from './scripts/vite-plugin-licence-files';
 
 export default defineConfig({
     build: {
@@ -36,6 +37,7 @@ export default defineConfig({
     },
     plugins: [
         react(),
+        licenceFiles(__dirname),
         ViteEjsPlugin({
             prod: process.env.NODE_ENV === 'production',
             root: normalizePath(path.resolve(__dirname, './src/remote')),

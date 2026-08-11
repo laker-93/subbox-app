@@ -31,6 +31,14 @@ RUN if [ "$BUILD_MODE" = "production" ]; then \
 FROM nginxinc/nginx-unprivileged:alpine-slim
 
 COPY --chown=nginx:nginx --from=builder /app/out/web /usr/share/nginx/html
+
+# Serving the bundle to a browser conveys the program under the GPL-3.0, so the
+# licence text and the §5(a) modification record have to be served with it. The
+# web build emits both into out/web already (scripts/vite-plugin-licence-files.ts);
+# copying them again here keeps the published image correct even if that build
+# step is ever changed or dropped.
+COPY --chown=nginx:nginx LICENSE NOTICE /usr/share/nginx/html/
+
 COPY --chown=nginx:nginx ./settings.js.template /etc/nginx/templates/settings.js.template
 COPY --chown=nginx:nginx ng.conf.template /etc/nginx/templates/default.conf.template
 
