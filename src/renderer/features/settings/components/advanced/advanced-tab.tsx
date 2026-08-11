@@ -1,7 +1,6 @@
 import { memo } from 'react';
 import { Fragment } from 'react/jsx-runtime';
 
-import { AnalyticsSettings } from '/@/renderer/features/settings/components/advanced/analytics-settings';
 import { ExportImportSettings } from '/@/renderer/features/settings/components/advanced/export-import-settings';
 import { LoggerSettings } from '/@/renderer/features/settings/components/advanced/logger-settings';
 import { CacheSettings } from '/@/renderer/features/settings/components/window/cache-settngs';
@@ -9,9 +8,10 @@ import { UpdateSettings } from '/@/renderer/features/settings/components/window/
 import { Divider } from '/@/shared/components/divider/divider';
 import { Stack } from '/@/shared/components/stack/stack';
 
+// No analytics section: Subbox sends no usage analytics at all (see the comment in
+// src/renderer/index.html), so upstream's opt-out toggle would control nothing.
 const sections = [
     { component: UpdateSettings, key: 'update' },
-    { component: AnalyticsSettings, key: 'analytics' },
     { component: ExportImportSettings, key: 'export-import' },
     { component: LoggerSettings, key: 'logger' },
     { component: CacheSettings, key: 'cache' },
