@@ -62,20 +62,18 @@ Mailboxes that must exist and be monitored before publishing: `abuse@sub-box.net
 address is worse than none — under reg 19 the clock for acting starts when the report
 arrives, read or not.
 
-Two engineering problems the drafting exposed, both flagged inline in the privacy
-notice, both of which should be fixed rather than disclosed:
+Two engineering problems the drafting exposed, both of which should be fixed rather
+than disclosed:
 
 - **Account passwords are stored in a readable form.** `pymix`'s
   `db_controller.create_session` compares `user['password'] == password` against the
   stored column. The platform re-authenticates to each user's Navidrome on their behalf,
   which is why it is like this, but the privacy notice cannot claim passwords are hashed
-  while they are not.
-- **The app loads third-party analytics.** `src/renderer/index.html` injects
-  `https://umami.jeffvli.org/script.js` — upstream Feishin's own Umami instance, with
-  upstream's website ID. It is gated only on `localStorage['umami.disabled']`, so the
-  `ANALYTICS_DISABLED` env var suppresses the *events* but not the script fetch, and the
-  fetch alone discloses each user's IP and user-agent to a third party we have no
-  processor agreement with.
+  while they are not. Still open, and flagged inline in the notice.
+- **The app loaded third-party analytics** — `src/renderer/index.html` injected upstream
+  Feishin's own Umami instance, disclosing each user's IP and user-agent to a third
+  party. **Fixed** (laker-93/subbox-app#99); the privacy notice now states plainly that
+  there is no product analytics, which is only true while that stays fixed.
 
 ## Editing them
 
