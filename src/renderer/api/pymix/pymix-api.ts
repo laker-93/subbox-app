@@ -49,6 +49,10 @@ export const contract = c.router({
     download: {
         method: 'GET',
         path: 'sync/download/:filename',
+        // `cache_bust` is a client-side concern, not a server one — see the note on
+        // downloadParameters: the url is identical for every user and every export, so
+        // a cache in front of pymix can serve a stale (or foreign) file.
+        query: pymixType._parameters.download,
         responses: {
             200: resultWithHeaders(pymixType._response.download),
             500: resultWithHeaders(pymixType._response.error),

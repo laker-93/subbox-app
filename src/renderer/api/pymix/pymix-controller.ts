@@ -210,6 +210,12 @@ export const PymixController = {
         const { baseUrl, filename, responseType, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, responseType, signal, token }).download({
             params: { filename },
+            // Unique per call: /sync/download/music.zip is the same url for every user
+            // and every export, so a CDN in front of pymix can answer with a stale — or
+            // another session's — file (laker-93/pymix#119, where Cloudflare cached it
+            // for 4h in prod and re-downloading with different options silently returned
+            // the first zip).
+            query: { cache_bust: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` },
         });
 
         if (res.status !== 200) {

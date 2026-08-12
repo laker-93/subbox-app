@@ -229,6 +229,15 @@ const isValidTokenParameters = z.object({
     token: z.string(),
 });
 
+// Not a server parameter — pymix ignores it. Every user's download is the same url
+// (/sync/download/music.zip), so a CDN in front of pymix will happily hand back a
+// stale, or another session's, file: Cloudflare was caching it for 4h in prod
+// (laker-93/pymix#119). A value that changes per request keeps this client correct
+// whatever sits in front of, or ships in, the server.
+const downloadParameters = z.object({
+    cache_bust: z.string(),
+});
+
 /**
  * Beta-invite capture. The one pymix write that carries no session — the caller is a
  * prospective user with no account. `dj_software_other` is only meaningful alongside
@@ -436,6 +445,7 @@ export const pymixType = {
         create: createParameters,
         deleteDuplicates: deleteParameters,
         deleteSong: deleteSongParameters,
+        download: downloadParameters,
         exportJob: rbExportParameters,
         import: importParameters,
         importProgress: importProgressParameters,

@@ -869,15 +869,16 @@ export const SyncDownload = () => {
                     position="top-start"
                     w={300}
                 >
-                    <Group
-                        gap="md"
-                        onClick={() => setIncludeTracks((v) => !v)}
-                        style={{ cursor: 'pointer', width: 'fit-content' }}
-                    >
+                    {/* The Checkbox owns its own change. A readOnly box inside a
+                        clickable wrapper looks equivalent but isn't: clicking the label
+                        text fired the wrapper's handler twice — once for the label, once
+                        for the click a label forwards to its input — so the tick never
+                        moved for anyone who aimed at the words. */}
+                    <Group gap="md" style={{ width: 'fit-content' }}>
                         <Checkbox
                             checked={includeTracks}
                             label="Include tracks"
-                            readOnly
+                            onChange={(event) => setIncludeTracks(event.currentTarget.checked)}
                             size="sm"
                         />
                     </Group>
@@ -892,15 +893,13 @@ export const SyncDownload = () => {
                     position="top-start"
                     w={300}
                 >
-                    <Group
-                        gap="md"
-                        onClick={() => setIncludeRekordboxXml((v) => !v)}
-                        style={{ cursor: 'pointer', width: 'fit-content' }}
-                    >
+                    <Group gap="md" style={{ width: 'fit-content' }}>
                         <Checkbox
                             checked={includeRekordboxXml}
                             label="Include Rekordbox XML"
-                            readOnly
+                            onChange={(event) =>
+                                setIncludeRekordboxXml(event.currentTarget.checked)
+                            }
                             size="sm"
                         />
                     </Group>
