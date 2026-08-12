@@ -13,8 +13,10 @@ import {
     setRememberedLogin,
     setRememberPreference,
 } from '/@/renderer/features/pymix/utils/pymix-login';
+import { LegalFooterLinks } from '/@/renderer/features/shared/components/legal-footer-links';
 import { useAuthStoreActions } from '/@/renderer/store';
 import { credentialStore } from '/@/renderer/utils/credential-store';
+import { Box } from '/@/shared/components/box/box';
 import { Button } from '/@/shared/components/button/button';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Modal, ModalProps } from '/@/shared/components/modal/modal';
@@ -86,6 +88,15 @@ export const PymixAuthModal = ({
                     onSuccess={onSuccess}
                     status={createStatus}
                 />
+            )}
+            {/* Mounted once at the modal level rather than per view: the terms have to be
+                readable from the account-creation step in particular, and this way a new
+                view can't be added without them. Hidden while a create is in flight, when
+                navigating away would abandon a half-provisioned account. */}
+            {!isBlocked && (
+                <Box pb="md" px="md">
+                    <LegalFooterLinks />
+                </Box>
             )}
         </Modal>
     );

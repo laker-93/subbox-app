@@ -1,28 +1,15 @@
-import { useTranslation } from 'react-i18next';
-
+import { useLegalLinks } from '/@/renderer/features/shared/hooks/use-legal-links';
 import { Group } from '/@/shared/components/group/group';
 import { Text } from '/@/shared/components/text/text';
-import { LegalLinks } from '/@/shared/constants/legal-links';
 
 /**
  * The terms, privacy notice and reporting route have to be reachable before a user
  * has an account — that is most of the point of publishing them — so they are linked
- * from the login screen as well as from Settings → About.
+ * from the auth modal as well as from Settings → About. The landing page renders the
+ * same list through its own link styling rather than mounting this component.
  */
 export const LegalFooterLinks = () => {
-    const { t } = useTranslation();
-
-    const links = [
-        { href: LegalLinks.terms, label: t('common.termsOfService', { postProcess: 'titleCase' }) },
-        {
-            href: LegalLinks.privacy,
-            label: t('common.privacyNotice', { postProcess: 'titleCase' }),
-        },
-        {
-            href: LegalLinks.noticeAndAction,
-            label: t('common.reportContent', { postProcess: 'titleCase' }),
-        },
-    ];
+    const links = useLegalLinks();
 
     return (
         <Group gap="md" justify="center">

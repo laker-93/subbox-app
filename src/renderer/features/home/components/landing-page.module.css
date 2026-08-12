@@ -139,6 +139,22 @@
     font-size: 0.85rem;
 }
 
+/* Smaller and dimmer than the account links above: these have to be present and
+   findable, but they are not something we are asking a visitor to click. */
+.fs-landing-page-legal-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+}
+
+.fs-landing-page-legal-links .fs-landing-page-link {
+    color: var(--theme-colors-text-secondary);
+}
+
 /* Text links, not buttons: these are the actions we deliberately do not want
    competing with "Try the demo" for attention. */
 .fs-landing-page-link {

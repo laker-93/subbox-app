@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next';
 
+import { useLegalLinks } from '/@/renderer/features/shared/hooks/use-legal-links';
 import { Group } from '/@/shared/components/group/group';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
-import { LegalLinks } from '/@/shared/constants/legal-links';
 
 /**
  * Links out to the hosted legal pages (static HTML in src/renderer/public/legal/).
@@ -13,18 +13,7 @@ import { LegalLinks } from '/@/shared/constants/legal-links';
  */
 export const LegalSettings = () => {
     const { t } = useTranslation();
-
-    const links = [
-        { href: LegalLinks.terms, label: t('common.termsOfService', { postProcess: 'titleCase' }) },
-        {
-            href: LegalLinks.privacy,
-            label: t('common.privacyNotice', { postProcess: 'titleCase' }),
-        },
-        {
-            href: LegalLinks.noticeAndAction,
-            label: t('common.reportContent', { postProcess: 'titleCase' }),
-        },
-    ];
+    const links = useLegalLinks();
 
     return (
         <Stack gap="md">
