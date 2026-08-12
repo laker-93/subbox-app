@@ -29,33 +29,106 @@ does this; use it rather than hardcoding URLs.
 Linked from the login screen (`features/shared/components/legal-footer-links.tsx`) and
 Settings → About (`features/settings/components/about/legal-settings.tsx`).
 
-## They are drafts. Do not deploy them as they are.
+## The release gate
 
-Every unresolved fact is marked up as `.pending` (a highlighted inline span) or
-`.pending-block` (a highlighted paragraph). They are styled loudly so that a page that
-is not ready cannot be mistaken for one that is.
+Unresolved facts are marked up as `.pending` (a highlighted inline span) or
+`.pending-block` (a highlighted paragraph), styled loudly so that a page which is not
+ready cannot be mistaken for one that is.
 
-**The release gate: no `pending` class may remain in `src/renderer/public/legal/` when
-these pages ship to production.** To check:
+**No `pending` class may remain in `src/renderer/public/legal/` when these pages ship to
+production.** To check:
 
 ```sh
 grep -rn 'class="pending' src/renderer/public/legal/ && echo "NOT READY"
 ```
 
-### What has to be settled
+**As of 2026-08-12 this gate is clean.** The `.pending` CSS is deliberately kept in
+`legal.css` for the next round of drafting.
 
-Facts to fill in:
+### What was settled, and what was consciously dropped
 
-- Operator legal/trading name and geographic postal address (required in its own right
-  under the e-Commerce Regulations, reg 6).
-- Effective date for each of the three documents.
-- ICO data protection fee registration number.
-- DigitalOcean droplet region and Grafana Cloud region, then the international transfer
-  mechanism that follows from them.
-- Retention periods: account deletion, backup cycle, server logs, service metrics.
-- Liability cap figure for business users.
-- EU Article 27 representative (likely required, as the beta targets EU users).
-- DMCA designated agent, registered at dmca.copyright.gov (the beta targets US users).
+Settled on 2026-08-11, and now filled in on the pages:
+
+- **Operator: Luke Purnell, 2 Digby Crescent, London N4 2HR, United Kingdom** — a sole
+  trader, not an incorporated company. Published under the e-Commerce Regulations, reg 6,
+  which wants a geographic address rather than a PO box.
+- **Effective date: 11 August 2026** on all three documents.
+- **DigitalOcean region: London (LON1)** — UK, so hosting itself is not a transfer.
+- **Cloudflare, Inc. fronts the site** (nameservers `dawn`/`aaron.ns.cloudflare.com`,
+  `server: cloudflare` on responses). It terminates TLS, so it processes every visitor's
+  IP and request metadata — a named processor and a US transfer that applies from the
+  first anonymous visitor, before any account exists.
+- **Google LLC (Gmail)** receives email correspondence. Also a US transfer.
+- **Server log and service-metric retention: 14 days** each.
+- **Contact address: `luke.a.purnell@gmail.com`, everywhere.** The pages previously
+  referenced four `@sub-box.net` mailboxes (`abuse`, `privacy`, `legal`, `hello`); none
+  of them exist, so every one was replaced with the personal address rather than
+  published as a route that bounces. If those mailboxes are ever created — Cloudflare
+  Email Routing is free and the DNS is already there — swap them back, because a
+  role address is what a rightsholder or regulator expects to write to.
+
+Settled on 2026-08-12:
+
+- **Grafana Cloud region: United Kingdom.** Derived from DNS, without touching the
+  droplet: `kindtaco3368.grafana.net` CNAMEs to `hg-gateway-cf-prod-gb-south-1`, and
+  `gb-south-1` is Grafana's UK region. Worth confirming once in the Grafana console.
+- **Transfers (§5) rewritten around that.** Hosting and metrics are both UK, so the only
+  outbound transfers are Cloudflare (traffic routing, IDTA/UK Addendum, which is part of
+  Cloudflare's DPA) and Google (the mailbox). Much narrower than the draft assumed.
+- **Liability cap: the greater of £100 or twelve months' fees.** A conventional
+  formulation, not advice, and it applies to business users only.
+
+### Dropped from the pages on 2026-08-12 — still owed
+
+These were removed so the PR could merge, on the instruction not to block it
+unnecessarily. **Removing the warning did not discharge the obligation.** Each one is
+now tracked only here:
+
+- **No qualified adviser has read these pages.** All three "draft pending review" blocks
+  are gone. That was a deliberate call to ship rather than wait, not a review.
+- **Account passwords are still stored in readable form** — `pymix`'s
+  `db_controller.create_session` compares `user['password'] == password` against the
+  stored column. The notice no longer flags this. It does not *claim* passwords are
+  hashed, so nothing published is false, but the disclosure is now silent on a fact a
+  regulator would expect to find. Fix the storage before the beta opens accounts.
+- **No EU Article 27 representative is named.** If the Service is marketed to people in
+  the EU, one is likely required and must be published in §1.
+- **No DMCA designated agent is registered** at dmca.copyright.gov. DMCA notices now go
+  to the general address, which is honest — but without a registered agent there is no
+  section 512(c) safe harbour. This matters once users upload their own music; it does
+  not matter for a demo serving only our own CC library.
+- **The account-deletion window and backup cycle are stated as criteria, not periods.**
+  §6 now says data is deleted on closure and backups "as those backups are rotated out",
+  which is permitted by Article 13(2)(a) and avoids asserting a backup schedule that may
+  not exist. Replace with real periods once they do.
+- **The four `@sub-box.net` role mailboxes still do not exist.** Everything points at
+  `luke.a.purnell@gmail.com`. Cloudflare Email Routing is free and the DNS is already
+  there; a role address is what a rightsholder or regulator expects to write to.
+
+### The ICO fee: no number on the page, but the fee is probably now owed
+
+These are two separate things, and conflating them is the trap.
+
+**The page.** The privacy notice originally claimed an ICO registration number. It no
+longer does, and it should not — UK GDPR does not require one in a privacy notice.
+Article 13 asks for the controller's identity and contact details, which are now filled
+in. Nothing is blocked on this.
+
+**The fee.** The [self-assessment](https://ico.org.uk/for-organisations/data-protection-fee/data-protection-fee-self-assessment/)
+returned "you don't need to pay a fee yet" on 2026-08-11, on the ground that *companies
+that have not started trading* are exempt. **That answer was superseded the same day**,
+when the operator was settled as a sole trader rather than a company. The exemption is
+company-specific; a sole trader processing personal data — which includes server logs
+carrying visitor IPs, with no sign-ups required — has no equivalent exemption. Expect
+Tier 1: £40 by direct debit, £52 otherwise.
+
+Registering is not a release gate for the pages, because no number needs to appear on
+them. It is an operator obligation to discharge separately, and it should be done around
+the time the demo is publicised, since that is when the log volume starts.
+
+Unchanged either way: **none of this is an exemption from UK GDPR itself.** Lawful basis,
+the rights in section 8, breach reporting and the retention periods still marked
+`pending` apply in full, fee or no fee.
 
 Mailboxes that must exist and be monitored before publishing: `abuse@sub-box.net`,
 `privacy@sub-box.net`, `legal@sub-box.net`, `hello@sub-box.net`. An unmonitored abuse
