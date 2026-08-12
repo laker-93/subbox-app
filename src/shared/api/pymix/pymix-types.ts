@@ -8,10 +8,17 @@ const sync = z.null();
 const download = z.any();
 
 const syncPlaylists = z.object({
+    // The one file to fetch from /sync/download — either the tracks zip (with the
+    // Rekordbox XML inside it, when asked for) or the XML on its own. Optional
+    // because a pymix that predates it doesn't send it; callers fall back to
+    // deriving the name from zipPath.
+    downloadFilename: z.string().nullish(),
     nTracksExported: z.number(),
     reason: z.string(),
     success: z.boolean(),
-    zipPath: z.string(),
+    xmlIncluded: z.boolean().nullish(),
+    // Null for a metadata-only export: there is no zip in that case.
+    zipPath: z.string().nullish(),
 });
 
 const matchTracks = z.object({
@@ -222,6 +229,15 @@ const isValidTokenParameters = z.object({
     token: z.string(),
 });
 
+// Not a server parameter — pymix ignores it. Every user's download is the same url
+// (/sync/download/music.zip), so a CDN in front of pymix will happily hand back a
+// stale, or another session's, file: Cloudflare was caching it for 4h in prod
+// (laker-93/pymix#119). A value that changes per request keeps this client correct
+// whatever sits in front of, or ships in, the server.
+const downloadParameters = z.object({
+    cache_bust: z.string(),
+});
+
 /**
  * Beta-invite capture. The one pymix write that carries no session — the caller is a
  * prospective user with no account. `dj_software_other` is only meaningful alongside
@@ -264,7 +280,18 @@ const syncPlanParameters = z.object({
     playlists: z.array(syncPlanPlaylist).nullable(),
 });
 
-const syncPlaylistsParameters = syncPlanParameters;
+// What to put in the single file pymix prepares. The client always asks for one
+// download: a browser only reliably saves one file per user gesture, so a second
+// programmatic download is dropped with no error at all.
+const syncPlaylistsParameters = syncPlanParameters.extend({
+    // Include subbox_rb_export.xml — in the zip alongside the tracks, or as the
+    // whole download when includeTracks is false.
+    includeRekordboxXml: z.boolean().optional(),
+    // False for a metadata-only (XML) download.
+    includeTracks: z.boolean().optional(),
+    // Where the user will keep the tracks, so the XML's Locations resolve.
+    user_root: z.string().optional(),
+});
 
 const syncTracksParameters = z.object({
     tracksToDownload: z.array(track),
@@ -418,6 +445,7 @@ export const pymixType = {
         create: createParameters,
         deleteDuplicates: deleteParameters,
         deleteSong: deleteSongParameters,
+        download: downloadParameters,
         exportJob: rbExportParameters,
         import: importParameters,
         importProgress: importProgressParameters,

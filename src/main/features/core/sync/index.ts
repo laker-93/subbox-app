@@ -22,6 +22,9 @@ import {
 } from '/@/main/features/core/sync/rekordbox-xml';
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
+/** What pymix calls the Rekordbox XML it writes, in the zip and on its own. */
+const XML_FILENAME = 'subbox_rb_export.xml';
+
 /** Lightweight playlist info sent to renderer for preview (no file paths). */
 export interface PlaylistPreview {
     name: string;
@@ -1128,7 +1131,22 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
     return tracks;
 }
 
-async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promise<void> {
+/**
+ * Extract a zip into targetDirPath, merging with what's already there.
+ *
+ * `extractTo` re-routes named entries to an absolute destination of their own,
+ * overwriting whatever is there. That's for the Rekordbox XML, which pymix now
+ * ships inside the tracks zip (one download instead of two — a browser silently
+ * drops the second, see pymix#118) but which belongs in the user's chosen XML
+ * folder, not the music tree. It also has to overwrite: the merge below skips
+ * files that already exist, which is right for audio and wrong for an XML that
+ * describes this export.
+ */
+async function unzipAndMerge(
+    zipFilePath: string,
+    targetDirPath: string,
+    extractTo: Record<string, string> = {},
+): Promise<void> {
     const newFilePaths: string[] = [];
     return new Promise<void>((resolve, reject) => {
         fs.createReadStream(zipFilePath)
@@ -1143,6 +1161,18 @@ async function unzipAndMerge(zipFilePath: string, targetDirPath: string): Promis
                         fs.mkdirSync(dir, { recursive: true });
                     }
                     entry.autodrain();
+                    return;
+                }
+
+                const redirectedPath = extractTo[entryPath];
+                if (redirectedPath) {
+                    const redirectedDir = path.dirname(redirectedPath);
+                    if (!fs.existsSync(redirectedDir)) {
+                        fs.mkdirSync(redirectedDir, { recursive: true });
+                    }
+                    // Not pushed to newFilePaths: it isn't audio, so there's no
+                    // SUBBOX_ID to cache off it.
+                    entry.pipe(fs.createWriteStream(redirectedPath));
                     return;
                 }
 
@@ -1180,6 +1210,7 @@ ipcMain.handle(
             filebrowserToken: string;
             filebrowserUrl: string;
             includeRekordboxXml?: boolean;
+            includeTracks?: boolean;
             playlistIds: string[];
             pymixUrl: string;
             rekordboxXmlDir?: string;
@@ -1191,6 +1222,7 @@ ipcMain.handle(
             filebrowserToken,
             filebrowserUrl,
             includeRekordboxXml,
+            includeTracks = true,
             playlistIds,
             pymixUrl,
             rekordboxXmlDir,
@@ -1223,23 +1255,43 @@ ipcMain.handle(
             // Scan local music directory for existing tracks
             const localTracks = await scanLocalTracks();
 
-            // Step 1: Call syncPlaylists to prepare the zip on the server
+            const appPath = getAppPath();
+            if (!fs.existsSync(appPath)) {
+                fs.mkdirSync(appPath, { recursive: true });
+            }
+            // The XML goes where the user asked for it, defaulting alongside the
+            // tracks. Resolved up front: both branches below write it.
+            const xmlDir =
+                rekordboxXmlDir && rekordboxXmlDir.length > 0 ? rekordboxXmlDir : appPath;
+            const xmlDestPath = path.join(xmlDir, XML_FILENAME);
+            const ensureXmlDir = () => {
+                if (!fs.existsSync(xmlDir)) fs.mkdirSync(xmlDir, { recursive: true });
+            };
+
+            // Step 1: have pymix prepare the one file this download is — the tracks
+            // zip, that zip with the Rekordbox XML inside it, or (includeTracks
+            // false) the XML on its own.
             const syncResponse = await withPymixAuth<{
+                downloadFilename?: null | string;
                 nTracksExported: number;
                 reason: string;
                 success: boolean;
-                zipPath: string;
+                xmlIncluded?: boolean;
+                zipPath?: null | string;
             }>(pymixAuth, (cookie) =>
                 axios.post(
                     `${pymixUrl}/sync/playlists`,
                     {
                         direction: 'download',
+                        includeRekordboxXml: Boolean(includeRekordboxXml),
+                        includeTracks,
                         localTracks,
                         options: {
                             fuzzyMatch: true,
                             includeMetadata: true,
                         },
                         playlists: playlistIds.map((id) => ({ id, source: 'subbox' })),
+                        user_root: getMusicPath(),
                     },
                     { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
                 ),
@@ -1249,20 +1301,44 @@ ipcMain.handle(
                 throw new Error(`Sync failed: ${syncResponse.data.reason}`);
             }
 
-            const { nTracksExported, zipPath } = syncResponse.data;
-            const zipFileName = `${path.basename(zipPath)}.zip`;
+            const { downloadFilename, nTracksExported, xmlIncluded, zipPath } = syncResponse.data;
 
-            // Step 2: Download the zip from filebrowser
-            const appPath = getAppPath();
-            if (!fs.existsSync(appPath)) {
-                fs.mkdirSync(appPath, { recursive: true });
+            if (!includeTracks) {
+                // Metadata-only: the XML *is* the download.
+                if (!xmlIncluded || !downloadFilename) {
+                    throw new Error(
+                        'This server does not support downloading the Rekordbox XML on its own yet.',
+                    );
+                }
+                ensureXmlDir();
+                await downloadFileFromFilebrowser(
+                    filebrowserUrl,
+                    fbAuth,
+                    downloadFilename,
+                    xmlDestPath,
+                );
+                return { musicPath: getMusicPath(), tracksExported: 0, xmlPath: xmlDestPath };
             }
+
+            // Step 2: Download the zip from filebrowser. pymix names the file it
+            // wrote; older ones only return zipPath, which omits the .zip suffix.
+            const zipFileName = downloadFilename ?? `${path.basename(zipPath ?? '')}.zip`;
             const localZipPath = path.join(appPath, zipFileName);
             await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
 
-            // Step 3: Unzip and merge into app directory (zip contains music/ prefix).
+            // Step 3: Unzip and merge into app directory (zip contains music/ prefix),
+            // lifting the Rekordbox XML out of it into the user's XML folder.
             // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
-            await unzipAndMerge(localZipPath, appPath);
+            let xmlPath: string | undefined;
+            if (xmlIncluded) {
+                ensureXmlDir();
+                xmlPath = xmlDestPath;
+            }
+            await unzipAndMerge(
+                localZipPath,
+                appPath,
+                xmlIncluded ? { [XML_FILENAME]: xmlDestPath } : {},
+            );
 
             // Clean up the zip
             try {
@@ -1271,33 +1347,24 @@ ipcMain.handle(
                 // ignore cleanup errors
             }
 
-            // Step 4: Optionally export and download Rekordbox XML
-            let xmlPath: string | undefined;
-            if (includeRekordboxXml) {
-                const musicPath = getMusicPath();
-
-                // Call pymix to prepare the Rekordbox XML on the server
+            if (includeRekordboxXml && !xmlIncluded) {
+                // The server predates the XML-in-the-zip change, so fall back to
+                // asking for it separately. Only safe here because this is the
+                // desktop app: the browser is the side that drops a second
+                // download. Removable once every deployed pymix has pymix#118.
                 console.log('[Subbox] Exporting Rekordbox XML with playlistIds:', playlistIds);
                 await withPymixAuth(pymixAuth, (cookie) =>
                     axios.post(
                         `${pymixUrl}/rekordbox/export`,
-                        { playlistIds, user_root: musicPath },
+                        { playlistIds, user_root: getMusicPath() },
                         { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
                     ),
                 );
-
-                // Download the XML from filebrowser into the user-configured directory,
-                // falling back to the app directory when none has been set.
-                const xmlDir =
-                    rekordboxXmlDir && rekordboxXmlDir.length > 0 ? rekordboxXmlDir : appPath;
-                if (!fs.existsSync(xmlDir)) {
-                    fs.mkdirSync(xmlDir, { recursive: true });
-                }
-                const xmlDestPath = path.join(xmlDir, 'subbox_rb_export.xml');
+                ensureXmlDir();
                 await downloadFileFromFilebrowser(
                     filebrowserUrl,
                     fbAuth,
-                    'subbox_rb_export.xml',
+                    XML_FILENAME,
                     xmlDestPath,
                 );
                 xmlPath = xmlDestPath;
@@ -2175,13 +2242,8 @@ ipcMain.handle(
             if (!fs.existsSync(xmlDir)) {
                 fs.mkdirSync(xmlDir, { recursive: true });
             }
-            const xmlDestPath = path.join(xmlDir, 'subbox_rb_export.xml');
-            await downloadFileFromFilebrowser(
-                filebrowserUrl,
-                fbAuth,
-                'subbox_rb_export.xml',
-                xmlDestPath,
-            );
+            const xmlDestPath = path.join(xmlDir, XML_FILENAME);
+            await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, XML_FILENAME, xmlDestPath);
             xmlPath = xmlDestPath;
         }
 
