@@ -70,6 +70,21 @@ const downloadFileFromPymix = async (pymixBaseUrl: string, filename: string): Pr
     URL.revokeObjectURL(objectUrl);
 };
 
+/**
+ * The name of the single file to fetch from pymix.
+ *
+ * pymix says which file it prepared; the zipPath fallback is for a server that
+ * predates it, whose zipPath omits the .zip the file on disk actually has.
+ */
+const resolveDownloadFilename = (
+    downloadFilename: null | string | undefined,
+    zipPath: null | string | undefined,
+): string => {
+    if (downloadFilename) return downloadFilename;
+    if (zipPath) return `${zipPath.split('/').pop()}.zip`;
+    throw new Error('Sync did not return a file to download');
+};
+
 const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -110,6 +125,9 @@ export const SyncDownload = () => {
         xmlPath?: string;
     }>(null);
     const [includeRekordboxXml, setIncludeRekordboxXml] = useState(true);
+    // Untick to take the Rekordbox XML on its own — for playlists whose audio the
+    // user already has, where all they need is the metadata to import.
+    const [includeTracks, setIncludeTracks] = useState(true);
     const [xmlHelpOpened, xmlHelpHandlers] = useDisclosure(false);
     const [rekordboxHelpOpened, rekordboxHelpHandlers] = useDisclosure(false);
     // The folder the Rekordbox XML is saved to. `xmlDir` is the user's override
@@ -262,6 +280,8 @@ export const SyncDownload = () => {
                 console.log(
                     '[Subbox] Download (Electron) - selectedPlaylists:',
                     Array.from(selectedPlaylists),
+                    'includeTracks:',
+                    includeTracks,
                     'includeRekordboxXml:',
                     includeRekordboxXml,
                 );
@@ -269,6 +289,7 @@ export const SyncDownload = () => {
                     filebrowserToken: server.fbToken ?? '',
                     filebrowserUrl: urlConfig.filebrowser,
                     includeRekordboxXml,
+                    includeTracks,
                     playlistIds: Array.from(selectedPlaylists),
                     pymixUrl: urlConfig.pymix,
                     rekordboxXmlDir: xmlDir ?? '',
@@ -282,11 +303,17 @@ export const SyncDownload = () => {
                 );
                 setStep('done');
             } else {
-                // Web: call syncPlaylists to get zipPath, then trigger browser download
+                // Web: one file, whatever the user asked for — the tracks zip with
+                // the Rekordbox XML inside it, or the XML on its own. It has to be
+                // one: a browser only reliably saves a single download per user
+                // gesture, and the second was being dropped with no error, which is
+                // how the XML went missing from every web download (pymix#118).
                 const result = await PymixController.syncPlaylists({
                     baseUrl: urlConfig.pymix,
                     body: {
                         direction: 'download',
+                        includeRekordboxXml,
+                        includeTracks,
                         localTracks: [],
                         options: {
                             fuzzyMatch: true,
@@ -296,6 +323,7 @@ export const SyncDownload = () => {
                             id,
                             source: 'subbox',
                         })),
+                        user_root: webExtractPath.trim(),
                     },
                 });
 
@@ -303,28 +331,19 @@ export const SyncDownload = () => {
                     throw new Error(result.reason || 'Sync failed');
                 }
 
-                // pymix's zipPath omits the .zip extension (the actual file on disk
-                // is "music.zip") — the Electron main-process download path already
-                // accounts for this (path.basename(zipPath) + '.zip'); mirror it here.
-                const zipFileName = `${result.zipPath.split('/').pop()}.zip`;
-                await downloadFileFromPymix(urlConfig.pymix, zipFileName);
-
-                // Optionally export and download Rekordbox XML
-                if (includeRekordboxXml) {
-                    console.log(
-                        '[Subbox] rbDownload (web) - playlistIds:',
-                        Array.from(selectedPlaylists),
+                // A server that predates this ignores what we asked for and just
+                // zips tracks, so say so rather than handing over a zip that's
+                // missing the XML the user ticked (which is the bug this fixes).
+                if (includeRekordboxXml && !result.xmlIncluded) {
+                    throw new Error(
+                        'This server is too old to include the Rekordbox XML in the download. Update pymix, or untick Include Rekordbox XML to download the tracks alone.',
                     );
-                    await PymixController.rbDownload({
-                        baseUrl: urlConfig.pymix,
-                        body: {
-                            playlistIds: Array.from(selectedPlaylists),
-                            user_root: webExtractPath.trim(),
-                        },
-                    });
-
-                    await downloadFileFromPymix(urlConfig.pymix, 'subbox_rb_export.xml');
                 }
+
+                await downloadFileFromPymix(
+                    urlConfig.pymix,
+                    resolveDownloadFilename(result.downloadFilename, result.zipPath),
+                );
 
                 setDownloadResult({ tracksExported: result.nTracksExported });
                 setStep('done');
@@ -336,6 +355,7 @@ export const SyncDownload = () => {
         }
     }, [
         includeRekordboxXml,
+        includeTracks,
         selectedPlaylists,
         server.fbToken,
         server.username,
@@ -401,9 +421,9 @@ export const SyncDownload = () => {
                             <Stack gap="xs">
                                 <TextTitle order={5}>2. Download with the Rekordbox XML</TextTitle>
                                 <Text size="sm">
-                                    On the preview screen, make sure &quot;Include Rekordbox
-                                    XML&quot; is ticked and click Download. This saves the tracks to
-                                    your device along with a .xml file describing the playlists.
+                                    {isElectron()
+                                        ? 'On the preview screen, make sure "Include Rekordbox XML" is ticked and click Download. This saves the tracks to your music folder and the .xml describing the playlists to your chosen XML folder.'
+                                        : 'On the preview screen, make sure "Include Rekordbox XML" is ticked and click Download. You get one zip: unzip it and subbox_rb_export.xml sits next to the music folder. If you already have these tracks, untick "Include tracks" to download just the .xml.'}
                                 </Text>
                             </Stack>
                             <Stack gap="xs">
@@ -527,9 +547,11 @@ export const SyncDownload = () => {
                 <Stack align="center" gap="md">
                     <Spinner />
                     <Text c="dimmed" size="sm">
-                        {isElectron()
-                            ? 'Downloading and extracting tracks...'
-                            : 'Preparing download...'}
+                        {!includeTracks
+                            ? 'Preparing your Rekordbox XML...'
+                            : isElectron()
+                              ? 'Downloading and extracting tracks...'
+                              : 'Preparing download...'}
                     </Text>
                 </Stack>
             </Center>
@@ -543,9 +565,17 @@ export const SyncDownload = () => {
                 <Stack align="center" gap="md">
                     <TextTitle order={3}>Download Complete</TextTitle>
                     <Text c="dimmed" size="sm">
-                        {downloadResult
-                            ? `${downloadResult.tracksExported} track${downloadResult.tracksExported === 1 ? '' : 's'} exported.`
-                            : 'Download finished.'}
+                        {!includeTracks
+                            ? 'Rekordbox XML downloaded — no audio files, as requested.'
+                            : downloadResult
+                              ? `${downloadResult.tracksExported} track${downloadResult.tracksExported === 1 ? '' : 's'} exported${
+                                    includeRekordboxXml
+                                        ? isElectron()
+                                            ? ', with a Rekordbox XML saved alongside them'
+                                            : ', with subbox_rb_export.xml inside the zip'
+                                        : ''
+                                }.`
+                              : 'Download finished.'}
                     </Text>
                     {isElectron() && (downloadResult?.musicPath || downloadResult?.xmlPath) && (
                         <Group gap="sm" justify="center" wrap="wrap">
@@ -589,6 +619,18 @@ export const SyncDownload = () => {
     if (!plan) return null;
 
     const { metadata, summary, tracks } = plan;
+
+    // One button, whose wording follows what the tick boxes below put in the file.
+    const downloadButtonLabel = !includeTracks
+        ? 'Download Rekordbox XML'
+        : isElectron()
+          ? 'Download & Extract'
+          : 'Download Zip';
+    const downloadButtonTooltip = !includeTracks
+        ? 'Download just the Rekordbox XML for these playlists — no audio files.'
+        : isElectron()
+          ? 'Download the missing tracks and save them into your local music folder, ready to use (plus a Rekordbox XML if ticked above).'
+          : 'Download the selected tracks as a single zip file to this device, with a Rekordbox XML inside it if ticked above.';
 
     const tabs = [
         { count: tracks.missing.length, key: 'missing' as const, label: 'Missing' },
@@ -817,9 +859,34 @@ export const SyncDownload = () => {
                 )}
             </ScrollArea>
 
+            {/* What goes in the download. Both ticked is one file containing both —
+                these choose its contents, not how many downloads there are. */}
             <Group gap="xs" style={{ width: 'fit-content' }}>
                 <Tooltip
-                    label="Also create a Rekordbox XML alongside the tracks. Import that file into Rekordbox to recreate these playlists there — click the info icon for step-by-step instructions."
+                    label="Download the audio files themselves. Untick to take only the Rekordbox XML — useful when you already have these tracks and just want the playlists."
+                    multiline
+                    openDelay={300}
+                    position="top-start"
+                    w={300}
+                >
+                    <Group
+                        gap="md"
+                        onClick={() => setIncludeTracks((v) => !v)}
+                        style={{ cursor: 'pointer', width: 'fit-content' }}
+                    >
+                        <Checkbox
+                            checked={includeTracks}
+                            label="Include tracks"
+                            readOnly
+                            size="sm"
+                        />
+                    </Group>
+                </Tooltip>
+            </Group>
+
+            <Group gap="xs" style={{ width: 'fit-content' }}>
+                <Tooltip
+                    label="Include a Rekordbox XML with the tracks, in the same download. Import that file into Rekordbox to recreate these playlists there — click the info icon for step-by-step instructions."
                     multiline
                     openDelay={300}
                     position="top-start"
@@ -879,11 +946,19 @@ export const SyncDownload = () => {
 
             {/* Where the tracks will end up (web only) — the browser can't tell us
                 this, so the Rekordbox XML's track locations depend on the user
-                telling us where they'll extract music.zip. */}
+                telling us where the audio is (or will be). */}
             {!isElectron() && includeRekordboxXml && (
                 <TextInput
-                    description="Rekordbox needs this to find the tracks — the XML won't link them if it doesn't match where you actually unzip music.zip."
-                    label="Folder you'll extract music.zip into"
+                    description={
+                        includeTracks
+                            ? "Rekordbox needs this to find the tracks — the XML won't link them if it doesn't match where you actually unzip music.zip."
+                            : "Rekordbox needs this to find the tracks — the XML won't link them if it doesn't match where the audio actually is."
+                    }
+                    label={
+                        includeTracks
+                            ? "Folder you'll extract music.zip into"
+                            : 'Folder your tracks are in'
+                    }
                     onChange={(e) => handleWebExtractPathChange(e.currentTarget.value)}
                     placeholder="e.g. /Users/you/Music or C:\Users\you\Music"
                     value={webExtractPath}
@@ -940,7 +1015,11 @@ export const SyncDownload = () => {
 
             <Button
                 disabled={
-                    (summary.tracksMissing === 0 &&
+                    // Nothing ticked, so there'd be nothing in the download.
+                    (!includeTracks && !includeRekordboxXml) ||
+                    // Tracks asked for, but there are none to fetch and no XML either.
+                    (includeTracks &&
+                        summary.tracksMissing === 0 &&
                         metadata.updates.length === 0 &&
                         !includeRekordboxXml) ||
                     (!isElectron() && includeRekordboxXml && webExtractPath.trim().length === 0)
@@ -949,16 +1028,14 @@ export const SyncDownload = () => {
                 onClick={handleDownload}
                 size="md"
                 tooltip={{
-                    label: isElectron()
-                        ? 'Download the missing tracks and save them into your local music folder, ready to use (plus a Rekordbox XML if ticked above).'
-                        : 'Download the selected tracks as a zip file (plus a Rekordbox XML if ticked above) to this device.',
+                    label: downloadButtonTooltip,
                     multiline: true,
                     openDelay: 300,
                     w: 300,
                 }}
                 variant="filled"
             >
-                {isElectron() ? 'Download & Extract' : 'Download Zip'}
+                {downloadButtonLabel}
             </Button>
         </Stack>
     );
