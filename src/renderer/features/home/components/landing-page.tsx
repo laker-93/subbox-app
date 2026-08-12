@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { useTranslation } from 'react-i18next';
 
 // The Subbox app icon — the same artwork electron-builder ships as the desktop
@@ -9,6 +10,7 @@ import styles from './landing-page.module.css';
 import screenshot from '/@/renderer/assets/landing-library-preview.png';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { openInviteRequest } from '/@/renderer/features/invite/store/invite-request-store';
+import { useLegalLinks } from '/@/renderer/features/shared/hooks/use-legal-links';
 import { Button } from '/@/shared/components/button/button';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
@@ -28,6 +30,7 @@ export const LandingPage = ({
     onTryDemo,
 }: LandingPageProps) => {
     const { t } = useTranslation();
+    const legalLinks = useLegalLinks();
 
     return (
         <div className={styles['fs-landing-page-container']}>
@@ -164,6 +167,31 @@ export const LandingPage = ({
                                     postProcess: 'sentenceCase',
                                 })}
                             </a>
+                        </div>
+
+                        {/* This is the only screen an unauthenticated visitor actually
+                            reaches, so it is the one that has to carry the legal links —
+                            a rightsholder or regulator must be able to find the terms and
+                            the reporting route without an account. Their own row, quieter
+                            than the account links above: required, not promoted. */}
+                        <div className={styles['fs-landing-page-legal-links']}>
+                            {legalLinks.map((link, index) => (
+                                <Fragment key={link.href}>
+                                    {index > 0 && (
+                                        <span className={styles['fs-landing-page-link-separator']}>
+                                            ·
+                                        </span>
+                                    )}
+                                    <a
+                                        className={styles['fs-landing-page-link']}
+                                        href={link.href}
+                                        rel="noopener noreferrer"
+                                        target="_blank"
+                                    >
+                                        {link.label}
+                                    </a>
+                                </Fragment>
+                            ))}
                         </div>
                     </div>
                 </div>

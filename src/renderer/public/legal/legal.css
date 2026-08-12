@@ -1,0 +1,174 @@
+/*
+ * Styling for the static legal pages. These are deliberately plain HTML served
+ * straight out of the nginx image (see Dockerfile / ng.conf.template) rather
+ * than routes inside the React app, so that they stay readable without
+ * JavaScript, remain crawlable, and can be cited by a rightsholder or a
+ * regulator without an account.
+ */
+
+:root {
+    color-scheme: light dark;
+
+    --bg: #fff;
+    --fg: #1a1a1a;
+    --muted: #5c5c5c;
+    --rule: #e0e0e0;
+    --link: #1a4fd6;
+    --pending-bg: #fff4d6;
+    --pending-fg: #6b4c00;
+    --pending-border: #e0b84d;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #121212;
+        --fg: #e8e8e8;
+        --muted: #a0a0a0;
+        --rule: #2e2e2e;
+        --link: #8ab0ff;
+        --pending-bg: #3a2f10;
+        --pending-fg: #f0d79a;
+        --pending-border: #7a6420;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    max-width: 46rem;
+    padding: 2.5rem 1.25rem 6rem;
+    margin: 0 auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+        sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    color: var(--fg);
+    background: var(--bg);
+}
+
+header {
+    padding-bottom: 1.25rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--rule);
+}
+
+header a.home {
+    font-size: 0.9rem;
+    color: var(--muted);
+    text-decoration: none;
+}
+
+h1 {
+    margin: 0.75rem 0 0.5rem;
+    font-size: 1.9rem;
+    line-height: 1.25;
+}
+
+h2 {
+    margin-top: 2.5rem;
+    font-size: 1.25rem;
+}
+
+h3 {
+    margin-top: 1.75rem;
+    font-size: 1.05rem;
+}
+
+.updated {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+a {
+    color: var(--link);
+}
+
+table {
+    display: block;
+    width: 100%;
+    margin: 1.25rem 0;
+    overflow-x: auto;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 0.5rem 0.7rem;
+    vertical-align: top;
+    text-align: left;
+    border: 1px solid var(--rule);
+}
+
+th {
+    font-size: 0.9rem;
+}
+
+td {
+    font-size: 0.95rem;
+}
+
+code {
+    padding: 0.1em 0.35em;
+    font-size: 0.9em;
+    background: var(--rule);
+    border-radius: 3px;
+}
+
+/*
+ * PENDING marks a fact that has not been settled yet — a company name, an
+ * address, a hosting region, a registration number. They are styled loudly on
+ * purpose: none of these pages should be deployed to production while any
+ * `.pending` element is still on them. See docs/LEGAL_PAGES.md.
+ */
+.pending {
+    padding: 0.05em 0.4em;
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--pending-fg);
+    background: var(--pending-bg);
+    border: 1px solid var(--pending-border);
+    border-radius: 3px;
+}
+
+.pending-block {
+    padding: 0.85rem 1.1rem;
+    margin: 1.5rem 0;
+    color: var(--pending-fg);
+    background: var(--pending-bg);
+    border: 1px solid var(--pending-border);
+    border-radius: 4px;
+}
+
+.pending-block p {
+    margin: 0.4rem 0;
+}
+
+nav.index {
+    padding: 0;
+    list-style: none;
+}
+
+nav.index li {
+    margin: 1.25rem 0;
+}
+
+nav.index a {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+nav.index p {
+    margin: 0.2rem 0 0;
+    color: var(--muted);
+}
+
+footer {
+    padding-top: 1.25rem;
+    margin-top: 4rem;
+    font-size: 0.9rem;
+    color: var(--muted);
+    border-top: 1px solid var(--rule);
+}

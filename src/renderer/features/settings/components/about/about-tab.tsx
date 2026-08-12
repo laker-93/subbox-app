@@ -1,12 +1,14 @@
 import { memo } from 'react';
 import { Fragment } from 'react/jsx-runtime';
 
+import { LegalSettings } from '/@/renderer/features/settings/components/about/legal-settings';
 import { LicenceSettings } from '/@/renderer/features/settings/components/about/licence-settings';
 import { MusicCreditsSettings } from '/@/renderer/features/settings/components/about/music-credits-settings';
 import { Divider } from '/@/shared/components/divider/divider';
 import { Stack } from '/@/shared/components/stack/stack';
 
 const sections = [
+    { component: LegalSettings, key: 'legal' },
     { component: LicenceSettings, key: 'licence' },
     { component: MusicCreditsSettings, key: 'music-credits' },
 ];
