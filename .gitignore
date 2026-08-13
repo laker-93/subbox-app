@@ -19,8 +19,10 @@ release
 # cycle silently stalls the loop's own sync until someone notices and cleans
 # up by hand. A real, reusable driver should be renamed without the `_` and
 # committed properly instead.
-scripts/qa/_debug-*.mjs
-scripts/qa/_fav-*.mjs
-scripts/qa/_probe-*.mjs
-scripts/qa/_reset-*.mjs
-scripts/qa/_tmp-*.mjs
+#
+# This is deliberately a single `_*` glob, not a list of known prefixes. The
+# earlier per-prefix list (_debug-/_fav-/_probe-/_reset-/_tmp-) let scratch with
+# any new prefix through, and that is exactly what stalled the loop: _bench-*
+# and _jamendo100-* scratch from 2026-08-06 sat untracked and disabled the
+# rebase for the whole pause.
+scripts/qa/_*.mjs
