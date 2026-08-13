@@ -42,7 +42,9 @@ const CONTENT_TYPES = {
 };
 
 if (SERVE_LOCAL && !fs.existsSync(path.join(WEB_DIR, 'index.html'))) {
-    console.error(`No web build at ${WEB_DIR}.\nRun \`pnpm run build:web\` first (production mode — it bakes the prod pymix/Navidrome URLs).`);
+    console.error(
+        `No web build at ${WEB_DIR}.\nRun \`pnpm run build:web\` first (production mode — it bakes the prod pymix/Navidrome URLs).`,
+    );
     process.exit(2);
 }
 
