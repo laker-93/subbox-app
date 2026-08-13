@@ -143,7 +143,13 @@ const syncPlanTrackConflict = z.object({
 
 const syncPlanMetadataUpdate = z.object({
     artist: z.string(),
-    fields: z.array(z.string()),
+    // Optional because pymix does not send it: /sync/plan builds each update from
+    // the missing track's title and artist alone and never says which fields would
+    // change. This contract isn't validated at runtime (see pymixApiClient — the
+    // axios body is passed straight through), so declaring it required didn't make
+    // it appear; it just let the renderer call .map() on undefined and crash the
+    // Metadata Updates tab. Render it defensively until pymix computes real fields.
+    fields: z.array(z.string()).optional(),
     title: z.string(),
 });
 

@@ -146,9 +146,9 @@ export const SyncDownload = () => {
     const [selectedPlaylists, setSelectedPlaylists] = useState<Set<string>>(new Set());
     const [plan, setPlan] = useState<null | SyncPlanResponse>(null);
     const [error, setError] = useState<null | string>(null);
-    const [activeTab, setActiveTab] = useState<'conflicts' | 'existing' | 'metadata' | 'missing'>(
-        'missing',
-    );
+    // No 'conflicts' tab: pymix initialises tracks.conflicts as an empty list and
+    // never appends to it, so it could only ever render "No conflicts found."
+    const [activeTab, setActiveTab] = useState<'existing' | 'metadata' | 'missing'>('missing');
     const [downloadResult, setDownloadResult] = useState<null | {
         musicPath?: string;
         tracksExported: number;
@@ -548,7 +548,9 @@ export const SyncDownload = () => {
                     onClick={handleGetPlan}
                     size="md"
                     tooltip={{
-                        label: 'See exactly what will be downloaded — which tracks are missing locally, which you already have, and the total download size — before anything is saved.',
+                        label: isElectron()
+                            ? 'See exactly what will be downloaded — which tracks are missing locally, which you already have, and the total download size — before anything is saved.'
+                            : 'See exactly what will be downloaded — every track that goes in the zip, and the total download size — before anything is saved.',
                         multiline: true,
                         openDelay: 300,
                         w: 300,
@@ -655,6 +657,19 @@ export const SyncDownload = () => {
 
     const { metadata, summary, tracks } = plan;
 
+    // The web build can't read the user's disk, so it asks /sync/plan for a plan with
+    // an empty localTracks list. pymix then has nothing to match server tracks
+    // against, which fixes the whole classification: `existing` is always empty,
+    // `tracksAlreadyPresent` is always 0, and `missing` is always every requested
+    // track — so "N to download" only restates "N requested", and the Already Present
+    // tab can only ever say "no existing tracks found locally".
+    //
+    // The plan is still worth fetching on web for its server-side file sizes (the
+    // download-size badge is the one number a browser user actually needs before
+    // pulling a zip), but it describes the zip's contents rather than a diff. So on
+    // web this screen is a manifest: no tabs, no diff badges, just what's in the file.
+    const isWeb = !isElectron();
+
     // One button, whose wording follows what the tick boxes below put in the file.
     const downloadButtonLabel = !includeTracks
         ? 'Download Rekordbox XML'
@@ -670,9 +685,55 @@ export const SyncDownload = () => {
     const tabs = [
         { count: tracks.missing.length, key: 'missing' as const, label: 'Missing' },
         { count: tracks.existing.length, key: 'existing' as const, label: 'Already Present' },
-        { count: tracks.conflicts.length, key: 'conflicts' as const, label: 'Conflicts' },
         { count: metadata.updates.length, key: 'metadata' as const, label: 'Metadata Updates' },
     ];
+
+    // Shared by both layouts: the desktop plan's "Missing" tab and the web manifest
+    // are the same list of tracks, described differently.
+    const missingTrackList = (
+        <Stack gap="xs">
+            {tracks.missing.length === 0 ? (
+                <Text c="dimmed" size="sm">
+                    {isWeb
+                        ? 'These playlists have no tracks to download.'
+                        : 'No missing tracks — everything is already present locally.'}
+                </Text>
+            ) : (
+                tracks.missing.map((track, i) => (
+                    <Group
+                        gap="md"
+                        key={`${track.artist}-${track.title}-${i}`}
+                        style={{
+                            borderRadius: 'var(--theme-radius-sm)',
+                            padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
+                        }}
+                    >
+                        <Stack gap={2} style={{ flex: 1 }}>
+                            <Text fw={500} size="sm">
+                                {track.title}
+                            </Text>
+                            <Text c="dimmed" size="xs">
+                                {track.artist}
+                                {track.album ? ` · ${track.album}` : ''}
+                            </Text>
+                        </Stack>
+                        <Group gap="xs">
+                            {track.duration != null && (
+                                <Text c="dimmed" size="xs">
+                                    {formatDuration(track.duration)}
+                                </Text>
+                            )}
+                            {track.fileSize != null && (
+                                <Text c="dimmed" size="xs">
+                                    {formatBytes(track.fileSize)}
+                                </Text>
+                            )}
+                        </Group>
+                    </Group>
+                ))
+            )}
+        </Stack>
+    );
 
     return (
         <Stack gap="md" p="xl" style={{ height: '100%', overflow: 'hidden' }}>
@@ -693,90 +754,71 @@ export const SyncDownload = () => {
                 </Button>
             </Group>
 
-            {/* Summary badges */}
+            {/* Summary badges. The already-present / to-download / metadata-updates
+                counts are a diff against the local library, which only exists on
+                desktop — on web they are fixed at 0 / everything / a copy of the
+                missing list, so they're left out rather than shown as noise. */}
             <Group gap="sm" wrap="wrap">
                 <Badge color="blue" size="lg" variant="light">
                     {summary.playlists} {summary.playlists === 1 ? 'playlist' : 'playlists'}
                 </Badge>
                 <Badge color="blue" size="lg" variant="light">
-                    {summary.tracksRequested} tracks requested
+                    {summary.tracksRequested}{' '}
+                    {isWeb
+                        ? summary.tracksRequested === 1
+                            ? 'track'
+                            : 'tracks'
+                        : 'tracks requested'}
                 </Badge>
-                <Badge color="green" size="lg" variant="light">
-                    {summary.tracksAlreadyPresent} already present
-                </Badge>
-                <Badge color="orange" size="lg" variant="light">
-                    {summary.tracksMissing} to download
-                </Badge>
-                {summary.metadataUpdates > 0 && (
-                    <Badge color="violet" size="lg" variant="light">
-                        {summary.metadataUpdates} metadata updates
-                    </Badge>
+                {!isWeb && (
+                    <>
+                        <Badge color="green" size="lg" variant="light">
+                            {summary.tracksAlreadyPresent} already present
+                        </Badge>
+                        <Badge color="orange" size="lg" variant="light">
+                            {summary.tracksMissing} to download
+                        </Badge>
+                        {summary.metadataUpdates > 0 && (
+                            <Badge color="violet" size="lg" variant="light">
+                                {summary.metadataUpdates} metadata updates
+                            </Badge>
+                        )}
+                    </>
                 )}
                 <Badge color="cyan" size="lg" variant="light">
                     {formatBytes(summary.downloadSizeBytes)} download
                 </Badge>
             </Group>
 
-            {/* Tab buttons */}
-            <Group gap="xs">
-                {tabs.map((tab) => (
-                    <Button
-                        key={tab.key}
-                        onClick={() => setActiveTab(tab.key)}
-                        size="xs"
-                        variant={activeTab === tab.key ? 'filled' : 'subtle'}
-                    >
-                        {tab.label} ({tab.count})
-                    </Button>
-                ))}
-            </Group>
+            {/* Tab buttons (desktop only — on web there is only one non-empty list) */}
+            {isWeb ? (
+                <Text c="dimmed" size="sm">
+                    {includeTracks
+                        ? 'Tracks in this download'
+                        : 'Tracks covered by the Rekordbox XML'}
+                </Text>
+            ) : (
+                <Group gap="xs">
+                    {tabs.map((tab) => (
+                        <Button
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            size="xs"
+                            variant={activeTab === tab.key ? 'filled' : 'subtle'}
+                        >
+                            {tab.label} ({tab.count})
+                        </Button>
+                    ))}
+                </Group>
+            )}
 
-            {/* Tab content */}
+            {/* Tab content (web renders the one list on its own) */}
             <ScrollArea style={{ flex: 1 }}>
-                {activeTab === 'missing' && (
-                    <Stack gap="xs">
-                        {tracks.missing.length === 0 ? (
-                            <Text c="dimmed" size="sm">
-                                No missing tracks — everything is already present locally.
-                            </Text>
-                        ) : (
-                            tracks.missing.map((track, i) => (
-                                <Group
-                                    gap="md"
-                                    key={`${track.artist}-${track.title}-${i}`}
-                                    style={{
-                                        borderRadius: 'var(--theme-radius-sm)',
-                                        padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
-                                    }}
-                                >
-                                    <Stack gap={2} style={{ flex: 1 }}>
-                                        <Text fw={500} size="sm">
-                                            {track.title}
-                                        </Text>
-                                        <Text c="dimmed" size="xs">
-                                            {track.artist}
-                                            {track.album ? ` · ${track.album}` : ''}
-                                        </Text>
-                                    </Stack>
-                                    <Group gap="xs">
-                                        {track.duration != null && (
-                                            <Text c="dimmed" size="xs">
-                                                {formatDuration(track.duration)}
-                                            </Text>
-                                        )}
-                                        {track.fileSize != null && (
-                                            <Text c="dimmed" size="xs">
-                                                {formatBytes(track.fileSize)}
-                                            </Text>
-                                        )}
-                                    </Group>
-                                </Group>
-                            ))
-                        )}
-                    </Stack>
-                )}
+                {isWeb && missingTrackList}
 
-                {activeTab === 'existing' && (
+                {!isWeb && activeTab === 'missing' && missingTrackList}
+
+                {!isWeb && activeTab === 'existing' && (
                     <Stack gap="xs">
                         {tracks.existing.length === 0 ? (
                             <Text c="dimmed" size="sm">
@@ -810,48 +852,7 @@ export const SyncDownload = () => {
                     </Stack>
                 )}
 
-                {activeTab === 'conflicts' && (
-                    <Stack gap="xs">
-                        {tracks.conflicts.length === 0 ? (
-                            <Text c="dimmed" size="sm">
-                                No conflicts found.
-                            </Text>
-                        ) : (
-                            tracks.conflicts.map((track, i) => (
-                                <Group
-                                    gap="md"
-                                    key={`${track.artist}-${track.title}-${i}`}
-                                    style={{
-                                        borderRadius: 'var(--theme-radius-sm)',
-                                        padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
-                                    }}
-                                >
-                                    <Stack gap={2} style={{ flex: 1 }}>
-                                        <Text fw={500} size="sm">
-                                            {track.title}
-                                        </Text>
-                                        <Text c="dimmed" size="xs">
-                                            {track.artist}
-                                            {track.album ? ` · ${track.album}` : ''}
-                                        </Text>
-                                    </Stack>
-                                    <Stack align="flex-end" gap={2}>
-                                        <Badge color="red" size="sm" variant="light">
-                                            {track.status}
-                                        </Badge>
-                                        {track.reason && (
-                                            <Text c="dimmed" size="xs">
-                                                {track.reason}
-                                            </Text>
-                                        )}
-                                    </Stack>
-                                </Group>
-                            ))
-                        )}
-                    </Stack>
-                )}
-
-                {activeTab === 'metadata' && (
+                {!isWeb && activeTab === 'metadata' && (
                     <Stack gap="xs">
                         {metadata.updates.length === 0 ? (
                             <Text c="dimmed" size="sm">
@@ -875,18 +876,24 @@ export const SyncDownload = () => {
                                             {update.artist}
                                         </Text>
                                     </Stack>
-                                    <Group gap={4}>
-                                        {update.fields.map((field) => (
-                                            <Badge
-                                                color="violet"
-                                                key={field}
-                                                size="xs"
-                                                variant="light"
-                                            >
-                                                {field}
-                                            </Badge>
-                                        ))}
-                                    </Group>
+                                    {/* pymix doesn't populate `fields` today, so this
+                                        renders nothing — it used to throw on
+                                        undefined.map and take the whole preview
+                                        screen down the moment this tab was opened. */}
+                                    {update.fields && update.fields.length > 0 && (
+                                        <Group gap={4}>
+                                            {update.fields.map((field) => (
+                                                <Badge
+                                                    color="violet"
+                                                    key={field}
+                                                    size="xs"
+                                                    variant="light"
+                                                >
+                                                    {field}
+                                                </Badge>
+                                            ))}
+                                        </Group>
+                                    )}
                                 </Group>
                             ))
                         )}
