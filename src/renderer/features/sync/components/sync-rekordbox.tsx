@@ -480,7 +480,7 @@ export const SyncRekordbox = () => {
                 </Group>
 
                 <Tooltip
-                    label="Only update track info (cue points, ratings, tags) for music already in your library — no audio files are uploaded. Leave unticked to upload the actual tracks."
+                    label="Only update track info (cue points, ratings, tags) for music already in your library. Nothing is uploaded. Untick to upload the tracks themselves."
                     multiline
                     openDelay={300}
                     position="right"

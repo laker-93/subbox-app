@@ -88,15 +88,15 @@ export const SyncWatch = () => {
                 Watch Directory
             </Text>
             <Text c="dimmed" size="sm">
-                Select a local folder to watch. New audio files will be automatically uploaded to
-                your cloud storage.
+                Select a local folder to watch. New audio files are uploaded to your cloud library
+                automatically.
             </Text>
 
             <Group gap="sm">
                 <Button
                     onClick={handleSelectDirectory}
                     tooltip={{
-                        label: 'Choose the local folder to monitor — for example the folder where you save new downloads or recordings.',
+                        label: 'Choose the local folder to monitor, such as where you save new downloads or recordings.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
@@ -118,7 +118,7 @@ export const SyncWatch = () => {
                         <Button
                             onClick={handleStartWatch}
                             tooltip={{
-                                label: 'Start watching this folder. New audio files added here will be uploaded to your Sub-box library automatically while the app is open.',
+                                label: 'Start watching this folder. New audio files are uploaded to Sub-box while the app is open.',
                                 multiline: true,
                                 openDelay: 300,
                                 w: 280,

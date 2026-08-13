@@ -392,7 +392,7 @@
             "title": "$t(action.editWishlistItem)"
         },
         "matchMetadata": {
-            "applied": "applied match: {{artist}} — {{title}}",
+            "applied": "applied match: {{artist}} - {{title}}",
             "needsArtistAndTitle": "enter both an artist and a title first",
             "noMatch": "no confident match found"
         },
@@ -539,14 +539,14 @@
                 "saveSuccess": "wishlist sheet saved",
                 "saveError": "failed to save wishlist sheet",
                 "emailCopied": "email copied",
-                "statusOk": "wishlist sheet connected — sub-box can update it",
+                "statusOk": "wishlist sheet connected, sub-box can update it",
                 "statusError": "sub-box can't access this wishlist sheet",
                 "statusChecking": "checking sheet access..."
             },
             "inboxRawNote": "raw note",
             "openInLibrary": "go to track in library",
             "resolving": "resolving…",
-            "trackNotFound": "couldn't find this track in your library yet — it may still be scanning",
+            "trackNotFound": "not in your library yet, it may still be scanning",
             "noStatusMatches": "no items match this status",
             "status": {
                 "all": "all",
@@ -714,12 +714,12 @@
             "legal": "legal",
             "legalDescription": "The terms you use Subbox under, what we do with your data, and how to report unlawful content. These open in your browser.",
             "licence": "licence",
-            "licenceDescription": "Subbox is free software. You may redistribute it and modify it under the terms of the GNU General Public License, version 3, as published by the Free Software Foundation. It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY — without even the implied warranty of merchantability or fitness for a particular purpose.",
+            "licenceDescription": "Subbox is free software. You may redistribute it and modify it under the terms of the GNU General Public License, version 3, as published by the Free Software Foundation. It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY, without even the implied warranty of merchantability or fitness for a particular purpose.",
             "licenceLinkFullText": "Full licence text (GNU GPL v3.0)",
             "licenceLinkNotice": "Modification record and attribution (NOTICE)",
             "licenceLinkSource": "Source code for this program",
             "licenceLinkUpstream": "Feishin, the upstream project",
-            "licenceUpstream": "Subbox is a modified version of Feishin by jeffvli, itself a rewrite of Sonixd, both licensed under the GPL-3.0. Subbox is not affiliated with, endorsed by, or supported by the Feishin project — please do not report Subbox issues to them.",
+            "licenceUpstream": "Subbox is a modified version of Feishin by jeffvli, itself a rewrite of Sonixd, both licensed under the GPL-3.0. Subbox is not affiliated with, endorsed by, or supported by the Feishin project. Please do not report Subbox issues to them.",
             "licenceVersion": "This build is Subbox {{version}}. A copy of the licence and the record of modifications is distributed with it, and the complete corresponding source for this version is published under the same licence.",
             "musicCredits": "music credits",
             "musicCreditsDescription": "The demo library is Creative Commons licensed music from Jamendo. Each track links to its original release and to the licence it is offered under.",

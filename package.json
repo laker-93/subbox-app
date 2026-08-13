@@ -43,6 +43,7 @@
         "build:web:staging": "vite build --config web.vite.config.ts --mode staging",
         "dev": "electron-vite dev",
         "prod": "pnpm run build && electron-vite preview",
+        "prod:web": "pnpm run build:web && node scripts/prod-web-preview.mjs",
         "dev:remote": "vite dev --config remote.vite.config.ts",
         "dev:staging": "electron-vite dev --mode staging",
         "dev:watch": "electron-vite dev --watch",

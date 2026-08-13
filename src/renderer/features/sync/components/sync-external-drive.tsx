@@ -285,10 +285,9 @@ export const SyncExternalDrive = () => {
                     <TextTitle order={3}>External Drive Comparison</TextTitle>
                     <Text c="dimmed" size="sm">
                         Select a folder on an external drive, then choose playlists to compare
-                        against. Missing tracks — those in your playlists but not on the drive —
-                        will be shown as a preview. The drive folder is only used for this
-                        comparison: downloaded tracks are saved to your Sub-box library, the same
-                        place regular playlist downloads go, ready to add to Rekordbox and export
+                        against. You get a preview of the tracks in those playlists that aren&apos;t
+                        on the drive. The drive folder is only read for this comparison: downloads
+                        are saved to your Sub-box music folder, ready to add to Rekordbox and export
                         back to the drive from there.
                     </Text>
                 </Stack>
@@ -704,7 +703,7 @@ export const SyncExternalDrive = () => {
 
             <Group gap="xs" style={{ width: 'fit-content' }}>
                 <Tooltip
-                    label="Also create a Rekordbox XML alongside the downloaded tracks. Import that file into Rekordbox to bring these playlists into your collection without hunting through the app's music folder — click the info icon for step-by-step instructions."
+                    label="Also create a Rekordbox XML alongside the downloaded tracks, to bring these playlists into your collection. Click the info icon for the steps."
                     multiline
                     openDelay={300}
                     position="top-start"
@@ -740,7 +739,7 @@ export const SyncExternalDrive = () => {
                             onClick={handleSelectXmlDirectory}
                             size="xs"
                             tooltip={{
-                                label: 'Choose the folder the Rekordbox XML is saved to when you download. By default it is saved alongside your downloaded tracks.',
+                                label: 'Where the Rekordbox XML is saved. By default it goes alongside your downloaded tracks.',
                                 multiline: true,
                                 openDelay: 300,
                                 w: 300,
@@ -770,8 +769,8 @@ export const SyncExternalDrive = () => {
                 <Stack gap="lg">
                     <Text size="sm">
                         After downloading, follow these steps to bring the compared playlists into
-                        your Rekordbox collection — Rekordbox matches tracks by file path, so any
-                        you already have won&apos;t be duplicated.
+                        your Rekordbox collection. Rekordbox matches tracks by file path, so any you
+                        already have won&apos;t be duplicated.
                     </Text>
                     <Stack gap="md">
                         <Stack gap="xs">
