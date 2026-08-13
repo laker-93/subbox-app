@@ -410,9 +410,9 @@ export const SyncDownload = () => {
                 <Stack gap="xs">
                     <TextTitle order={3}>Download Playlists</TextTitle>
                     <Text c="dimmed" size="sm">
-                        Select playlists from your cloud library to preview a download plan. This
-                        lets you sync from Sub-box back into your DJ software — download the tracks
-                        plus a Rekordbox XML and import your playlists straight into Rekordbox.
+                        Select playlists from your cloud library to preview a download plan.
+                        Download the tracks with a Rekordbox XML to import your playlists straight
+                        into Rekordbox.
                     </Text>
                     <Group gap="xs">
                         <Button
@@ -549,8 +549,8 @@ export const SyncDownload = () => {
                     size="md"
                     tooltip={{
                         label: isElectron()
-                            ? 'See exactly what will be downloaded — which tracks are missing locally, which you already have, and the total download size — before anything is saved.'
-                            : 'See exactly what will be downloaded — every track that goes in the zip, and the total download size — before anything is saved.',
+                            ? 'Before anything is saved, see which tracks are missing locally, which you already have, and the total download size.'
+                            : 'Before anything is saved, see every track that goes in the zip and the total download size.',
                         multiline: true,
                         openDelay: 300,
                         w: 300,
@@ -603,7 +603,7 @@ export const SyncDownload = () => {
                     <TextTitle order={3}>Download Complete</TextTitle>
                     <Text c="dimmed" size="sm">
                         {!includeTracks
-                            ? 'Rekordbox XML downloaded — no audio files, as requested.'
+                            ? 'Rekordbox XML downloaded. No audio files, as requested.'
                             : downloadResult
                               ? `${downloadResult.tracksExported} track${downloadResult.tracksExported === 1 ? '' : 's'} exported${
                                     includeRekordboxXml
@@ -677,10 +677,10 @@ export const SyncDownload = () => {
           ? 'Download & Extract'
           : 'Download Zip';
     const downloadButtonTooltip = !includeTracks
-        ? 'Download just the Rekordbox XML for these playlists — no audio files.'
+        ? 'Download just the Rekordbox XML for these playlists, with no audio files.'
         : isElectron()
-          ? 'Download the missing tracks and save them into your local music folder, ready to use (plus a Rekordbox XML if ticked above).'
-          : 'Download the selected tracks as a single zip file to this device, with a Rekordbox XML inside it if ticked above.';
+          ? 'Save the missing tracks into your local music folder, plus a Rekordbox XML if ticked above.'
+          : 'Download the selected tracks as one zip, with a Rekordbox XML inside if ticked above.';
 
     const tabs = [
         { count: tracks.missing.length, key: 'missing' as const, label: 'Missing' },
@@ -696,7 +696,7 @@ export const SyncDownload = () => {
                 <Text c="dimmed" size="sm">
                     {isWeb
                         ? 'These playlists have no tracks to download.'
-                        : 'No missing tracks — everything is already present locally.'}
+                        : 'No missing tracks. Everything is already present locally.'}
                 </Text>
             ) : (
                 tracks.missing.map((track, i) => (
@@ -905,7 +905,7 @@ export const SyncDownload = () => {
                 these choose its contents, not how many downloads there are. */}
             <Group gap="xs" style={{ width: 'fit-content' }}>
                 <Tooltip
-                    label="Download the audio files themselves. Untick to take only the Rekordbox XML — useful when you already have these tracks and just want the playlists."
+                    label="Download the audio files. Untick to take only the Rekordbox XML, for when you already have these tracks."
                     multiline
                     openDelay={300}
                     position="top-start"
@@ -929,7 +929,7 @@ export const SyncDownload = () => {
 
             <Group gap="xs" style={{ width: 'fit-content' }}>
                 <Tooltip
-                    label="Include a Rekordbox XML with the tracks, in the same download. Import that file into Rekordbox to recreate these playlists there — click the info icon for step-by-step instructions."
+                    label="Include a Rekordbox XML in the same download, to recreate these playlists in Rekordbox. Click the info icon for the steps."
                     multiline
                     openDelay={300}
                     position="top-start"
@@ -964,7 +964,7 @@ export const SyncDownload = () => {
                             onClick={handleSelectXmlDirectory}
                             size="xs"
                             tooltip={{
-                                label: 'Choose the folder the Rekordbox XML is saved to when you download. By default it is saved alongside your downloaded tracks.',
+                                label: 'Where the Rekordbox XML is saved. By default it goes alongside your downloaded tracks.',
                                 multiline: true,
                                 openDelay: 300,
                                 w: 300,
@@ -993,8 +993,8 @@ export const SyncDownload = () => {
                     <TextInput
                         description={
                             includeTracks
-                                ? "Rekordbox needs this to find the tracks — the XML won't link them if it doesn't match where you actually unzip music.zip. The zip contains a single music folder; extract it here so that folder sits directly inside."
-                                : "Rekordbox needs this to find the tracks — the XML won't link them if it doesn't match where the audio actually is."
+                                ? 'Rekordbox needs this to find the tracks. The zip contains a single music folder; extract it here so that folder sits directly inside.'
+                                : 'Rekordbox needs this to find the tracks, so it must match where the audio actually is.'
                         }
                         label={
                             includeTracks
@@ -1020,7 +1020,7 @@ export const SyncDownload = () => {
                             <Text component="span" size="xs" style={{ fontFamily: 'monospace' }}>
                                 {musicRootFromExtractPath(webExtractPath)}
                             </Text>
-                            . Check this after extracting — if your unzipper added an extra folder,
+                            . Check this after extracting. If your unzipper added an extra folder,
                             move the music folder here or the XML won&apos;t find the tracks.
                         </Text>
                     )}

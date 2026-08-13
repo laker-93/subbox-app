@@ -30,7 +30,7 @@ export const DemoBanner = () => {
             <Text className={styles['fs-demo-banner-text']} size="sm">
                 {t('page.demoBanner.message', {
                     defaultValue:
-                        "You're exploring a sample library. Sub-box is in private beta — get an invite to upload your own.",
+                        "You're exploring a sample library. Request an invite to upload your own.",
                 })}
             </Text>
             <Button

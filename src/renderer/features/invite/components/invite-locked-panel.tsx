@@ -46,7 +46,7 @@ export const InviteLockedPanel = ({ description, title }: InviteLockedPanelProps
                 <Text c="dimmed" size="sm" ta="center">
                     {t('page.invite.lockedBeta', {
                         defaultValue:
-                            'Sub-box is in private beta — request an invite and we’ll get you set up.',
+                            'Sub-box is in private beta. Request an invite.',
                     })}
                 </Text>
                 <Button

@@ -63,7 +63,7 @@ export const MusicCreditsSettings = () => {
                             >
                                 {track.title}
                             </Text>
-                            {` — ${track.artist}`}
+                            {` - ${track.artist}`}
                         </Text>
                         <Text
                             component="a"

@@ -36,7 +36,7 @@ const useSourceIntro = (source: InviteRequestSource): string => {
         case 'blockedAction':
             return t('page.invite.introBlockedAction', {
                 defaultValue:
-                    'Uploading your own music needs your own Sub-box library — the demo is read-only.',
+                    'The demo library is read-only. Uploading your own music needs your own Sub-box library.',
             });
         case 'createAccount':
             return t('page.invite.introCreateAccount', {
@@ -45,7 +45,7 @@ const useSourceIntro = (source: InviteRequestSource): string => {
         case 'demoBanner':
             return t('page.invite.introDemoBanner', {
                 defaultValue:
-                    'Liking the demo? Get your own library — upload your collection and stream it anywhere.',
+                    'Liking the demo? Get your own library and stream your collection anywhere.',
             });
         default:
             return t('page.invite.introLanding', {
@@ -135,7 +135,7 @@ function RequestInviteForm({
                 setFormError(
                     t('page.invite.errorRateLimited', {
                         defaultValue:
-                            "That's a few requests in a short space of time — try again a bit later.",
+                            "That's a few requests in a short space of time. Try again a bit later.",
                     }),
                 );
             } else {
