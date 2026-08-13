@@ -42,6 +42,36 @@ const XML_DIRECTORY_KEY = 'rekordbox_xml_directory';
 // but couldn't resolve a single track (see laker-93/pymix#66 follow-up).
 const WEB_EXTRACT_PATH_KEY = 'sync_web_extract_path';
 
+/**
+ * The folder the export zip nests every track under. The zip's only top-level
+ * entry, so extracting it into <folder> puts the tracks at <folder>/music/... —
+ * which is what the XML's user_root has to be, not <folder> itself.
+ *
+ * Desktop gets this right for free: it sends getMusicPath() (= appPath/music) and
+ * unzips into appPath. On web all we're told is the extraction folder, so the
+ * `music` segment has to be added here — omitting it was the original bug, and it
+ * fails silently, producing an XML whose every Location is one level too shallow.
+ */
+const ZIP_MUSIC_DIR = 'music';
+
+/**
+ * Turn the folder the user says they'll extract music.zip into, into the folder
+ * the tracks will actually be in.
+ *
+ * Deliberately does NOT skip appending when the path already ends in `music` —
+ * a user whose extraction folder is genuinely named `music` would then get a
+ * wrong answer with no way to override it. The UI shows the resulting path
+ * instead, so a mismatch is visible before the download.
+ */
+const musicRootFromExtractPath = (extractPath: string): string => {
+    const trimmed = extractPath.trim();
+    if (trimmed.length === 0) return '';
+    // Windows paths use \, everything else /. Take the cue from what was typed;
+    // a bare "C:" gets \ too, since a drive letter is only ever Windows.
+    const separator = trimmed.includes('\\') || /^[a-z]:$/i.test(trimmed) ? '\\' : '/';
+    return `${trimmed.replace(/[/\\]+$/, '')}${separator}${ZIP_MUSIC_DIR}`;
+};
+
 type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'select';
 
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
@@ -323,7 +353,12 @@ export const SyncDownload = () => {
                             id,
                             source: 'subbox',
                         })),
-                        user_root: webExtractPath.trim(),
+                        // Only the zip nests tracks under music/. A metadata-only
+                        // download ships no audio, so the path the user gave is
+                        // already where their tracks are — appending would break it.
+                        user_root: includeTracks
+                            ? musicRootFromExtractPath(webExtractPath)
+                            : webExtractPath.trim(),
                     },
                 });
 
@@ -423,7 +458,7 @@ export const SyncDownload = () => {
                                 <Text size="sm">
                                     {isElectron()
                                         ? 'On the preview screen, make sure "Include Rekordbox XML" is ticked and click Download. This saves the tracks to your music folder and the .xml describing the playlists to your chosen XML folder.'
-                                        : 'On the preview screen, make sure "Include Rekordbox XML" is ticked and click Download. You get one zip: unzip it and subbox_rb_export.xml sits next to the music folder. If you already have these tracks, untick "Include tracks" to download just the .xml.'}
+                                        : `On the preview screen, make sure "Include Rekordbox XML" is ticked, enter the folder you'll extract into, and click Download. You get one zip containing a single music folder, with subbox_rb_export.xml inside it. If you already have these tracks, untick "Include tracks" to download just the .xml.`}
                                 </Text>
                             </Stack>
                             <Stack gap="xs">
@@ -572,7 +607,7 @@ export const SyncDownload = () => {
                                     includeRekordboxXml
                                         ? isElectron()
                                             ? ', with a Rekordbox XML saved alongside them'
-                                            : ', with subbox_rb_export.xml inside the zip'
+                                            : ", with subbox_rb_export.xml inside the zip's music folder"
                                         : ''
                                 }.`
                               : 'Download finished.'}
@@ -947,21 +982,42 @@ export const SyncDownload = () => {
                 this, so the Rekordbox XML's track locations depend on the user
                 telling us where the audio is (or will be). */}
             {!isElectron() && includeRekordboxXml && (
-                <TextInput
-                    description={
-                        includeTracks
-                            ? "Rekordbox needs this to find the tracks — the XML won't link them if it doesn't match where you actually unzip music.zip."
-                            : "Rekordbox needs this to find the tracks — the XML won't link them if it doesn't match where the audio actually is."
-                    }
-                    label={
-                        includeTracks
-                            ? "Folder you'll extract music.zip into"
-                            : 'Folder your tracks are in'
-                    }
-                    onChange={(e) => handleWebExtractPathChange(e.currentTarget.value)}
-                    placeholder="e.g. /Users/you/Music or C:\Users\you\Music"
-                    value={webExtractPath}
-                />
+                <Stack gap="xs">
+                    <TextInput
+                        description={
+                            includeTracks
+                                ? "Rekordbox needs this to find the tracks — the XML won't link them if it doesn't match where you actually unzip music.zip. The zip contains a single music folder; extract it here so that folder sits directly inside."
+                                : "Rekordbox needs this to find the tracks — the XML won't link them if it doesn't match where the audio actually is."
+                        }
+                        label={
+                            includeTracks
+                                ? "Folder you'll extract music.zip into"
+                                : 'Folder your tracks are in'
+                        }
+                        onChange={(e) => handleWebExtractPathChange(e.currentTarget.value)}
+                        placeholder={
+                            includeTracks
+                                ? 'e.g. /Users/you/Desktop or C:\\Users\\you\\Desktop'
+                                : 'e.g. /Users/you/Music or C:\\Users\\you\\Music'
+                        }
+                        value={webExtractPath}
+                    />
+                    {/* The `music` segment is added for the user, so show the result:
+                        it's the only way to catch an unzipper that added a wrapper
+                        folder of its own (macOS Archive Utility does this for a
+                        multi-entry zip; Windows' Extract All always does) before the
+                        XML is built against a path that doesn't exist. */}
+                    {includeTracks && webExtractPath.trim().length > 0 && (
+                        <Text c="dimmed" size="xs">
+                            Tracks must end up in{' '}
+                            <Text component="span" size="xs" style={{ fontFamily: 'monospace' }}>
+                                {musicRootFromExtractPath(webExtractPath)}
+                            </Text>
+                            . Check this after extracting — if your unzipper added an extra folder,
+                            move the music folder here or the XML won&apos;t find the tracks.
+                        </Text>
+                    )}
+                </Stack>
             )}
 
             <Modal

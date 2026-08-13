@@ -51,6 +51,7 @@
         "i18next": "i18next -c src/i18n/i18next-parser.config.js",
         "ui:snapshot": "node scripts/ui-snapshot.mjs",
         "check:rekordbox-paths": "tsx scripts/check-rekordbox-path-resolution.ts",
+        "check:export-zip-extraction": "tsx scripts/check-export-zip-extraction.ts",
         "postinstall": "electron-builder install-app-deps",
         "lint": "pnpm run typecheck && pnpm run lint-code && pnpm run lint-styles",
         "lint-code": "eslint --max-warnings=0 --cache .",
