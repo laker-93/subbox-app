@@ -23,6 +23,34 @@ reading code alone), and fix what it can verify — conservatively. It does not
 add net-new features or do large redesigns; it sands down rough edges and
 fixes bugs in what already exists.
 
+## ⚠️ The dev test account changed (2026-08-13) — read this before driving anything
+
+**`test260526` is gone.** Not stopped — deleted. `user_table` in `pymix-postgres`
+now holds exactly one user, **`test060826`**, and the only per-user containers on
+the stack are `navidrometest060826` / `beetstest060826`. Around 69 mentions of the
+old account across this journal (and ~99 more in `../pymix-qa`) are therefore
+**historical, not reusable**: the playlists, `subbox_id`s, track counts and byte
+sizes in every `features/*.md` written before this date describe a library that no
+longer exists. The behaviour those docs record is still the best available account;
+the fixtures are dead. Don't chase a "missing" playlist — mint your own.
+
+`.env.ui-snapshot.local` has been re-pointed at `test060826` (login re-verified
+2026-08-13, HTTP 200), so `getCredentials()` and every driver authenticate
+correctly again.
+
+**`test060826` is NOT a disposable account — it is the user's own working
+fixture.** Its Navidrome `/music` holds `t104before/`, `t104after/`, `t104a2/`,
+`t104b2/` and `backup/`: the before/after comparison data for the pymix #104/#105
+import-performance work, 97 tracks. The usual "it's a test account, write freely"
+latitude **does not apply**. Concretely:
+
+- **Never** bulk-delete, re-tag, or re-import anything under those five
+  directories, and never run a library-wide mutation on this account.
+- Create scratch fixtures under an obviously-scratch name and delete them at end
+  of cycle, exactly as if this were a shared account.
+- A destructive step you can't scope tightly is a reason to **log the check as
+  not-run**, not to proceed carefully.
+
 ## How to read this directory
 
 - `directives.md` — **check this first, every cycle.** User-steered focus
@@ -194,6 +222,47 @@ discovery** — bias regression sweeps and edge-probing toward the `[subbox]`/`[
 surface (upload, delete, local download, sync, wishlist, import-export, sharing,
 filebrowser), and re-drive an `[upstream]` browse/search path only as low-priority
 filler when the subbox areas were all exercised recently.
+
+### Added 2026-08-13 — surface that landed during the runner pause, none of it driven
+
+The client went **1.10.16 → 1.10.23** between 2026-08-04 and 08-13 while the loop
+was paused. The checklist above read 100% `[x]` only because it predates this
+code. All `[subbox]` unless noted, so all high-priority.
+
+- [ ] `[subbox]` **Sync → Download, rebuilt** (#101/#102/#103) — one download with
+  tick-boxes for tracks/XML, web `user_root` gains a `music` segment, and web now
+  shows a manifest where desktop shows a diff. Detail: `features/sync.md`, which is
+  source-rewritten but **not** re-driven. Drive **both** web and desktop — their
+  preview screens genuinely differ now, so a desktop-only pass proves nothing about web.
+- [ ] `[subbox]` **Sync below the 768px breakpoint** (#81) — `ModeToggle` in
+  `MobileLayout`'s header + `MobileSyncPlaceholder`. Never exercised at any
+  viewport width; the whole Sync surface used to be unreachable there.
+- [ ] `[subbox]` **Rekordbox import phase reporting** (#79) — the frozen-100%
+  screen now names the phase and shows that phase's n/total. Needs a long enough
+  import to actually pass through phases; degrades silently against an older pymix.
+- [ ] `[subbox]` **Invite funnel** (`features/invite/`, #72/#91) — an entirely new
+  feature directory: `RequestInviteModal`, `DemoBanner`, `InviteLockedPanel`,
+  `useRequestInvite`, `invite-request-store`. Backend half (`POST /invite-request`)
+  is already covered in `../pymix-qa/features/invite-request.md`, which notes the
+  client half was then unmerged — it has since merged. Includes a demo-user hook
+  converting demo triallists into invite requests.
+- [ ] `[subbox]` **Demo session restrictions** (#92) — delete-track action hidden
+  for a demo session. Client half of pymix #115. Not drivable on the local dev
+  stack (no demo account) — needs the deployed demo login or a code-read.
+- [ ] `[mixed]` **Settings → About tab** (#93/#96/#89) — new `about-tab.tsx`,
+  `legal-settings.tsx`, `licence-settings.tsx`, `music-credits-settings.tsx` plus
+  a generated `credits/music-credits.json`. Covers the GPL-3.0 notices shipped
+  with every build and the Creative Commons demo-library attribution. Worth
+  checking the credits render against the real `music-credits.json`, since that
+  file is regenerated whenever the demo library changes (workspace
+  `docs/demo-library.md`).
+- [ ] `[mixed]` **Legal pages** (#98) — `src/renderer/public/legal/` (ToS, privacy
+  notice, notice-and-action) plus `legal-footer-links.tsx` / `use-legal-links.ts`.
+  Static pages, but the footer links and their reachability from the landing page
+  are drivable.
+- [ ] `[mixed]` **Analytics beacon removed** (#99) — upstream Feishin's beacon no
+  longer loads (`analytics-settings.tsx`). Verifiable as a negative: assert no
+  request to the upstream endpoint on boot.
 
 ## Hard rules (do not relax these)
 

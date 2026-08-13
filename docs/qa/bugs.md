@@ -123,7 +123,48 @@ fix (wiring up an actual caller) has different requirements than guessed here.
 **Fix it when a UI callsite for the lenient matcher is wired up, alongside
 that change, not now.** No `qa-bug` issue by design (nothing a user hits).
 
-### (informational, not urgent) Playlist "Kodzo" has a duplicate track server-side
+### (OPEN — fix written and DECLINED by the user; do not re-implement) Export Settings backup writes no file until the whole app is quit (Electron)
+
+Issue: https://github.com/laker-93/subbox-app/issues/39
+
+Added: 2026-07-25. **Moved back to OPEN 2026-08-13** — it had been recorded in the
+Closed index as FIXED, which was wrong.
+
+**What happened.** A cycle found the bug, fixed it (commit `a7227e1c`: branch the
+Electron path through `window.api.utils.download` → `download-url` IPC →
+`webContents.downloadURL` with a `data:application/json` URL, plus a
+`will-download` handler to name the file), verified it live via
+`settings-journey.mjs` (export landed in ~300ms, previously stuck until app
+quit), and opened PR #40 as designed. **The user closed PR #40 unmerged** the
+same day, with: *"Closing — low priority, not implementing right now. The
+underlying bug … is still tracked in subbox-app#39."* The journal recorded the
+fix as shipped anyway, and — because Step 1½'s close-out only re-examines OPEN
+entries — nothing would ever have corrected it.
+
+**Current state.** The bug is **still live in `development`**; issue #39 is still
+open. Commit `a7227e1c` was **dropped from `claude/continuous-ux`** on 2026-08-13:
+it had been sitting below every later commit, so the branch was building a client
+containing a change the user had declined, and it conflicted with upstream #72
+(which touched the same file), silently blocking `sync-merged.sh`'s rebase. The
+commit is preserved on the local ref `qa-backup-20260813` if it's ever wanted.
+
+**Do not re-fix this.** It is deliberately deprioritised. Leave it OPEN; if it
+ever becomes wanted, the approach above is known-good and recoverable from that
+backup ref. This entry exists so a future cycle recognises it rather than
+rediscovering and re-implementing it.
+
+### (OBSOLETE 2026-08-13 — the fixture no longer exists; do not investigate) Playlist "Kodzo" has a duplicate track server-side
+
+> **Closed as moot 2026-08-13.** This entry describes a data condition on
+> `test260526`, an account that has since been deleted (see `README.md` → "The
+> dev test account changed"). The "Kodzo" playlist went with it — `../pymix-qa`'s
+> own `bugs.md` already noted the container recreation that first orphaned these
+> fixtures back on 2026-07-25. There is nothing left to look at. Kept here only
+> so a cycle that meets a genuine `subbox_id_divergence` signal on `test060826`
+> doesn't waste time hunting for a "known duplicate" that has not existed for
+> weeks — **if you see one now, it is new**. Retained rather than archived
+> because the reasoning below (a correctly-flagged real duplicate is not a false
+> positive) is still the right call for a future occurrence.
 
 Added: 2026-07-09. Found while validating pymix#22's new
 `subbox_id_divergence` signal for real (see `directives.md`).
@@ -154,6 +195,6 @@ false positive if seen again — it's a real, correctly-flagged case.
 - 2026-07-22 | External Drive "Download Missing Tracks" — misdiagnosed as ignoring drivePath (it doesn't; drive is compare-only by design) | NOT A ROUTING BUG — real defect was misleading tooltip/copy claiming tracks land on the drive; fixed by rewording copy + adding Rekordbox XML export, not by changing where files are written; full writeup `features/external-drive-sync.md` | issue #27, PR #29 (supersedes closed PR #28, which had wrongly routed downloads to drivePath)
 - 2026-07-23 | Rekordbox metadata-only import: filebrowser 401 not retried + failed import shown as success toast | FIXED — sync:upload-xml now uses createFbAuth/fbRequest retry; poll loop + done screen now branch on prog.result/error; re-verified live via new rekordbox-metadata-import.mjs | issue #30, PR #31
 - 2026-07-24 | Player-bar favorite button: removing a favorite often doesn't visually update | NOT REPRODUCIBLE on re-check — 21/21 fresh trials (8 REMOVE) correct with full request/state/render tracing; original 3/5 remove-failure cause unknown, not present now; no code change | issue #38 (closed not-reproducible)
-- 2026-07-25 | Export Settings backup wrote no file until the whole app was quit (Electron) | FIXED — onExportSettings now routes Electron through window.api.utils.download (data: URL + will-download handler names the file); re-verified live via settings-journey.mjs (export lands in ~300ms, was previously stuck until app quit) | issue #39, PR #40
+- 2026-07-25 | Export Settings backup wrote no file until the whole app was quit (Electron) | ~~FIXED~~ **REOPENED 2026-08-13 — see the OPEN entry above; PR #40 was closed unmerged** | issue #39 (still open), PR #40 (CLOSED, not merged)
 - 2026-07-26 | Wishlist create modal: link parse-link prefill never fired (onBlur silently overwritten by form.getInputProps spread) | FIXED — reordered so handleLinkBlur runs after the spread; re-verified live via wishlist-bulk-and-sheet.mjs (artist/title now prefill from a pasted YouTube link) | issue #44, PR https://github.com/laker-93/subbox-app/pull/45
 - 2026-08-02 | Row-level favorite heart icon silently no-ops (`item._serverId` mismatch) | CLOSED NOT-REPRODUCIBLE — 21/21 clean trials across 2 cycles (6+15), both leads (stuck-mutation-cache, boot-race) ruled out with direct evidence; same bar as sibling #38 | issue #53 (closed not-reproducible)

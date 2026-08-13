@@ -6,6 +6,56 @@ Verified 2026-07-09 against subbox-app `claude/continuous-ux` (rebased onto
 `laker93/pymix:qa-local`) in the local dev stack. Test account `test260526`
 (774 real local tracks, most already SUBBOX_ID-tagged from prior real usage).
 
+> **⚠️ THE OLDEST DOC IN THIS JOURNAL, AND THE SURFACE IT DESCRIBES WAS REBUILT.**
+> Verified 2026-07-09; between 2026-08-04 and 08-13, while the runner was paused,
+> **every file under `src/renderer/features/sync/` changed** and the app went from
+> 1.10.16 to 1.10.23. The `test260526` account it was verified against no longer
+> exists either (see `README.md`). Everything below is the 07-09 behaviour; the
+> section that follows is a source-read of what moved, **not driven**. This is the
+> single highest-priority regression sweep on the client side.
+>
+> ### What changed (source-read 2026-08-13, needs driving)
+>
+> - **One download, tick-boxes choose its contents (#101).** The web client's
+>   Download used to save `music.zip` and *silently lose* the Rekordbox XML —
+>   nothing failed, pymix served it 200 and the browser discarded it, because
+>   Chrome allows one download per user gesture and needs the per-origin
+>   "Automatic downloads" permission for a second. There is now only ever one
+>   download, with "Include tracks" / "Include Rekordbox XML" choosing what's in
+>   it (paired with pymix #118 — a metadata-only export is XML-only, no zip).
+> - **Web `user_root` now gets a `music` segment appended (#102).** The zip nests
+>   tracks under `music/`, so the folder the user typed was one level too shallow
+>   and every XML `Location` linked nothing. Desktop was never affected (it sends
+>   `appPath/music` and unzips into `appPath`). The resolved path is now echoed
+>   back to the user, because a wrapper folder added by their unzipper (Windows'
+>   Extract All always adds one) is otherwise invisible until Rekordbox fails.
+>   The XML is also routed out of the zip **by basename as well as full path**.
+> - **Web and desktop previews now differ (#103).** The web build has no
+>   filesystem access, so it sends `/sync/plan` an empty `localTracks` — which
+>   pins the classification: `existing` always empty, `tracksAlreadyPresent`
+>   always 0, `missing` always everything. Web therefore no longer renders a diff
+>   at all; it shows a manifest (playlist/track counts + download size). **Desktop
+>   keeps the full diff UI described below.** Also fixed a metadata-tab crash.
+> - **Rekordbox import shows real phases (#79).** The progress screen derived
+>   everything from a percentage that saturated the moment the last audio file
+>   landed, while two more passes still ran — a 100-track prod import sat at
+>   "95/95 (100%)" for ~13 more minutes, indistinguishable from a hang. It now
+>   shows the phase name and that phase's own n/total (pymix #51). All three
+>   fields are optional, so it degrades cleanly against an older pymix.
+> - **Sync is reachable on mobile (#81).** Below the 768px breakpoint the entire
+>   Upload/Download/Watch/External Drive surface was silently unreachable with no
+>   URL escape hatch (`appMode` is zustand state, not a route). `ModeToggle` was
+>   extracted to `features/sync/components/mode-toggle` and is rendered in
+>   `MobileLayout`'s header; switching to Sync on mobile now shows
+>   `MobileSyncPlaceholder` instead of the mode vanishing. **New coverage: drive
+>   this at a viewport under 768px** — it has never been exercised.
+> - **Watch poller re-entrancy guard (#88)** — see `features/watch-upload.md`.
+> - **Hidden-staging-dir fix (#82).** A Rekordbox track whose album or artist
+>   starts with a dot uploaded fine, reached beets staging, and was never
+>   imported (beets ignores hidden paths), reporting 97-of-99 under a green tick
+>   with no error. `sanitizePathSegment` now strips leading dots for staging path
+>   components. A good edge case to re-probe.
+
 ## UI path
 
 Library/Sync segmented control (top of main content area, always rendered) →
