@@ -1780,14 +1780,9 @@ ipcMain.handle(
         /** False once a later `sync:start-watch` has superseded this watcher. */
         const isCurrent = () => generation === watchGeneration;
 
-        // The retired pass stops at its next file boundary; wait it out so the two
-        // watchers never upload at once (and so it can't repopulate the sets we
-        // are about to clear). Its errors are handled inside pollAndUpload.
-        if (inFlightPoll) await inFlightPoll.catch(() => {});
-
-        // Clear cached presence so a fresh startup check runs immediately
-        knownPresentIds.clear();
-        inFlightUploadIds.clear();
+        // Waiting out a retired pass and clearing the caches both happen in the
+        // deferred startup below, not here: this handler must resolve as soon as
+        // the watcher is requested so the renderer can flip the button.
 
         const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
 
@@ -2001,19 +1996,48 @@ ipcMain.handle(
             return poll;
         };
 
-        // Run immediately on start
-        await runPoll();
+        // Give the renderer something to render the instant its progress panel
+        // mounts. The first pass can take minutes on a large directory, and until
+        // it emits its own scanning event there would otherwise be nothing at all
+        // on screen — which is indistinguishable from a dropped click.
+        sendProgress({ currentFile: '', phase: 'scanning', total: 0, uploaded: 0 });
 
-        // Then poll at interval. Skip the tick while a pass is still running: a
-        // batch that outlasts the interval would otherwise have the next pass
-        // stack on top of it, and since a file is only added to knownPresentIds
-        // *after* its upload finishes, the overlapping pass sees it as still
-        // missing and re-uploads it. Left unguarded that compounds — more passes,
-        // more contention, 502s, retries — and never converges.
-        watchInterval = setInterval(() => {
-            if (inFlightPoll) return;
-            runPoll().catch(console.error);
-        }, pollIntervalMs);
+        // Start the watcher without waiting for the first pass to finish. The pass
+        // reports itself over sync:watch-progress exactly like every subsequent
+        // one, so there is nothing for the caller to wait on — and awaiting it here
+        // used to keep the renderer's `await ipc.invoke` pending for the whole first
+        // upload, leaving the button on "Start Watching" the entire time.
+        void (async () => {
+            // The retired pass stops at its next file boundary; wait it out so the
+            // two watchers never upload at once (and so it can't repopulate the sets
+            // we are about to clear). Its errors are handled inside pollAndUpload.
+            if (inFlightPoll) await inFlightPoll.catch(() => {});
+
+            // A newer sync:start-watch (or a stop) arrived while we waited — it owns
+            // the caches and the interval now, so this generation must not touch them.
+            if (!isCurrent()) return;
+
+            // Clear cached presence so a fresh startup check runs immediately
+            knownPresentIds.clear();
+            inFlightUploadIds.clear();
+
+            // runPoll() marks inFlightPoll synchronously, so the interval armed on
+            // the next line already sees the first pass and skips its early ticks.
+            const firstPass = runPoll();
+
+            // Then poll at interval. Skip the tick while a pass is still running: a
+            // batch that outlasts the interval would otherwise have the next pass
+            // stack on top of it, and since a file is only added to knownPresentIds
+            // *after* its upload finishes, the overlapping pass sees it as still
+            // missing and re-uploads it. Left unguarded that compounds — more passes,
+            // more contention, 502s, retries — and never converges.
+            watchInterval = setInterval(() => {
+                if (inFlightPoll) return;
+                runPoll().catch(console.error);
+            }, pollIntervalMs);
+
+            await firstPass;
+        })().catch(console.error);
     },
 );
 

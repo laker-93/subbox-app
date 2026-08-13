@@ -23,6 +23,8 @@ export const SyncWatch = () => {
     const currentServer = useCurrentServerWithCredential();
     const [watchDir, setWatchDir] = useState<null | string>(null);
     const [watching, setWatching] = useState(false);
+    /** True between the Start click and sync:start-watch resolving. */
+    const [starting, setStarting] = useState(false);
     const [progress, setProgress] = useState<null | WatchProgress>(null);
 
     // Load persisted watch directory and active state on mount
@@ -63,22 +65,35 @@ export const SyncWatch = () => {
 
     const handleStartWatch = useCallback(async () => {
         if (!ipc || !watchDir || !localSettings) return;
-        await ipc.invoke('sync:start-watch', {
-            filebrowserToken: currentServer.fbToken,
-            filebrowserUrl: urlConfig.filebrowser,
-            pymixUrl: urlConfig.pymix,
-            serverId: currentServer.id,
-            username: currentServer.username,
-            watchDir,
-        });
+        // Flip to the watching state on the request rather than on the reply, so
+        // the button and the progress panel are live for the first pass instead of
+        // looking like the click was dropped. Rolled back below if the start fails.
+        setStarting(true);
         setWatching(true);
-        localSettings.set('watch_active', true);
+        try {
+            await ipc.invoke('sync:start-watch', {
+                filebrowserToken: currentServer.fbToken,
+                filebrowserUrl: urlConfig.filebrowser,
+                pymixUrl: urlConfig.pymix,
+                serverId: currentServer.id,
+                username: currentServer.username,
+                watchDir,
+            });
+            localSettings.set('watch_active', true);
+        } catch (err) {
+            console.error('Failed to start watching:', err);
+            setWatching(false);
+            setProgress(null);
+        } finally {
+            setStarting(false);
+        }
     }, [currentServer.fbToken, currentServer.id, currentServer.username, watchDir]);
 
     const handleStopWatch = useCallback(async () => {
         if (!ipc || !localSettings) return;
         await ipc.invoke('sync:stop-watch');
         setWatching(false);
+        setProgress(null);
         localSettings.set('watch_active', false);
     }, []);
 
@@ -116,6 +131,8 @@ export const SyncWatch = () => {
                 <Group gap="sm">
                     {!watching ? (
                         <Button
+                            disabled={starting}
+                            loading={starting}
                             onClick={handleStartWatch}
                             tooltip={{
                                 label: 'Start watching this folder. New audio files are uploaded to Sub-box while the app is open.',
@@ -130,6 +147,10 @@ export const SyncWatch = () => {
                     ) : (
                         <Button
                             color="red"
+                            // The start is still in flight; stopping now would race
+                            // it and leave watch_active persisted as true.
+                            disabled={starting}
+                            loading={starting}
                             onClick={handleStopWatch}
                             tooltip={{
                                 label: 'Stop watching this folder. New files will no longer be uploaded automatically.',
