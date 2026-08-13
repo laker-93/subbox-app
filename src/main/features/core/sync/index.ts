@@ -13,6 +13,7 @@ import * as unzipper from 'unzipper';
 
 import { appConfig } from '/@/main/config/app-config';
 import { getStoredPassword } from '/@/main/features/core/settings';
+import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip-layout';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 import {
     extractPlaylists,
@@ -1141,6 +1142,9 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
  * folder, not the music tree. It also has to overwrite: the merge below skips
  * files that already exist, which is right for audio and wrong for an XML that
  * describes this export.
+ *
+ * resolveExtractDestination owns which entry lands where, including matching the
+ * XML under either zip layout — see export-zip-layout.ts.
  */
 async function unzipAndMerge(
     zipFilePath: string,
@@ -1164,19 +1168,19 @@ async function unzipAndMerge(
                     return;
                 }
 
-                const redirectedPath = extractTo[entryPath];
-                if (redirectedPath) {
-                    const redirectedDir = path.dirname(redirectedPath);
+                const destination = resolveExtractDestination(entryPath, targetDirPath, extractTo);
+                if (destination.redirected) {
+                    const redirectedDir = path.dirname(destination.path);
                     if (!fs.existsSync(redirectedDir)) {
                         fs.mkdirSync(redirectedDir, { recursive: true });
                     }
                     // Not pushed to newFilePaths: it isn't audio, so there's no
                     // SUBBOX_ID to cache off it.
-                    entry.pipe(fs.createWriteStream(redirectedPath));
+                    entry.pipe(fs.createWriteStream(destination.path));
                     return;
                 }
 
-                const filePath = path.join(targetDirPath, entryPath);
+                const filePath = destination.path;
                 const dir = path.dirname(filePath);
                 if (!fs.existsSync(dir)) {
                     fs.mkdirSync(dir, { recursive: true });
