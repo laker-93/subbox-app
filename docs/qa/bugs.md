@@ -123,6 +123,40 @@ fix (wiring up an actual caller) has different requirements than guessed here.
 **Fix it when a UI callsite for the lenient matcher is wired up, alongside
 that change, not now.** No `qa-bug` issue by design (nothing a user hits).
 
+### (unconfirmed, cosmetic — NOT a regression from the account change; no issue filed) Spurious "Failed to get user info" error toast on a forced-fresh login
+
+Added: 2026-08-14, during the pre-resume smoke check of the re-pointed
+`test060826` credentials (client built at 1.10.23 from the freshly-rebased
+branch, `scripts/ui-snapshot-electron.mjs`).
+
+**Symptom.** The app logs in successfully and renders correctly, but shows an
+`Error / Failed to get user info` toast *alongside* the `Success / Logged in
+successfully` one. Screenshot: `.ui-snapshots/electron-home-1440x900-1786692083474.png`.
+
+**Not a server-side failure.** `navidrometest060826`'s log shows **every**
+`getUser.view` in that window returning `status=OK` / `httpStatus=200` (3
+request/response pairs, including a manual `curl` control). So the throw at
+`hooks/use-server-authenticated.ts:85` (`if (!userInfo) throw`) fired on a path
+that returned falsy **without making a request at all** — i.e. the hook ran
+before the server/auth state resolved.
+
+**Almost certainly the already-known boot race, not new.** The issue #53
+investigation (closed not-reproducible after 21/21 clean trials, full history in
+`bugs-archive.md`) found exactly this shape: `_serverId` can be stale or absent
+on a session's **very first load**, not only across a logoff cycle. It's also
+specific to the harness's `forceFreshLogin()`, which wipes localStorage directly
+rather than going through the real logoff path — so the app boots with no server,
+this hook fires, fails, and the subsequent real login succeeds.
+
+**Why NOT filed.** Observed once, cosmetic (nothing downstream is broken — the
+retry succeeds and `isAdmin` is correctly updated), and only under the
+fresh-login driver path. **Do not treat this as a regression caused by the
+2026-08-13 account re-point** — that's the trap this entry exists to prevent. If
+you want to close it out: drive a *resumed-session* launch (no `forceFreshLogin`)
+and see whether the toast still appears. If it does, it's real and worth an
+issue; if it only appears on forced-fresh boots, it's the harness artifact and
+this entry can be archived.
+
 ### (OPEN — fix written and DECLINED by the user; do not re-implement) Export Settings backup writes no file until the whole app is quit (Electron)
 
 Issue: https://github.com/laker-93/subbox-app/issues/39
