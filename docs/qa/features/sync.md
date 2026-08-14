@@ -11,8 +11,11 @@ Verified 2026-07-09 against subbox-app `claude/continuous-ux` (rebased onto
 > **every file under `src/renderer/features/sync/` changed** and the app went from
 > 1.10.16 to 1.10.23. The `test260526` account it was verified against no longer
 > exists either (see `README.md`). Everything below is the 07-09 behaviour; the
-> section that follows is a source-read of what moved, **not driven**. This is the
-> single highest-priority regression sweep on the client side.
+> section that follows is a source-read of what moved. **2026-08-14: the desktop
+> half is now driven and verified — see "Desktop tick-boxes, re-verified
+> 2026-08-14" below.** Web (`#102`/`#103` manifest view) and the sub-768px mobile
+> breakpoint (`#81`) are still source-read only, not driven — still the
+> highest-priority regression sweep remaining on the client side.
 >
 > ### What changed (source-read 2026-08-13, needs driving)
 >
@@ -55,6 +58,49 @@ Verified 2026-07-09 against subbox-app `claude/continuous-ux` (rebased onto
 >   imported (beets ignores hidden paths), reporting 97-of-99 under a green tick
 >   with no error. `sanitizePathSegment` now strips leading dots for staging path
 >   components. A good edge case to re-probe.
+
+## Desktop tick-boxes, re-verified 2026-08-14
+
+Driven live (Electron, `electron-vite build --mode development`) against
+`test060826`'s "Downtempo" playlist (9 tracks — smallest real playlist on this
+account; `test260526`'s fixtures no longer exist, see `README.md`). New driver
+`scripts/qa/sync-download-tickboxes.mjs`. pymix **not** rebuilt/swapped — the
+shared container was already serving normal `/sync/plan`/`/sync/playlists`
+requests, no image change needed for a client-only regression.
+
+- **Both tick-boxes render and default checked** ("Include tracks", "Include
+  Rekordbox XML") on a fresh plan.
+- **Desktop keeps the full diff** — "Missing (N)" / "Already Present (N)" /
+  "Metadata Updates (N)" tabs all present (confirms #103's web/desktop split
+  didn't regress desktop's own view).
+- **Untick "Include tracks" → XML-only download**: button label correctly
+  becomes "Download Rekordbox XML", the download completes, done-screen text
+  reads "Rekordbox XML downloaded. No audio files, as requested.", and
+  (confirmed on disk) no audio files land — only `subbox_rb_export.xml`.
+- **Both ticked → full download**: 9 real mp3s landed in
+  `subbox-dev/music/<artist>/<album>/...` (byte-identical count to the
+  playlist), plus the Rekordbox XML; done screen shows both "Show Music" and
+  "Show Rekordbox XML" buttons. `Promise.race`'d against the error toast per
+  the driver-gotchas convention — no hang.
+- **Real, verified behavior (not a bug): `includeTracks`/`includeRekordboxXml`
+  are plain component state, not reset by "Start Over" (`handleBack` only
+  resets `step`/`plan`/`error`/`downloadResult`).** So unticking "Include
+  tracks", downloading, then clicking "Start Over" and picking a new plan
+  **keeps it unticked** — confirmed live (the driver had to explicitly
+  re-check the box to test the tracks+XML combo a second time; its first
+  attempt at this, assuming a reset, got a `Download Rekordbox XML` button
+  where it expected `Download & Extract`). Worth remembering for whoever next
+  touches this screen: it's a "remember what I last asked for" behavior, which
+  reads as reasonable, not broken — flagging here rather than in `bugs.md`
+  since nothing was wrong, just undocumented.
+- Scratch downloads (9 mp3s + XML) deleted after; `subbox-dev/music` directory
+  tree left otherwise untouched.
+
+**Not yet driven this cycle:** web build's manifest view (#102/#103 — needs
+`pnpm dev:web` against the local pymix, per the "Download side, WEB build"
+section below, which itself predates this rebuild and needs re-running) and
+the sub-768px mobile breakpoint (#81, `MobileSyncPlaceholder`) — next
+regression-sweep cycle on this doc should pick up one of those.
 
 ## UI path
 

@@ -231,9 +231,12 @@ code. All `[subbox]` unless noted, so all high-priority.
 
 - [ ] `[subbox]` **Sync → Download, rebuilt** (#101/#102/#103) — one download with
   tick-boxes for tracks/XML, web `user_root` gains a `music` segment, and web now
-  shows a manifest where desktop shows a diff. Detail: `features/sync.md`, which is
-  source-rewritten but **not** re-driven. Drive **both** web and desktop — their
-  preview screens genuinely differ now, so a desktop-only pass proves nothing about web.
+  shows a manifest where desktop shows a diff. Detail: `features/sync.md`.
+  **2026-08-14: desktop half driven and verified** (tick-boxes, XML-only vs.
+  tracks+XML, full diff tabs — see the doc's "Desktop tick-boxes" section). Still
+  unchecked because **web's manifest view (#102/#103) and the sub-768px mobile
+  breakpoint (#81) remain undriven** — a desktop-only pass proves nothing about
+  web, per the original note.
 - [ ] `[subbox]` **Sync below the 768px breakpoint** (#81) — `ModeToggle` in
   `MobileLayout`'s header + `MobileSyncPlaceholder`. Never exercised at any
   viewport width; the whole Sync surface used to be unreachable there.
