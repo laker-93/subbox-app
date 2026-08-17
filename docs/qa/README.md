@@ -229,17 +229,16 @@ The client went **1.10.16 → 1.10.23** between 2026-08-04 and 08-13 while the l
 was paused. The checklist above read 100% `[x]` only because it predates this
 code. All `[subbox]` unless noted, so all high-priority.
 
-- [ ] `[subbox]` **Sync → Download, rebuilt** (#101/#102/#103) — one download with
+- [x] `[subbox]` **Sync → Download, rebuilt** (#101/#102/#103) — one download with
   tick-boxes for tracks/XML, web `user_root` gains a `music` segment, and web now
   shows a manifest where desktop shows a diff. Detail: `features/sync.md`.
-  **2026-08-14: desktop half driven and verified** (tick-boxes, XML-only vs.
-  tracks+XML, full diff tabs — see the doc's "Desktop tick-boxes" section). Still
-  unchecked because **web's manifest view (#102/#103) and the sub-768px mobile
-  breakpoint (#81) remain undriven** — a desktop-only pass proves nothing about
-  web, per the original note.
-- [ ] `[subbox]` **Sync below the 768px breakpoint** (#81) — `ModeToggle` in
-  `MobileLayout`'s header + `MobileSyncPlaceholder`. Never exercised at any
-  viewport width; the whole Sync surface used to be unreachable there.
+  2026-08-14: desktop half (tick-boxes, XML-only vs. tracks+XML, full diff
+  tabs). 2026-08-17: web half (manifest view, no diff tabs, tick-boxes, extract-path
+  field, both download outcomes) — all sub-steps now driven and verified.
+- [x] `[subbox]` **Sync below the 768px breakpoint** (#81) — `ModeToggle` in
+  `MobileLayout`'s header + `MobileSyncPlaceholder`. Verified live 2026-08-17 at
+  400×800: mobile layout mounts, placeholder shows with working "Back to
+  Library", real Sync tabs don't leak through: `features/sync.md`.
 - [ ] `[subbox]` **Rekordbox import phase reporting** (#79) — the frozen-100%
   screen now names the phase and shows that phase's n/total. Needs a long enough
   import to actually pass through phases; degrades silently against an older pymix.

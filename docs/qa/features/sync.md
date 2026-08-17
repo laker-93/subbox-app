@@ -13,9 +13,10 @@ Verified 2026-07-09 against subbox-app `claude/continuous-ux` (rebased onto
 > exists either (see `README.md`). Everything below is the 07-09 behaviour; the
 > section that follows is a source-read of what moved. **2026-08-14: the desktop
 > half is now driven and verified — see "Desktop tick-boxes, re-verified
-> 2026-08-14" below.** Web (`#102`/`#103` manifest view) and the sub-768px mobile
-> breakpoint (`#81`) are still source-read only, not driven — still the
-> highest-priority regression sweep remaining on the client side.
+> 2026-08-14" below. 2026-08-17: the web manifest view (`#102`/`#103`) and the
+> sub-768px mobile breakpoint (`#81`) are now also driven and verified — see
+> "Web manifest view" and "Mobile breakpoint" below.** All three sub-steps of
+> the rebuild are now live-verified; nothing left source-read-only on this row.
 >
 > ### What changed (source-read 2026-08-13, needs driving)
 >
@@ -96,11 +97,57 @@ requests, no image change needed for a client-only regression.
 - Scratch downloads (9 mp3s + XML) deleted after; `subbox-dev/music` directory
   tree left otherwise untouched.
 
-**Not yet driven this cycle:** web build's manifest view (#102/#103 — needs
-`pnpm dev:web` against the local pymix, per the "Download side, WEB build"
-section below, which itself predates this rebuild and needs re-running) and
-the sub-768px mobile breakpoint (#81, `MobileSyncPlaceholder`) — next
-regression-sweep cycle on this doc should pick up one of those.
+## Web manifest view, verified 2026-08-17 (#101/#102/#103)
+
+Driven live via `pnpm dev:web` (port 4343, the only origin in pymix's local CORS
+allowlist) against `test060826`'s "Downtempo" playlist (9 tracks). New driver
+`scripts/qa/web-sync-manifest.mjs` — supersedes the pre-rebuild
+`web-sync-download-zip.mjs` (kept below for its still-relevant CORS/auth
+context, but its own tick-box-less flow predates #101). pymix **not**
+rebuilt/swapped — read-only `/sync/plan` + `/sync/playlists` calls against the
+already-running shared container.
+
+- **Manifest, not a diff**: "1 Playlist / 9 Tracks / 54.5 MB Download" badges,
+  a flat "Tracks in this download" list, no Missing/Already Present/Metadata
+  tabs — confirmed both by DOM query (`missing (N)` button absent) and by
+  screenshot. Matches the source comment exactly (`existing` pinned empty,
+  `tracksAlreadyPresent` pinned 0 on the web branch since `localTracks: []`).
+- **Both tick-boxes present and default-checked**, same as desktop.
+- **Web-only "folder you'll extract music.zip into" field** renders (only when
+  "Include Rekordbox XML" is ticked), with the `music`-segment-preview text
+  described in source once a path is typed.
+- **XML-only download** (untick "Include tracks"): button label becomes
+  "Download Rekordbox XML", a real Playwright `download` event fires for
+  `subbox_rb_export.xml`.
+- **Tracks + XML download** (re-tick, "Start Over", re-plan — needed the same
+  re-select-after-remount retry loop as the desktop driver): button reads
+  "Download Zip", a real `download` event fires for `music.zip`. (The zip's
+  internal `music/`-nesting + XML routing was already verified server-side in
+  `../pymix-qa`'s 2026-08-14 cycle; this confirms the client requests/consumes
+  it correctly, not the zip bytes again.)
+- **`includeTracks` persists un-ticked across "Start Over"** on web too, same
+  documented (not-a-bug) behavior as desktop.
+- Noted, not filed: every web run logs one console 404 for `GET /settings.js`
+  — `index.html` unconditionally `<script src="settings.js">`s in the `web`
+  build (real deploys generate it from `settings.js.template`; `pnpm dev:web`'s
+  dev server has no such file). Cosmetic, dev-only, no functional impact
+  observed (login/Sync worked identically both drivers) — not investigated
+  further, same class as the already-dismissed cosmetic 502 noise elsewhere in
+  this doc.
+
+## Mobile breakpoint, verified 2026-08-17 (#81)
+
+New driver `scripts/qa/mobile-sync-breakpoint.mjs`, Chromium at 400×800 (well
+under the 768px `useIsMobile` media query) against `pnpm dev:web`. Never
+exercised at any viewport width before this cycle.
+
+- `#mobile-layout` mounts (not just a squished `DefaultLayout`).
+- `ModeToggle` renders in the mobile header; switching to Sync shows
+  `MobileSyncPlaceholder`'s "Sync needs a wider screen" copy + a working "Back
+  to Library" button (round-tripped — clicking it correctly leaves the
+  placeholder).
+- Confirmed the real Sync UI (e.g. an "Upload (Rekordbox)" tab) does **not**
+  leak through underneath the placeholder.
 
 ## UI path
 
