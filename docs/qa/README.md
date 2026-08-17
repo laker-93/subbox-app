@@ -242,12 +242,13 @@ code. All `[subbox]` unless noted, so all high-priority.
 - [ ] `[subbox]` **Rekordbox import phase reporting** (#79) — the frozen-100%
   screen now names the phase and shows that phase's n/total. Needs a long enough
   import to actually pass through phases; degrades silently against an older pymix.
-- [ ] `[subbox]` **Invite funnel** (`features/invite/`, #72/#91) — an entirely new
-  feature directory: `RequestInviteModal`, `DemoBanner`, `InviteLockedPanel`,
-  `useRequestInvite`, `invite-request-store`. Backend half (`POST /invite-request`)
-  is already covered in `../pymix-qa/features/invite-request.md`, which notes the
-  client half was then unmerged — it has since merged. Includes a demo-user hook
-  converting demo triallists into invite requests.
+- [x] `[subbox]` **Invite funnel** (`features/invite/`, #72/#91) — landing-page and
+  create-account entry points driven live, bug found + fixed (mutation retry was
+  burning the invite endpoint's 5/hour rate limit): `features/invite-funnel.md`,
+  `bugs.md` (issue #105, PR #106, FIXED). `DemoBanner`/`InviteLockedPanel`
+  (`source: demoBanner`/`blockedAction`) still undriven — both require a demo
+  session, not available on the local dev stack; same caveat as the "Demo session
+  restrictions" row below.
 - [ ] `[subbox]` **Demo session restrictions** (#92) — delete-track action hidden
   for a demo session. Client half of pymix #115. Not drivable on the local dev
   stack (no demo account) — needs the deployed demo login or a code-read.
