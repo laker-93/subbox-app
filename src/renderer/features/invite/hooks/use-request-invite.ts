@@ -15,7 +15,8 @@ export type InviteRequestBody = z.infer<typeof pymixType._parameters.inviteReque
  * left to propagate as-is (a `PymixInviteRequestError`) rather than being toasted here —
  * the form renders an invalid address inline against the field, which a toast can't do.
  *
- * `retry: false` overrides the app-wide mutation default (3 retries in production).
+ * `retry: false` is now the app-wide default too, but it is pinned here because this
+ * call site is the one with a hard external budget to protect.
  * Verified live: without this, one submit of a rejected address fired 4 requests
  * (~8s of exponential backoff) against pymix's `/invite-request`, which caps at 5/hour
  * per IP specifically so a real user correcting a typo never gets rate-limited — a

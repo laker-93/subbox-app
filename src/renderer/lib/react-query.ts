@@ -21,12 +21,33 @@ const queryCache = new QueryCache({
 
 const queryConfig: DefaultOptions = {
     mutations: {
-        retry: process.env.NODE_ENV === 'production' ? 3 : false,
+        // No blind retries. Every API layer collapses its transport error into a bare
+        // `Error` (the ts-rest `api:` adapters in *-api.ts catch the AxiosError and turn
+        // it into a `{ status }` response, and the controllers then throw
+        // `new Error('Failed to ...')`), so nothing here can tell a definite rejection
+        // apart from a transient blip — a status-aware predicate would have nothing to
+        // read. Retrying blind is wrong for the mutations we actually have:
+        //   - non-idempotent writes (add-to-playlist, create-playlist, create-radio-
+        //     station, create-wishlist-item, scrobble) duplicate server-side if the
+        //     write lands but the response is lost in transit;
+        //   - a genuine 4xx just fails three more times;
+        //   - mutations with optimistic updates (set-rating, create/delete-favorite,
+        //     delete-playlist) hold the wrong UI state and defer their error toast for
+        //     the whole backoff window, because onError only runs once retries are spent.
+        // Re-enable per call site if one ever has a real reason to.
+        retry: false,
     },
     queries: {
         gcTime: 1000 * 20, // 20 seconds
         refetchOnWindowFocus: false,
-        retry: process.env.NODE_ENV === 'production',
+        // Was `retry: process.env.NODE_ENV === 'production'`, i.e. a bare `true` — which
+        // in react-query v5 means *infinite* retries, not 3 (`shouldRetry = retry === true
+        // || ...` short-circuits). Since a plain `vite build` always defines NODE_ENV as
+        // 'production' regardless of the --mode used for env-file selection, every built
+        // app retried every failed query forever on a 30s-capped backoff. The dev/prod
+        // split itself is kept as-is: only `vite dev` takes the `false` branch, so a live
+        // dev server still fails fast instead of masking errors behind retries.
+        retry: process.env.NODE_ENV === 'production' ? 3 : false,
         staleTime: 1000 * 10, // 10 seconds
         throwOnError: (error: any) => {
             return error?.response?.status >= 500;
