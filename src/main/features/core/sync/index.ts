@@ -1443,6 +1443,16 @@ const knownPresentIds = new Set<string>();
  */
 const inFlightUploadIds = new Set<string>();
 /**
+ * Per-file (size, mtime) recorded by the *previous* poll pass, keyed by path. A
+ * file only counts as finished once a pass observes both unchanged from the last
+ * one — a downloader still writing into it changes at least one of them between
+ * polls. This has to run before tagging: TagLib can open a truncated file just
+ * fine (the ID3 header sits at the front, which a partial download already has),
+ * and writing the SUBBOX_ID tag itself changes the file, so checking after
+ * tagging would make every file look "changed" forever. See issue #85.
+ */
+const fileStabilityHistory = new Map<string, { mtimeMs: number; size: number }>();
+/**
  * Bumped by every `sync:start-watch`. A poll pass captures the value it started
  * under and stops as soon as it no longer matches, so restarting the watcher
  * (auto-resume on launch, or the Start Watching button) can't leave the
@@ -1505,15 +1515,19 @@ function getAudioFiles(dirPath: string): string[] {
 
 /**
  * Return the existing SUBBOX_ID for a file, or generate a fresh UUID.
- * Returns null if the file cannot be opened by TagLib — this indicates a partial
- * or corrupt file (e.g. a download still in progress) and it should be skipped.
+ * Returns null if the file cannot be opened by TagLib — this indicates a
+ * genuinely corrupt file, since callers are expected to have already filtered
+ * out files still being written (see `isFileSizeStable`): TagLib only needs the
+ * ID3 header at the front of the file, which a partial download already has, so
+ * it cannot by itself tell "still downloading" from "complete".
  * If the file is valid but writing the tag fails, the UUID is still returned so
  * the upload can proceed.
  */
 function getOrCreateSubboxId(filePath: string): null | string {
-    // Validate the file is a complete, parseable audio file before proceeding.
-    // TagLib throws on truncated or corrupt files, making this a reliable
-    // completeness check that avoids uploading partial downloads.
+    // Validate the file is parseable before proceeding — TagLib throws on files
+    // it genuinely can't make sense of. This is not a completeness check (a
+    // truncated file with an intact header parses fine); that's handled by the
+    // caller via isFileSizeStable before this is ever called.
     let probe: null | TagLib.File = null;
     try {
         probe = TagLib.File.createFromPath(filePath);
@@ -1533,6 +1547,37 @@ function getOrCreateSubboxId(filePath: string): null | string {
         console.error(`[subbox-id] Failed to write SUBBOX_ID tag to ${filePath}:`, err);
     }
     return newId;
+}
+
+/**
+ * True once `history` has already seen this exact (size, mtime) for `filePath` —
+ * i.e. nothing wrote to it between the previous poll and this one. Always
+ * records the current stat before returning, so the *next* call is the one that
+ * can return true for a file that just stopped changing.
+ *
+ * A file that disappears between the directory listing and the stat (e.g.
+ * renamed away mid-poll) is treated as unstable and its history is dropped —
+ * if it reappears later it must re-earn stability rather than compare against
+ * a stale reading.
+ */
+function isFileSizeStable(
+    filePath: string,
+    history: Map<string, { mtimeMs: number; size: number }>,
+): boolean {
+    let stat: fs.Stats;
+    try {
+        stat = fs.statSync(filePath);
+    } catch {
+        history.delete(filePath);
+        return false;
+    }
+
+    const previous = history.get(filePath);
+    history.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size });
+
+    return (
+        previous !== undefined && previous.size === stat.size && previous.mtimeMs === stat.mtimeMs
+    );
 }
 
 // ── SUBBOX_ID cache ──────────────────────────────────────────────────────────
@@ -1851,14 +1896,36 @@ ipcMain.handle(
                 const audioFiles = getAudioFiles(watchDir);
                 if (audioFiles.length === 0) {
                     sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
+                    fileStabilityHistory.clear();
                     return;
                 }
 
-                // Step 1: Tag each file to get its SUBBOX_ID.
-                // getOrCreateSubboxId returns null if TagLib cannot open the file,
-                // which reliably identifies partial/corrupt files (e.g. still downloading).
+                // Drop history for files that vanished since the last pass (uploaded
+                // and cleared out by the downloader, deleted, renamed, ...) so a later
+                // same-named file can't be compared against a stale reading.
+                const audioFileSet = new Set(audioFiles);
+                for (const trackedPath of fileStabilityHistory.keys()) {
+                    if (!audioFileSet.has(trackedPath)) fileStabilityHistory.delete(trackedPath);
+                }
+
+                // Step 1: Only files whose size and mtime are unchanged since the
+                // previous pass are treated as finished downloads — see
+                // fileStabilityHistory's doc comment for why this has to happen
+                // before tagging rather than after.
+                const stableFiles = audioFiles.filter((f) =>
+                    isFileSizeStable(f, fileStabilityHistory),
+                );
+                if (stableFiles.length === 0) {
+                    sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
+                    return;
+                }
+
+                // Step 2: Tag each stable file to get its SUBBOX_ID.
+                // getOrCreateSubboxId returning null now means the file is genuinely
+                // corrupt, not merely still downloading (that's already filtered out
+                // above).
                 const fileIdMap = new Map<string, string>(); // filePath → subboxId
-                for (const filePath of audioFiles) {
+                for (const filePath of stableFiles) {
                     const id = getOrCreateSubboxId(filePath);
                     if (id !== null) fileIdMap.set(filePath, id);
                 }
@@ -1876,7 +1943,7 @@ ipcMain.handle(
                     return knownPresentIds.has(id) || inFlightUploadIds.has(id);
                 };
 
-                // Step 2: Only check presence for IDs not already confirmed on the server
+                // Step 3: Only check presence for IDs not already confirmed on the server
                 const uncheckedFiles = validFiles.filter((f) => !isAccountedFor(f));
 
                 if (uncheckedFiles.length > 0) {
@@ -1905,7 +1972,7 @@ ipcMain.handle(
                     return;
                 }
 
-                // Step 3: Upload missing files
+                // Step 4: Upload missing files
                 let uploaded = 0;
                 for (const filePath of missingFiles) {
                     // A newer watcher has taken over — leave the rest to it.
