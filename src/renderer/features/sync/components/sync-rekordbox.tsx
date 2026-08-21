@@ -10,6 +10,7 @@ import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
+import { CopyButton } from '/@/shared/components/copy-button/copy-button';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
@@ -264,12 +265,11 @@ export const SyncRekordbox = () => {
                     throw new Error(`Import failed: ${reason}`);
                 }
 
-                // If there's nothing to import, skip straight to done
-                if ((importResult.n_tracks_for_import ?? 0) === 0) {
-                    setStep('done');
-                    return;
-                }
-
+                // No tracks to import does NOT mean nothing left to do: pymix runs the
+                // playlist and metadata passes for a metadata-only import too, and this
+                // used to return "Success" the moment the upload came back — before the
+                // server had created a single playlist (laker-93/subbox-app#55). Poll the
+                // job either way; it is the only thing that can tell us it finished.
                 setJobId(jobId);
                 setStep('importing');
                 setImportProgress(null);
@@ -323,7 +323,12 @@ export const SyncRekordbox = () => {
                         setStep('done');
                         if (prog.result) {
                             toast.success({
-                                message: `Imported ${prog.n_tracks_processed} tracks`,
+                                // A metadata-only import lands no tracks, and
+                                // "Imported 0 tracks" reads like a failure.
+                                message:
+                                    prog.n_tracks_processed > 0
+                                        ? `Imported ${prog.n_tracks_processed} tracks`
+                                        : 'Library updated from your Rekordbox XML',
                             });
                         } else {
                             setError(prog.reason || 'Import failed');
@@ -608,6 +613,10 @@ export const SyncRekordbox = () => {
             phase === 'importing_audio' || phaseTotal === 0
                 ? `${processed} / ${total} tracks`
                 : `${importProgress?.phase_n_processed ?? 0} / ${phaseTotal} tracks`;
+        // A metadata-only import has no tracks to land and hasn't reached a pass with
+        // its own total yet, so "0 / 0 tracks" is all we'd have to say — show the
+        // percentage on its own rather than a count that reads like nothing is happening.
+        const hasCounts = total > 0 || phaseTotal > 0;
 
         return (
             <Center style={{ height: '100%' }}>
@@ -615,7 +624,7 @@ export const SyncRekordbox = () => {
                     <Spinner />
                     <TextTitle order={4}>{title}</TextTitle>
                     <Text size="sm">
-                        {counts} ({Math.round(pct)}%)
+                        {hasCounts ? `${counts} (${Math.round(pct)}%)` : `${Math.round(pct)}%`}
                     </Text>
                     <Text c="dimmed" size="xs" ta="center">
                         This may take a while for large libraries.
@@ -699,19 +708,77 @@ export const SyncRekordbox = () => {
 
     // ── Done (failed) ─────────────────────────────────────────────────────
     if (error) {
+        // The user's actual question is "is my music in there?", and the answer
+        // decides what they do next. A failed job keeps the phase it died in, so
+        // a failure in one of the two passes that run *after* `beet import` means
+        // the audio already landed and only metadata is missing — re-uploading
+        // 1.2 GB would be the wrong reaction to that (laker-93/subbox-app#48).
+        const failedPhase = importProgress?.phase;
+        const tracksAreSafe = failedPhase === 'applying_metadata' || failedPhase === 'mapping_ids';
+
+        const diagnostics = [
+            `Rekordbox import failed${tracksAreSafe ? ' (after tracks were imported)' : ''}`,
+            `reason: ${error}`,
+            jobId ? `job: ${jobId}` : null,
+            failedPhase ? `phase: ${failedPhase}` : null,
+            uploadResult ? `uploaded: ${uploadResult.uploaded}` : null,
+            importProgress ? `imported: ${importProgress.n_tracks_processed}` : null,
+        ]
+            .filter(Boolean)
+            .join('\n');
+
         return (
             <Center style={{ height: '100%' }}>
                 <Stack align="center" gap="md" maw={400}>
                     <Icon color="warn" icon="error" size="3rem" />
                     <TextTitle order={3}>
-                        {t('page.sync.rekordbox.importFailed', {
-                            defaultValue: 'Import Failed',
-                            postProcess: 'titleCase',
-                        })}
+                        {tracksAreSafe
+                            ? t('page.sync.rekordbox.importPartial', {
+                                  defaultValue: 'Imported, with problems',
+                                  postProcess: 'sentenceCase',
+                              })
+                            : t('page.sync.rekordbox.importFailed', {
+                                  defaultValue: 'Import Failed',
+                                  postProcess: 'titleCase',
+                              })}
                     </TextTitle>
-                    <Text c="dimmed" size="sm" ta="center">
+                    <Text size="sm" ta="center">
+                        {tracksAreSafe
+                            ? 'Your tracks were uploaded and are in your library, but some of the metadata from the XML (ratings, BPM, cue points) or some playlists could not be applied. There is no need to upload them again.'
+                            : 'The import did not finish, so some or all of your tracks may not be in your library. Check the Tracks page before uploading again.'}
+                    </Text>
+                    {/* What actually landed. Whatever broke, these numbers are real,
+                        and they are the difference between an error screen and one the
+                        user can act on. */}
+                    {(uploadResult || importProgress) && (
+                        <Stack align="center" gap={2}>
+                            {uploadResult && (
+                                <Text c="dimmed" size="sm">
+                                    {uploadResult.uploaded} tracks uploaded
+                                </Text>
+                            )}
+                            {importProgress && (
+                                <Text c="dimmed" size="sm">
+                                    {importProgress.n_tracks_processed} tracks imported into library
+                                </Text>
+                            )}
+                        </Stack>
+                    )}
+                    <Text c="dimmed" size="xs" ta="center">
                         {error}
                     </Text>
+                    <CopyButton timeout={2000} value={diagnostics}>
+                        {({ copied, copy }) => (
+                            <Button
+                                fullWidth
+                                leftSection={<Icon icon={copied ? 'check' : 'clipboardCopy'} />}
+                                onClick={copy}
+                                variant="subtle"
+                            >
+                                {copied ? 'Copied' : 'Copy details'}
+                            </Button>
+                        )}
+                    </CopyButton>
                     <Button fullWidth onClick={handleReset} variant="filled">
                         {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
                     </Button>
@@ -738,7 +805,12 @@ export const SyncRekordbox = () => {
                                 {uploadResult.totalTracksInXml} tracks found in XML
                             </Text>
                         )}
-                        {uploadResult.uploaded === 0 && !importProgress ? (
+                        {/* Nothing uploaded and nothing landed in the library. This used
+                            to key off `!importProgress`, which stopped meaning "nothing
+                            was imported" once we started polling the metadata-only path
+                            through to the end (#55) — that path always has progress now. */}
+                        {uploadResult.uploaded === 0 &&
+                        (importProgress?.n_tracks_processed ?? 0) === 0 ? (
                             <Text c="dimmed" size="sm">
                                 Everything is already up to date.
                             </Text>
