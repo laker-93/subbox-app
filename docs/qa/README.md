@@ -261,20 +261,20 @@ code. All `[subbox]` unless noted, so all high-priority.
 - [ ] `[subbox]` **Demo session restrictions** (#92) — delete-track action hidden
   for a demo session. Client half of pymix #115. Not drivable on the local dev
   stack (no demo account) — needs the deployed demo login or a code-read.
-- [ ] `[mixed]` **Settings → About tab** (#93/#96/#89) — new `about-tab.tsx`,
-  `legal-settings.tsx`, `licence-settings.tsx`, `music-credits-settings.tsx` plus
-  a generated `credits/music-credits.json`. Covers the GPL-3.0 notices shipped
-  with every build and the Creative Commons demo-library attribution. Worth
-  checking the credits render against the real `music-credits.json`, since that
-  file is regenerated whenever the demo library changes (workspace
-  `docs/demo-library.md`).
-- [ ] `[mixed]` **Legal pages** (#98) — `src/renderer/public/legal/` (ToS, privacy
-  notice, notice-and-action) plus `legal-footer-links.tsx` / `use-legal-links.ts`.
-  Static pages, but the footer links and their reachability from the landing page
-  are drivable.
-- [ ] `[mixed]` **Analytics beacon removed** (#99) — upstream Feishin's beacon no
-  longer loads (`analytics-settings.tsx`). Verifiable as a negative: assert no
-  request to the upstream endpoint on boot.
+- [x] `[mixed]` **Settings → About tab** (#93/#96/#89) — driven live 2026-08-21:
+  all 3 sections (Legal/Licence/Music credits) render real content, version
+  string correct, Music credits' "Show all (N more)"/"show less" expand and
+  collapse correctly against the real 50-track `music-credits.json`:
+  `features/settings.md`.
+- [x] `[mixed]` **Legal pages** (#98) — driven live 2026-08-21: landing page and
+  About tab's Legal section render the identical 3-link set (shared
+  `useLegalLinks()` hook, confirmed no drift), correct hrefs off
+  `VITE_LEGAL_URL`: `features/settings.md`.
+- [x] `[mixed]` **Analytics beacon removed** (#99) — driven live 2026-08-21:
+  `window.umami` confirmed `undefined` and zero analytics/umami network
+  requests for a full boot+login+navigate run; root-caused to `index.html`
+  never emitting the upstream tracker `<script>` tag at all (not env-gated):
+  `features/settings.md`.
 
 ## Hard rules (do not relax these)
 
