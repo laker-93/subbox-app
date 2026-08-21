@@ -239,9 +239,14 @@ code. All `[subbox]` unless noted, so all high-priority.
   `MobileLayout`'s header + `MobileSyncPlaceholder`. Verified live 2026-08-17 at
   400×800: mobile layout mounts, placeholder shows with working "Back to
   Library", real Sync tabs don't leak through: `features/sync.md`.
-- [ ] `[subbox]` **Rekordbox import phase reporting** (#79) — the frozen-100%
-  screen now names the phase and shows that phase's n/total. Needs a long enough
-  import to actually pass through phases; degrades silently against an older pymix.
+- [x] `[subbox]` **Rekordbox import phase reporting** (#79) — verified live
+  2026-08-21 against a 20-track fixture, alongside the same-day #109/pymix#133
+  job-completion-honesty fix: `features/rekordbox-import.md` new section. Phase
+  label + n/total confirmed real (not frozen); metadata-only path (which always
+  has `n_tracks_for_import: 0`) confirmed to poll to real completion instead of
+  the old skip-to-done. Failure-path distinction ("Imported, with problems" vs.
+  "Import Failed") verified by code reading only, not live-triggered — see the
+  doc for why.
 - [x] `[subbox]` **Invite funnel** (`features/invite/`, #72/#91) — landing-page and
   create-account entry points driven live, bug found + fixed (mutation retry was
   burning the invite endpoint's 5/hour rate limit): `features/invite-funnel.md`,

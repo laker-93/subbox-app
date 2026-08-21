@@ -10,6 +10,13 @@ Verified: 2026-07-23, live against the local dev stack (`test260526`,
 `laker93/pymix:qa-local`), driven end to end via
 `scripts/qa/rekordbox-metadata-import.mjs`.
 
+**Phase reporting + job-completion honesty re-verified 2026-08-21** (see the new
+section below) against `test060826` and the running `pymix` container
+(`laker93/pymix:main-20260821-local`, already carrying pymix#133 — not rebuilt
+this cycle). Covers the pause-era `[subbox]` README row "Rekordbox import phase
+reporting" (#79) plus the same-day #109/pymix#133 fix ("stop declaring a
+Rekordbox import successful before it is").
+
 ## Flow
 
 1. Sync → "Upload (Rekordbox)" tab (default tab).
@@ -123,6 +130,66 @@ and convert libraries between **Serato**, Rekordbox, and more" — logged as a
 ux-note (`ux-notes.md`) since it's ambiguous whether this is inaccurate present-tense
 copy or intentional whole-platform/roadmap framing; not changed this cycle.
 
+## Phase reporting + job-completion honesty, verified 2026-08-21
+
+Two pieces of freshly-merged surface, driven live for the first time: the
+frozen-100% fix from #79/pymix#100/#109/#110, and the same-day #109/pymix#133
+fix for the two ways the import screen used to lie about whether it had
+finished. Fixture: `make-test-rekordbox-xml`, 20 real tracks, seed `20260821`
+(`pymix scripts/make_test_rekordbox_xml.py --num-tracks 20 --seed 20260821`),
+`/tmp/qa/rekordbox-phase-fixture.xml` + `/tmp/qa/audio/`.
+
+**Full track-upload path — phase reporting.** New driver
+`scripts/qa/rekordbox-import-phase-progress.mjs` samples the progress screen's
+text every ~1.2s through the whole import. Live run against the 20-track
+fixture: `[1.2s] Importing into library... | 0 / 20 tracks (0%)` →
+`[3.7s] Linking tracks to your library... | 20 / 20 tracks (85%)` → done at
+7.5s. Confirms the phase label changes (not a frozen percentage), the
+per-phase `n_total` is the real track count (not 0), and the weighted overall
+percentage (`_PHASE_WEIGHTS` in `pymix/services/import_progress.py`: audio
+80%, mapping_ids 5%, applying_metadata 15%) moves monotonically. The
+`applying_metadata` phase itself wasn't caught mid-flight in this run — at 20
+tracks it resolved between two 1.2s polls — but its `n_total`/label are
+exercised by the metadata-only run below, which spends longer in it.
+
+**Metadata-only path — the #55/#109 fix, the real-world repro.** New driver
+`scripts/qa/rekordbox-metaonly-progress.mjs`. The metadata-only path uploads
+*no* audio ever, so `n_tracks_for_import` is 0 on **every** run of it, not an
+edge case — this is the path that made the old "0 tracks means nothing to do"
+assumption wrong on every single use. Re-ran the same 20-track fixture (now
+already in the library from the full-upload run above) as a metadata-only
+import: the driver's `sawProgressScreen` flag came back `true` (`[0.5s]
+Importing into library... | 80%` observed before completion) — it did **not**
+skip straight to "done" the instant the upload POST returned, which is exactly
+what #55 used to do. Final toast: **"Success / Library updated from your
+Rekordbox XML"** — the new #109 copy for a metadata-only completion, not the
+old "Imported 0 tracks" (which used to read like nothing happened, or worse,
+like a failure). "Everything is already up to date" also rendered correctly
+(0 uploaded, 0 net-new imported).
+
+**Failure-path distinction (#48/pymix#133) — verified by code reading only,
+not live-triggered.** `failure_reason()` (`pymix/services/import_progress.py`)
+formats any exception into a short single-line reason and
+`run_import_task`'s `finally` always calls `db_controller.job_completed(job_id,
+success, reason)` with it, regardless of which phase raised — so the job row's
+`phase` column is left wherever the exception happened, not force-moved to
+`complete`. Client-side, `sync-rekordbox.tsx`'s failure screen reads exactly
+that: `tracksAreSafe = failedPhase === 'applying_metadata' || failedPhase ===
+'mapping_ids'` selects between "Imported, with problems" (audio landed, only
+metadata/playlists missing — don't re-upload) and "Import Failed" (may not
+have landed) title/copy, and a "Copy details" button surfaces
+`reason`/`phase`/counts verbatim. Not live-triggered this cycle: forcing an
+exception in the tail passes means deliberately breaking a real
+job on the shared dev `pymix` container (currently the user's own
+`main-20260821-local` build, confirmed idle but not disposable), which is a
+different risk profile than driving the happy paths above. A future cycle
+wanting to close this out could point a fixture's XML at a track whose
+Name/Artist/Album match resolves to more than pymix's playlist-building code
+tolerates, or add a temporary fault-injection hook — left as a follow-up, not
+blocking the "Rekordbox import phase reporting" README row (the two behaviors
+that row is actually about — phase reporting and completion honesty — are
+both now live-verified).
+
 ## Driver notes
 
 `scripts/qa/rekordbox-metadata-import.mjs`: stubs `dialog.showOpenDialog` in the
@@ -132,3 +199,14 @@ rather than clicking the mode toggle (a right-sidebar overlap can intercept the
 click on some profiles); races "Upload Complete" against
 `/import failed|failed to check import progress/i` with a bounded timeout so a
 hang is reported as a real failure, never silently backgrounded.
+
+`scripts/qa/rekordbox-import-phase-progress.mjs` /
+`scripts/qa/rekordbox-metaonly-progress.mjs`: same login/navigation pattern,
+but launch on a **cold** `--user-data-dir` profile (a warm one can come up with
+the sidebar collapsed and the Sync switch unreachable) at 1440×900 — a smaller
+content size (1280×860 was the original scratch value) intermittently landed
+under the 768px mobile-Sync breakpoint (`useIsMobile`, `max-width: 768px`) and
+rendered `MobileSyncPlaceholder` instead of the real Sync tabs, failing the
+`uploadTab` wait. Both sample the progress screen's body text on a tight poll
+loop and screenshot on every text change, so a stall shows up as a repeated
+last line rather than silence.
