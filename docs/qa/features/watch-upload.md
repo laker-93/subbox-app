@@ -110,6 +110,49 @@ running. This directly refutes subbox-app **#23**, which reported the watcher as
 never re-arming — that report inspected only `sync-watch.tsx` and missed the
 app.tsx restore. Issue closed as not-a-bug; no code change.
 
+## Dedup guard (verified 2026-08-21)
+
+**Status:** verified end-to-end, all 4 phases PASS, against a fresh 4-track
+fixture (`make-test-rekordbox-xml` audio-only, no `SUBBOX_ID`) on `test060826`.
+Driver: `scripts/qa/watch-dedup-guard.mjs` — a pass/fail regression (unlike
+`watch-upload.mjs` above, deterministic enough to be one) for the specific
+failure mode the watch/download-concurrency and poller-re-entrancy fixes exist
+to prevent: **the watcher must upload each file exactly once**, never more.
+
+Four phases against one staging dir, driving the real Sync → Watch UI:
+
+- **A — fresh upload.** N untagged files land before the watcher starts →
+  exactly one `uploading` burst, every file tagged + uploaded, no duplicates
+  within the burst.
+- **B — linger.** Poller keeps ticking for 45s with the same (now-tagged)
+  files still in place → zero re-upload bursts.
+- **C — dribble.** One more file is written in slowly (12 chunks over 24s)
+  while the watcher is live → confirms subbox-app #108 (never tagged mid-write,
+  only after the last byte lands) and that it's picked up and uploaded exactly
+  once, not before completion. Confirmed live: the real upload lands up to
+  ~10s after the last byte, because a file only becomes upload-eligible once
+  `fileStabilityHistory` sees the same `(size, mtime)` on two consecutive
+  polls (`src/main/features/core/sync/index.ts`) — a real, correct debounce
+  against in-progress writes, not a bug.
+- **D — relaunch.** Quit and relaunch, Start Watching on the same dir again.
+  The new process starts with an empty in-memory `knownPresentIds`, so this
+  exercises the **server-side** `POST /tracks/presence` dedup instead of the
+  client cache → zero re-uploads.
+
+**Driver bug found and fixed while first running this** (not a product bug):
+`waitForDrain` read the *entire* accumulated `window.__watchEvents` list with
+no lower time bound. Called a second time in the same launch (phase C), it saw
+phase A's already-idle-after-upload state as "the latest event" and returned
+"drained" instantly — before the real, slower phase-C upload (which the
+`fileStabilityHistory` debounce above legitimately delays) had happened. The
+driver then raced ahead to phase D (stop watching, close, relaunch) before the
+dribbled file's genuine first upload occurred, which then landed under the
+*relaunch* process instead — misreported as C3/C4 "never uploaded" and D2 "a
+re-upload after relaunch", when the DB behind it (checked directly via
+`beet list`) only ever had one row for that file the whole time. Fixed by
+scoping `waitForDrain` to a `since` timestamp per phase; re-run afterward is
+clean 4/4 phases, no product code touched.
+
 ## Boundaries / gotchas
 
 - **Writes to a live dev user.** Uploads land in the logged-in user's per-user

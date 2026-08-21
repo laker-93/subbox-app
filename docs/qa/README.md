@@ -197,6 +197,10 @@ naturally passes through it.
       beets → Navidrome library. Skill `upload-music-dev` drives this; the
       wishlist → Soulseek → watch-dir import path (`wishlist-import-dev`) is the
       background variant.
+- [x] `[subbox]` Upload music — watch-dir uploader dedup guard (fresh upload /
+      linger / slow-write dribble / relaunch, exactly-once): verified 2026-08-21
+      — `features/watch-upload.md` "Dedup guard" section, driver
+      `watch-dedup-guard.mjs`.
 - [x] `[subbox]` Rekordbox/Serato import-export UI (subbox-app side of pymix
       `/rekordbox/*`, `/serato/*` — see pymix-qa journal): `features/rekordbox-import.md`
       (Rekordbox metadata-only + full track-upload paths verified; Serato has
