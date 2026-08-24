@@ -15,6 +15,8 @@ const localSettings = isElectron() ? window.api.localSettings : null;
 interface WatchProgress {
     currentFile: string;
     phase: 'error' | 'idle' | 'scanning' | 'uploading';
+    /** Files the watcher could not tag, and so could not upload. Absent on older payloads. */
+    skippedFiles?: string[];
     total: number;
     uploaded: number;
 }
@@ -186,6 +188,16 @@ export const SyncWatch = () => {
                     {progress.phase === 'error' && (
                         <Text c="red" size="sm">
                             Error uploading: {progress.currentFile || 'Unknown error'}
+                        </Text>
+                    )}
+                    {/* Not a phase — an unreadable file stays in the folder and is
+                        re-detected every pass, so this shows under any phase. */}
+                    {progress.skippedFiles && progress.skippedFiles.length > 0 && (
+                        <Text c="yellow" size="sm">
+                            {progress.skippedFiles.length} file
+                            {progress.skippedFiles.length === 1 ? '' : 's'} could not be read and
+                            {progress.skippedFiles.length === 1 ? ' was' : ' were'} not uploaded:{' '}
+                            {progress.skippedFiles.join(', ')}
                         </Text>
                     )}
                 </Stack>

@@ -1,11 +1,9 @@
 import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
-import { randomUUID } from 'crypto';
 import { app, ipcMain, session, shell } from 'electron';
 import Store from 'electron-store';
 import * as fs from 'fs';
 import * as https from 'https';
 import { parseFile } from 'music-metadata';
-import * as TagLib from 'node-taglib-sharp';
 import * as path from 'path';
 import { pipeline } from 'stream/promises';
 import * as tus from 'tus-js-client';
@@ -21,6 +19,7 @@ import {
     ParsedTrack,
     sanitizePathSegment,
 } from '/@/main/features/core/sync/rekordbox-xml';
+import { getOrCreateSubboxId, readSubboxId } from '/@/main/features/core/sync/subbox-id-tags';
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 /** What pymix calls the Rekordbox XML it writes, in the zip and on its own. */
@@ -1428,6 +1427,13 @@ const AUDIO_EXTENSIONS = new Set([
 export interface WatchProgress {
     currentFile: string;
     phase: 'error' | 'idle' | 'scanning' | 'uploading';
+    /**
+     * Basenames of files sitting in the watch dir that TagLib could not open, so
+     * they could not be given a SUBBOX_ID and are absent from `total`. Re-reported
+     * on every pass they remain in the folder: without them the panel showed a
+     * clean `uploaded=N/N` while quietly dropping tracks (#110).
+     */
+    skippedFiles: string[];
     total: number;
     uploaded: number;
 }
@@ -1474,14 +1480,6 @@ let inFlightPoll: null | Promise<void> = null;
 
 // ── SUBBOX_ID tag helpers ──────────────────────────────────────────────────
 
-const SUBBOX_ID_FIELD = 'SUBBOX_ID';
-
-// MP4/M4A files store custom tags as iTunes-style freeform atoms keyed by a
-// MEAN/NAME pair (the "----:<mean>:<name>" atom). This MEAN mirrors what the
-// pymix backend writes via mutagen ("----:com.apple.iTunes:SUBBOX_ID"), so a
-// SUBBOX_ID written by either side is readable by the other.
-const APPLE_ITUNES_MEAN = 'com.apple.iTunes';
-
 interface SubboxIdCacheEntry {
     mtimeMs: number;
     size: number;
@@ -1511,42 +1509,6 @@ function getAudioFiles(dirPath: string): string[] {
     }
 
     return files;
-}
-
-/**
- * Return the existing SUBBOX_ID for a file, or generate a fresh UUID.
- * Returns null if the file cannot be opened by TagLib — this indicates a
- * genuinely corrupt file, since callers are expected to have already filtered
- * out files still being written (see `isFileSizeStable`): TagLib only needs the
- * ID3 header at the front of the file, which a partial download already has, so
- * it cannot by itself tell "still downloading" from "complete".
- * If the file is valid but writing the tag fails, the UUID is still returned so
- * the upload can proceed.
- */
-function getOrCreateSubboxId(filePath: string): null | string {
-    // Validate the file is parseable before proceeding — TagLib throws on files
-    // it genuinely can't make sense of. This is not a completeness check (a
-    // truncated file with an intact header parses fine); that's handled by the
-    // caller via isFileSizeStable before this is ever called.
-    let probe: null | TagLib.File = null;
-    try {
-        probe = TagLib.File.createFromPath(filePath);
-    } catch {
-        return null;
-    } finally {
-        probe?.dispose();
-    }
-
-    const existing = readSubboxId(filePath);
-    if (existing) return existing;
-
-    const newId = randomUUID();
-    try {
-        writeSubboxId(filePath, newId);
-    } catch (err) {
-        console.error(`[subbox-id] Failed to write SUBBOX_ID tag to ${filePath}:`, err);
-    }
-    return newId;
 }
 
 /**
@@ -1585,72 +1547,6 @@ function isFileSizeStable(
 // I/O the filename-parsing fast path in scanLocalTracks otherwise avoids. Cache
 // each file's id keyed by (path, mtimeMs, size) so a later scan only reopens
 // files that are new or have changed since they were last read.
-
-/**
- * Read the SUBBOX_ID custom tag from any audio file via node-taglib-sharp.
- * Tries each tag type present on the file in priority order:
- *   Xiph (FLAC/OGG/OPUS) → ID3v2 (MP3/WAV) → APE → ASF (WMA)
- * Returns null if the tag is absent or the file cannot be opened.
- */
-function readSubboxId(filePath: string): null | string {
-    let file: null | TagLib.File = null;
-    try {
-        file = TagLib.File.createFromPath(filePath);
-        const types = file.tagTypes;
-
-        if (types & TagLib.TagTypes.Xiph) {
-            const xiph = file.getTag(TagLib.TagTypes.Xiph, false) as null | TagLib.XiphComment;
-            const val = xiph?.getFieldFirstValue(SUBBOX_ID_FIELD);
-            if (val) return val;
-        }
-
-        if (types & TagLib.TagTypes.Id3v2) {
-            const id3 = file.getTag(TagLib.TagTypes.Id3v2, false) as null | TagLib.Id3v2Tag;
-            if (id3) {
-                const frames = id3.getFramesByClassType<TagLib.Id3v2UserTextInformationFrame>(
-                    TagLib.Id3v2FrameClassType.UserTextInformationFrame,
-                );
-                const frame = TagLib.Id3v2UserTextInformationFrame.findUserTextInformationFrame(
-                    frames,
-                    SUBBOX_ID_FIELD,
-                    false,
-                );
-                if (frame?.text[0]) return frame.text[0];
-            }
-        }
-
-        if (types & TagLib.TagTypes.Ape) {
-            const ape = file.getTag(TagLib.TagTypes.Ape, false) as null | TagLib.ApeTag;
-            const val = ape?.getItem(SUBBOX_ID_FIELD)?.text[0];
-            if (val) return val;
-        }
-
-        if (types & TagLib.TagTypes.Asf) {
-            const asf = file.getTag(TagLib.TagTypes.Asf, false) as null | TagLib.AsfTag;
-            const val = asf?.getDescriptorStrings(SUBBOX_ID_FIELD)[0];
-            if (val) return val;
-        }
-
-        if (types & TagLib.TagTypes.Apple) {
-            const apple = file.getTag(TagLib.TagTypes.Apple, false) as null | TagLib.Mpeg4AppleTag;
-            const val = apple?.getFirstItunesString(APPLE_ITUNES_MEAN, SUBBOX_ID_FIELD);
-            if (val) return val;
-        }
-
-        return null;
-    } catch (err) {
-        // A file whose SUBBOX_ID tag is genuinely present (readable by other tools
-        // like ffprobe) can still fail to parse here if TagLib's ID3v2 reader is
-        // stricter about the surrounding tag than the writer was — logging this is
-        // the only way to distinguish "no tag" from "tag present but unreadable",
-        // since both otherwise looked identical (null) and caused the file to be
-        // silently treated as untagged on every scan.
-        console.error(`[subbox-id] Failed to read SUBBOX_ID tag from ${filePath}:`, err);
-        return null;
-    } finally {
-        file?.dispose();
-    }
-}
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 const subboxIdCacheStorePath = isDevelopment
@@ -1723,63 +1619,6 @@ function resolveSubboxId(
 
 function saveSubboxIdCache(entries: Record<string, SubboxIdCacheEntry>): void {
     subboxIdCacheStore.set('entries', entries);
-}
-
-/**
- * Write a SUBBOX_ID custom tag to any audio file via node-taglib-sharp.
- * Uses the tag type already present on the file (Xiph > ID3v2 > APE > ASF).
- * Throws if the file cannot be opened or saved — callers decide how to handle.
- */
-function writeSubboxId(filePath: string, id: string): void {
-    let file: null | TagLib.File = null;
-    try {
-        file = TagLib.File.createFromPath(filePath);
-        const types = file.tagTypes;
-
-        if (types & TagLib.TagTypes.Xiph) {
-            const xiph = file.getTag(TagLib.TagTypes.Xiph, true) as TagLib.XiphComment;
-            xiph.setFieldAsStrings(SUBBOX_ID_FIELD, id);
-        } else if (types & TagLib.TagTypes.Id3v2) {
-            const id3 = file.getTag(TagLib.TagTypes.Id3v2, true) as TagLib.Id3v2Tag;
-            const frames = id3.getFramesByClassType<TagLib.Id3v2UserTextInformationFrame>(
-                TagLib.Id3v2FrameClassType.UserTextInformationFrame,
-            );
-            const existing = TagLib.Id3v2UserTextInformationFrame.findUserTextInformationFrame(
-                frames,
-                SUBBOX_ID_FIELD,
-                false,
-            );
-            if (existing) {
-                existing.text = [id];
-            } else {
-                const frame = TagLib.Id3v2UserTextInformationFrame.fromDescription(SUBBOX_ID_FIELD);
-                frame.text = [id];
-                id3.addFrame(frame);
-            }
-        } else if (types & TagLib.TagTypes.Ape) {
-            const ape = file.getTag(TagLib.TagTypes.Ape, true) as TagLib.ApeTag;
-            ape.setItem(TagLib.ApeTagItem.fromTextValues(SUBBOX_ID_FIELD, id));
-        } else if (types & TagLib.TagTypes.Asf) {
-            const asf = file.getTag(TagLib.TagTypes.Asf, true) as TagLib.AsfTag;
-            asf.setDescriptorStrings([id], SUBBOX_ID_FIELD);
-        } else if (types & TagLib.TagTypes.Apple) {
-            // MP4/M4A: store as an iTunes freeform atom. ID3v2 (the fallback below)
-            // cannot be attached to an MP4 container, so this branch is required —
-            // without it, SUBBOX_ID silently never persists on .m4a files.
-            const apple = file.getTag(TagLib.TagTypes.Apple, true) as TagLib.Mpeg4AppleTag;
-            apple.setItunesStrings(APPLE_ITUNES_MEAN, SUBBOX_ID_FIELD, id);
-        } else {
-            // No recognised tag type — create an ID3v2 tag as the most portable option
-            const id3 = file.getTag(TagLib.TagTypes.Id3v2, true) as TagLib.Id3v2Tag;
-            const frame = TagLib.Id3v2UserTextInformationFrame.fromDescription(SUBBOX_ID_FIELD);
-            frame.text = [id];
-            id3.addFrame(frame);
-        }
-
-        file.save();
-    } finally {
-        file?.dispose();
-    }
 }
 
 ipcMain.handle('sync:select-watch-directory', async (): Promise<null | string> => {
@@ -1891,11 +1730,23 @@ ipcMain.handle(
             if (watchPaused) return;
             if (!isCurrent()) return;
             try {
-                sendProgress({ currentFile: '', phase: 'scanning', total: 0, uploaded: 0 });
+                sendProgress({
+                    currentFile: '',
+                    phase: 'scanning',
+                    skippedFiles: [],
+                    total: 0,
+                    uploaded: 0,
+                });
 
                 const audioFiles = getAudioFiles(watchDir);
                 if (audioFiles.length === 0) {
-                    sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
+                    sendProgress({
+                        currentFile: '',
+                        phase: 'idle',
+                        skippedFiles: [],
+                        total: 0,
+                        uploaded: 0,
+                    });
                     fileStabilityHistory.clear();
                     return;
                 }
@@ -1916,23 +1767,39 @@ ipcMain.handle(
                     isFileSizeStable(f, fileStabilityHistory),
                 );
                 if (stableFiles.length === 0) {
-                    sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
+                    sendProgress({
+                        currentFile: '',
+                        phase: 'idle',
+                        skippedFiles: [],
+                        total: 0,
+                        uploaded: 0,
+                    });
                     return;
                 }
 
                 // Step 2: Tag each stable file to get its SUBBOX_ID.
-                // getOrCreateSubboxId returning null now means the file is genuinely
-                // corrupt, not merely still downloading (that's already filtered out
-                // above).
+                // getOrCreateSubboxId returning null now means TagLib cannot open the
+                // file at all, not merely that it is still downloading (that's already
+                // filtered out above). Such a file can never be uploaded, so name it in
+                // every progress event for the rest of this pass rather than letting it
+                // vanish from the counts.
                 const fileIdMap = new Map<string, string>(); // filePath → subboxId
+                const skippedFiles: string[] = [];
                 for (const filePath of stableFiles) {
                     const id = getOrCreateSubboxId(filePath);
                     if (id !== null) fileIdMap.set(filePath, id);
+                    else skippedFiles.push(path.basename(filePath));
                 }
 
                 const validFiles = Array.from(fileIdMap.keys());
                 if (validFiles.length === 0) {
-                    sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
+                    sendProgress({
+                        currentFile: '',
+                        phase: 'idle',
+                        skippedFiles,
+                        total: 0,
+                        uploaded: 0,
+                    });
                     return;
                 }
 
@@ -1968,7 +1835,13 @@ ipcMain.handle(
 
                 const missingFiles = validFiles.filter((f) => !isAccountedFor(f));
                 if (missingFiles.length === 0) {
-                    sendProgress({ currentFile: '', phase: 'idle', total: 0, uploaded: 0 });
+                    sendProgress({
+                        currentFile: '',
+                        phase: 'idle',
+                        skippedFiles,
+                        total: 0,
+                        uploaded: 0,
+                    });
                     return;
                 }
 
@@ -1986,6 +1859,7 @@ ipcMain.handle(
                     sendProgress({
                         currentFile: fileName,
                         phase: 'uploading',
+                        skippedFiles,
                         total: missingFiles.length,
                         uploaded,
                     });
@@ -2007,6 +1881,7 @@ ipcMain.handle(
                                 sendProgress({
                                     currentFile: fileName,
                                     phase: 'error',
+                                    skippedFiles,
                                     total: missingFiles.length,
                                     uploaded,
                                 });
@@ -2024,6 +1899,7 @@ ipcMain.handle(
                 sendProgress({
                     currentFile: '',
                     phase: 'idle',
+                    skippedFiles,
                     total: missingFiles.length,
                     uploaded,
                 });
@@ -2046,7 +1922,13 @@ ipcMain.handle(
                     return;
                 }
 
-                sendProgress({ currentFile: '', phase: 'error', total: 0, uploaded: 0 });
+                sendProgress({
+                    currentFile: '',
+                    phase: 'error',
+                    skippedFiles: [],
+                    total: 0,
+                    uploaded: 0,
+                });
             }
         };
 
@@ -2067,7 +1949,13 @@ ipcMain.handle(
         // mounts. The first pass can take minutes on a large directory, and until
         // it emits its own scanning event there would otherwise be nothing at all
         // on screen — which is indistinguishable from a dropped click.
-        sendProgress({ currentFile: '', phase: 'scanning', total: 0, uploaded: 0 });
+        sendProgress({
+            currentFile: '',
+            phase: 'scanning',
+            skippedFiles: [],
+            total: 0,
+            uploaded: 0,
+        });
 
         // Start the watcher without waiting for the first pass to finish. The pass
         // reports itself over sync:watch-progress exactly like every subsequent
