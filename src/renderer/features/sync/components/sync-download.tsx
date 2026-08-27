@@ -711,7 +711,9 @@ export const SyncDownload = () => {
                     <TextTitle order={3}>Download Complete</TextTitle>
                     <Text c="dimmed" size="sm">
                         {!includeTracks
-                            ? 'Rekordbox XML downloaded. No audio files, as requested.'
+                            ? includeRekordboxXml
+                                ? 'Rekordbox XML downloaded. No audio files, as requested.'
+                                : 'Serato crates written from the tracks you already have. Nothing was downloaded.'
                             : downloadResult
                               ? `${downloadResult.tracksExported} track${downloadResult.tracksExported === 1 ? '' : 's'} exported${
                                     includeRekordboxXml
