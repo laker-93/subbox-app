@@ -13,6 +13,8 @@ import {
     readTrackCues,
     resolveSeratoFolder,
     SeratoCueWire,
+    storedTrackPath,
+    volumeRootOf,
     writeCrates,
     writeTrackCues,
 } from '../src/main/features/core/sync/serato-crates';
@@ -243,6 +245,7 @@ function main(): void {
     console.log('\nSerato crate writing');
     checkFileNamesMatchTseratoSave();
     checkCratesAreWritten();
+    checkPathsAreStoredSeratoStyle();
     checkAnExistingParentCrateSurvives();
     checkAReplacedCrateIsBackedUp();
     checkNamesThatCannotBeFilenames();
@@ -491,6 +494,42 @@ function checkNamesThatCannotBeFilenames(): void {
     console.log('  writing: a name that cannot be a filename is renamed and reported — OK');
 }
 
+/**
+ * Serato resolves `ptrk` against the volume the `_Serato_` folder is on, so that
+ * is the form it stores: no leading slash, and nothing of the volume in it.
+ *
+ * tserato writes `path.resolve()` instead. On the boot volume that only adds a
+ * leading slash, which Serato tolerates — but on an external drive it writes
+ * `/Volumes/DJ/Music/x.mp3`, which Serato resolves to
+ * `/Volumes/DJ/Volumes/DJ/Music/x.mp3` and shows as an empty crate. Confirmed in
+ * Serato DJ Pro against a disk image carrying all three forms.
+ */
+function checkPathsAreStoredSeratoStyle(): void {
+    writeCrates(writeSerato, [
+        {
+            pathComponents: ['Stored'],
+            tracks: [{ localPath: localTrack('Artist/Album/stored.mp3') }],
+        },
+    ]);
+
+    const stored = ptrkOf(path.join(writeSerato, 'SubCrates', 'Stored.crate'));
+    assert.ok(!stored.startsWith('/'), `Serato stores no leading slash; got ${stored}`);
+    assert.equal(stored, path.join(musicRoot, 'Artist/Album/stored.mp3').replace(/^\/+/, ''));
+
+    // The case the boot volume cannot show: a library on a mounted drive.
+    assert.equal(
+        storedTrackPath('/Volumes/DJ USB/_Serato_', '/Volumes/DJ USB/Music/x.mp3'),
+        'Music/x.mp3',
+    );
+    assert.equal(volumeRootOf('/Volumes/DJ USB/_Serato_'), '/Volumes/DJ USB');
+    assert.equal(volumeRootOf('/Users/someone/Music/_Serato_'), '/');
+
+    // And it still comes back out as an absolute path for everything downstream.
+    const node = readCrateTree(writeSerato).find((n) => nodeKey(n.components) === 'Stored');
+    assert.deepEqual(node!.tracks, [path.join(musicRoot, 'Artist/Album/stored.mp3')]);
+    console.log('  writing: track paths are stored the way Serato stores them — OK');
+}
+
 function checkWrittenCratesAgainstPyserato(): void {
     if (!fs.existsSync(PYSERATO_PYTHON)) {
         console.log(`  pyserato write cross-check: skipped (no interpreter at ${PYSERATO_PYTHON})`);
@@ -580,6 +619,26 @@ function packSelected(files: string[]): string {
         files.map((name) => ({ data: fs.readFileSync(path.join(subcrates, name)), name })),
     );
     return zipPath;
+}
+
+/** The first stored track path in a crate file, exactly as it sits on disk. */
+function ptrkOf(cratePath: string): string {
+    const buf = fs.readFileSync(cratePath);
+    let i = 0;
+    while (i + 8 <= buf.length) {
+        const tag = buf.toString('ascii', i, i + 4);
+        const length = buf.readUInt32BE(i + 4);
+        if (tag === 'otrk') {
+            // ptrk is the first chunk inside otrk.
+            const inner = buf.subarray(i + 8, i + 8 + length);
+            const innerLength = inner.readUInt32BE(4);
+            return Buffer.from(inner.subarray(8, 8 + innerLength))
+                .swap16()
+                .toString('utf16le');
+        }
+        i += 8 + length;
+    }
+    throw new Error(`no otrk chunk in ${cratePath}`);
 }
 
 /** An mp3 real enough for mp3tag.js, after check-taglib-tagging.ts's builder. */

@@ -54,11 +54,24 @@ const PLAYLISTS = (process.env.PLAYLISTS ?? 'Subbox Demo / Closers,Subbox Demo /
     .map((s) => s.trim())
     .filter(Boolean);
 
-/** The three path forms, as they will appear inside the crates. */
+/**
+ * The three path forms, as they will appear inside the crates.
+ *
+ * B and C are derived from what our writer produced, so they are transforms of
+ * the *stored* form rather than of the local path. Serato DJ Pro has now read all
+ * three: A and C show their tracks, B shows empty crates — and shows them under a
+ * doubled root, /Volumes/SubboxSerato/Volumes/SubboxSerato/…, which is the bug
+ * stated in Serato's own words.
+ */
 const VARIANTS = [
-    { name: 'A subbox', rewrite: (p: string) => p },
-    { name: 'B serato', rewrite: (p: string) => p.replace(`/Volumes/${VOLUME}/`, '') },
-    { name: 'C slash', rewrite: (p: string) => p.replace(`/Volumes/${VOLUME}`, '') },
+    // What the writer emits since the volume-prefix fix — the same bytes Serato
+    // itself writes, and the thing being re-checked.
+    { name: 'A subbox', rewrite: (stored: string) => stored },
+    // The bug, kept as the control it needs: tserato's path.resolve() output.
+    { name: 'B absolute', rewrite: (stored: string) => `/Volumes/${VOLUME}/${stored}` },
+    // Volume-relative but with a leading slash: proof the slash was never what
+    // broke it.
+    { name: 'C slash', rewrite: (stored: string) => `/${stored}` },
 ];
 
 type ExportCrate = { display_name: string; path_components: string[]; tracks: ExportTrack[] };
@@ -210,6 +223,10 @@ async function main(): Promise<void> {
                 }
             }
         }
+        // If A still carries the volume prefix, the build under test predates the fix
+        // and the whole image would be re-confirming the bug rather than the fix.
+        const leaf = path.join(subCrates, `${VARIANTS[0].name}%%Techno.crate`);
+        assert.ok(!firstPath(leaf).startsWith('/'), 'A must be volume-relative');
     } finally {
         execFileSync('hdiutil', ['detach', mount, '-quiet']);
     }

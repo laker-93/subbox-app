@@ -229,6 +229,29 @@ export function sanitizeCrateName(name: string): string {
 // ── Cues ────────────────────────────────────────────────────────────────────
 
 /**
+ * A track path in the form Serato itself stores: relative to the volume the
+ * `_Serato_` folder is on, with no leading slash.
+ *
+ * Serato resolves `ptrk` against that volume, which is what makes a library
+ * portable — the same crate works whether the drive mounts at /Volumes/DJ or
+ * /Volumes/DJ 1. tserato writes `path.resolve()` instead, so a library on an
+ * external drive got `/Volumes/DJ/Music/x.mp3`, which Serato reads as
+ * `/Volumes/DJ/Volumes/DJ/Music/x.mp3` and shows as an empty crate. On the boot
+ * volume the same rule just drops the leading slash, which is what Serato writes
+ * there too.
+ */
+export function storedTrackPath(seratoFolder: string, localPath: string): string {
+    const volume = volumeRootOf(seratoFolder);
+    if (volume !== '/' && (localPath === volume || localPath.startsWith(`${volume}/`))) {
+        return localPath.slice(volume.length + 1);
+    }
+    // A track on a different volume from the library is not expressible in this
+    // form; Serato does not write such crates either. Falling back to the
+    // root-relative path at least keeps the boot-volume case exactly right.
+    return localPath.replace(/^\/+/, '');
+}
+
+/**
  * Write crates into a `_Serato_` folder, backing up anything they replace.
  *
  * Two rules make this safe to point at a real library:
@@ -239,6 +262,14 @@ export function sanitizeCrateName(name: string): string {
  *    `Sets / Deep` also writes `Sets.crate`, and if the user keeps tracks
  *    directly in `Sets` an empty rewrite would silently delete them.
  */
+/**
+ * The volume a path lives on: `/Volumes/Something` for a mounted disk, `/` otherwise.
+ */
+export function volumeRootOf(target: string): string {
+    const match = /^(\/Volumes\/[^/]+)(\/|$)/.exec(target);
+    return match ? match[1] : '/';
+}
+
 export function writeCrates(seratoFolder: string, crates: CrateToWrite[]): WriteCratesResult {
     const subcrates = path.join(seratoFolder, 'SubCrates');
     fs.mkdirSync(subcrates, { recursive: true });
@@ -306,6 +337,15 @@ export function writeCrates(seratoFolder: string, crates: CrateToWrite[]): Write
         builder.save(root, seratoFolder, true);
     }
 
+    // Serato's own path form, applied to what tserato just wrote — before the
+    // untouched parents go back, so the user's own crates are never rewritten.
+    for (const file of new Set([...leafFiles, ...parentFiles])) {
+        const written = path.join(subcrates, file);
+        if (fs.existsSync(written)) {
+            rewriteCrateTrackPaths(written, (stored) => storedTrackPath(seratoFolder, stored));
+        }
+    }
+
     // Put back the parent crates that already existed. They were only rewritten
     // as a side effect of saving the branch under them.
     if (backupFolder) {
@@ -326,6 +366,62 @@ export function writeCrates(seratoFolder: string, crates: CrateToWrite[]): Write
         renamed,
         tracksWritten,
     };
+}
+
+/** Split a crate file, or an `otrk` body, into its tag/body chunks. */
+function crateChunks(buf: Buffer): Array<{ body: Buffer; tag: string }> {
+    const out: Array<{ body: Buffer; tag: string }> = [];
+    let i = 0;
+    while (i + 8 <= buf.length) {
+        const tag = buf.toString('ascii', i, i + 4);
+        const length = buf.readUInt32BE(i + 4);
+        out.push({ body: buf.subarray(i + 8, i + 8 + length), tag });
+        i += 8 + length;
+    }
+    return out;
+}
+
+function encodeCrateChunks(list: Array<{ body: Buffer; tag: string }>): Buffer {
+    return Buffer.concat(
+        list.map(({ body, tag }) => {
+            const header = Buffer.alloc(8);
+            header.write(tag, 0, 'ascii');
+            header.writeUInt32BE(body.length, 4);
+            return Buffer.concat([header, body]);
+        }),
+    );
+}
+
+/**
+ * Rewrite every track path in a crate file, leaving every other byte alone.
+ *
+ * tserato has no say in what it writes into `ptrk` — it resolves the path it is
+ * given — so the correction happens on the file after it is saved rather than by
+ * lying to `Track.fromPath`, which would break the existence check above it.
+ */
+function rewriteCrateTrackPaths(file: string, rewrite: (stored: string) => string): void {
+    const rewritten = encodeCrateChunks(
+        crateChunks(fs.readFileSync(file)).map((chunk) => {
+            if (chunk.tag !== 'otrk') return chunk;
+            return {
+                body: encodeCrateChunks(
+                    crateChunks(chunk.body).map((inner) =>
+                        inner.tag === 'ptrk'
+                            ? {
+                                  body: Buffer.from(
+                                      rewrite(Buffer.from(inner.body).swap16().toString('utf16le')),
+                                      'utf16le',
+                                  ).swap16(),
+                                  tag: 'ptrk',
+                              }
+                            : inner,
+                    ),
+                ),
+                tag: 'otrk',
+            };
+        }),
+    );
+    fs.writeFileSync(file, rewritten);
 }
 
 /** Serato's own limits. Past these tserato throws and Serato ignores the rest. */
