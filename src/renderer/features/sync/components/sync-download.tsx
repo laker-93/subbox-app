@@ -54,6 +54,9 @@ const WEB_EXTRACT_PATH_KEY = 'sync_web_extract_path';
  */
 const ZIP_MUSIC_DIR = 'music';
 
+/** localSettings key holding the user-chosen _Serato_ folder to write crates into. */
+const SERATO_FOLDER_KEY = 'serato_folder';
+
 /**
  * Turn the folder the user says they'll extract music.zip into, into the folder
  * the tracks will actually be in.
@@ -70,6 +73,29 @@ const musicRootFromExtractPath = (extractPath: string): string => {
     // a bare "C:" gets \ too, since a drive letter is only ever Windows.
     const separator = trimmed.includes('\\') || /^[a-z]:$/i.test(trimmed) ? '\\' : '/';
     return `${trimmed.replace(/[/\\]+$/, '')}${separator}${ZIP_MUSIC_DIR}`;
+};
+
+/**
+ * What writing the Serato crates did, as the main process reports it.
+ *
+ * Mirrors SeratoExportResult in src/main/features/core/sync/serato.ts. The counts
+ * that are *not* successes matter most here: a crate whose name had to change and
+ * a track that wasn't on disk both change what the user finds in Serato, and both
+ * are silent unless this screen says so.
+ */
+type SeratoWriteResult = {
+    backupFolder: null | string;
+    cratesWritten: number;
+    cues: {
+        alreadyCued: number;
+        failed: Array<{ reason: string; trackName: string }>;
+        unsupported: number;
+        written: number;
+    };
+    missing: string[];
+    renamed: Array<{ from: string; to: string }>;
+    seratoFolder: string;
+    tracksWritten: number;
 };
 
 type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'select';
@@ -155,6 +181,12 @@ export const SyncDownload = () => {
         xmlPath?: string;
     }>(null);
     const [includeRekordboxXml, setIncludeRekordboxXml] = useState(true);
+    // Serato crates are written on this machine, into the user's own library, so
+    // this is desktop-only and off unless asked for — unlike the Rekordbox XML,
+    // which is a new file in a folder of its own.
+    const [includeSeratoCrates, setIncludeSeratoCrates] = useState(false);
+    const [seratoFolder, setSeratoFolder] = useState<null | string>(null);
+    const [seratoResult, setSeratoResult] = useState<null | SeratoWriteResult>(null);
     // Untick to take the Rekordbox XML on its own — for playlists whose audio the
     // user already has, where all they need is the metadata to import.
     const [includeTracks, setIncludeTracks] = useState(true);
@@ -176,6 +208,16 @@ export const SyncDownload = () => {
         });
         ipc.invoke('sync:get-default-xml-directory').then((dir) => {
             if (typeof dir === 'string') setDefaultXmlDir(dir);
+        });
+        // The user's override wins; otherwise offer ~/Music/_Serato_ if it exists.
+        // A null default is why the checkbox can't just assume a folder.
+        localSettings.get(SERATO_FOLDER_KEY).then(async (dir) => {
+            if (typeof dir === 'string' && dir.length > 0) {
+                setSeratoFolder(dir);
+                return;
+            }
+            const found = await ipc!.invoke('sync:get-default-serato-folder');
+            if (typeof found === 'string') setSeratoFolder(found);
         });
     }, []);
 
@@ -199,6 +241,24 @@ export const SyncDownload = () => {
             localSettings.set(XML_DIRECTORY_KEY, dir);
         }
     }, []);
+
+    const handleSelectSeratoFolder = useCallback(async () => {
+        if (!ipc || !localSettings) return;
+        try {
+            const dir = await ipc.invoke('sync:select-serato-folder');
+            if (dir) {
+                setSeratoFolder(dir);
+                localSettings.set(SERATO_FOLDER_KEY, dir);
+            }
+        } catch (err: any) {
+            toast.error({ message: err?.message || 'Could not use that folder' });
+        }
+    }, []);
+
+    const handleShowSeratoFolder = useCallback(() => {
+        if (!ipc || !seratoResult?.seratoFolder) return;
+        ipc.invoke('sync:open-folder', seratoResult.seratoFolder);
+    }, [seratoResult?.seratoFolder]);
 
     const handleResetXmlDirectory = useCallback(() => {
         if (!localSettings) return;
@@ -299,7 +359,35 @@ export const SyncDownload = () => {
         setPlan(null);
         setError(null);
         setDownloadResult(null);
+        setSeratoResult(null);
     }, []);
+
+    /**
+     * Ask pymix for the crate structure and write it into the user's Serato
+     * library. Runs *after* the audio: a crate stores absolute paths, so writing
+     * one before the files are there produces a crate full of missing tracks.
+     * An empty musicRoot means "wherever the app keeps its music" — the main
+     * process is the side that knows.
+     */
+    const writeSeratoCrates = useCallback(
+        async (musicRoot: string) => {
+            if (!includeSeratoCrates || !seratoFolder) return;
+            const structure = await PymixController.seratoExport({
+                baseUrl: urlConfig.pymix,
+                body: { playlistIds: Array.from(selectedPlaylists) },
+            });
+            if (!structure.success) {
+                throw new Error(structure.reason || 'Could not build the Serato export');
+            }
+            const written = (await window.api.ipc.invoke('sync:write-serato-crates', {
+                crates: structure.crates,
+                musicRoot,
+                seratoFolder,
+            })) as SeratoWriteResult;
+            setSeratoResult(written);
+        },
+        [includeSeratoCrates, selectedPlaylists, seratoFolder],
+    );
 
     const handleDownload = useCallback(async () => {
         setStep('downloading');
@@ -307,6 +395,15 @@ export const SyncDownload = () => {
 
         try {
             if (isElectron()) {
+                // Crates alone: nothing to fetch, so nothing is fetched. pymix
+                // would reject a download with neither tracks nor XML in it, and
+                // rightly — the crates are written from tracks already on disk.
+                if (!includeTracks && !includeRekordboxXml) {
+                    await writeSeratoCrates('');
+                    setDownloadResult({ tracksExported: 0 });
+                    setStep('done');
+                    return;
+                }
                 console.log(
                     '[Subbox] Download (Electron) - selectedPlaylists:',
                     Array.from(selectedPlaylists),
@@ -328,9 +425,19 @@ export const SyncDownload = () => {
                     serverId: serverId ?? undefined,
                     username: server.username,
                 });
-                setDownloadResult(
-                    result as { musicPath?: string; tracksExported: number; xmlPath?: string },
-                );
+                const downloaded = result as {
+                    musicPath?: string;
+                    tracksExported: number;
+                    xmlPath?: string;
+                };
+                setDownloadResult(downloaded);
+
+                // Serato crates are written after the audio, and only after: a
+                // crate points at absolute paths, so writing one before the files
+                // are there produces a crate full of missing tracks. This is the
+                // reason the crate writing lives on the client at all — pymix
+                // could only ever guess at these paths.
+                await writeSeratoCrates(downloaded.musicPath ?? '');
                 setStep('done');
             } else {
                 // Web: one file, whatever the user asked for — the tracks zip with
@@ -396,6 +503,7 @@ export const SyncDownload = () => {
         server.username,
         serverId,
         webExtractPath,
+        writeSeratoCrates,
         xmlDir,
     ]);
 
@@ -411,8 +519,8 @@ export const SyncDownload = () => {
                     <TextTitle order={3}>Download Playlists</TextTitle>
                     <Text c="dimmed" size="sm">
                         Select playlists from your cloud library to preview a download plan.
-                        Download the tracks with a Rekordbox XML to import your playlists straight
-                        into Rekordbox.
+                        Download the tracks with a Rekordbox XML, or write them straight into your
+                        Serato library as crates.
                     </Text>
                     <Group gap="xs">
                         <Button
@@ -644,6 +752,53 @@ export const SyncDownload = () => {
                             )}
                         </Group>
                     )}
+                    {seratoResult && (
+                        <Stack align="center" gap={4}>
+                            <Text size="sm">
+                                {`${seratoResult.cratesWritten} Serato crate${seratoResult.cratesWritten === 1 ? '' : 's'} written with ${seratoResult.tracksWritten} track${seratoResult.tracksWritten === 1 ? '' : 's'}.`}
+                            </Text>
+                            {seratoResult.cues.written > 0 && (
+                                <Text c="dimmed" size="xs">
+                                    {`Cues written into ${seratoResult.cues.written} track${seratoResult.cues.written === 1 ? '' : 's'}.`}
+                                </Text>
+                            )}
+                            {/* Not a failure, and worth saying out loud: subbox
+                                deliberately never overwrites cues you already have. */}
+                            {seratoResult.cues.alreadyCued > 0 && (
+                                <Text c="dimmed" size="xs">
+                                    {`${seratoResult.cues.alreadyCued} track${seratoResult.cues.alreadyCued === 1 ? ' already had' : 's already had'} cues in Serato and ${seratoResult.cues.alreadyCued === 1 ? 'was' : 'were'} left untouched.`}
+                                </Text>
+                            )}
+                            {seratoResult.renamed.length > 0 && (
+                                <Text c="yellow" size="xs">
+                                    {`Renamed to fit a filename: ${seratoResult.renamed
+                                        .map((r) => `${r.from} → ${r.to}`)
+                                        .join(', ')}`}
+                                </Text>
+                            )}
+                            {seratoResult.missing.length > 0 && (
+                                <Text c="yellow" size="xs">
+                                    {`${seratoResult.missing.length} track${seratoResult.missing.length === 1 ? ' was' : 's were'} not on disk and left out of the crates.`}
+                                </Text>
+                            )}
+                            {seratoResult.backupFolder && (
+                                <Text c="dimmed" size="xs">
+                                    {`Crates that were replaced were backed up to ${seratoResult.backupFolder}`}
+                                </Text>
+                            )}
+                            <Text c="dimmed" size="xs">
+                                Restart Serato to see them.
+                            </Text>
+                            <Button
+                                leftSection={<Icon icon="folder" />}
+                                onClick={handleShowSeratoFolder}
+                                size="xs"
+                                variant="default"
+                            >
+                                Show Serato Folder
+                            </Button>
+                        </Stack>
+                    )}
                     <Button onClick={handleBack} size="md" variant="filled">
                         Start Over
                     </Button>
@@ -670,14 +825,20 @@ export const SyncDownload = () => {
     // web this screen is a manifest: no tabs, no diff badges, just what's in the file.
     const isWeb = !isElectron();
 
+    const writingSeratoCrates = includeSeratoCrates && Boolean(seratoFolder);
+
     // One button, whose wording follows what the tick boxes below put in the file.
     const downloadButtonLabel = !includeTracks
-        ? 'Download Rekordbox XML'
+        ? includeRekordboxXml
+            ? 'Download Rekordbox XML'
+            : 'Write Serato Crates'
         : isElectron()
           ? 'Download & Extract'
           : 'Download Zip';
     const downloadButtonTooltip = !includeTracks
-        ? 'Download just the Rekordbox XML for these playlists, with no audio files.'
+        ? includeRekordboxXml
+            ? 'Download just the Rekordbox XML for these playlists, with no audio files.'
+            : 'Write these playlists into your Serato library, pointing at tracks you already have.'
         : isElectron()
           ? 'Save the missing tracks into your local music folder, plus a Rekordbox XML if ticked above.'
           : 'Download the selected tracks as one zip, with a Rekordbox XML inside if ticked above.';
@@ -956,6 +1117,41 @@ export const SyncDownload = () => {
                 />
             </Group>
 
+            {/* Serato crates. Desktop only: they are written straight into the
+                user's own _Serato_ folder, against the paths the download just
+                landed on, which a browser can neither know nor reach. */}
+            {isElectron() && (
+                <Stack gap={4}>
+                    <Group gap="xs" style={{ width: 'fit-content' }}>
+                        <Tooltip
+                            label="Write these playlists into your Serato library as crates, pointing at the tracks downloaded here. Anything replaced is backed up first."
+                            multiline
+                            openDelay={300}
+                            position="top-start"
+                            w={300}
+                        >
+                            <Group gap="md" style={{ width: 'fit-content' }}>
+                                <Checkbox
+                                    checked={includeSeratoCrates}
+                                    disabled={!seratoFolder}
+                                    label="Write Serato crates"
+                                    onChange={(event) =>
+                                        setIncludeSeratoCrates(event.currentTarget.checked)
+                                    }
+                                    size="sm"
+                                />
+                            </Group>
+                        </Tooltip>
+                        <Button onClick={handleSelectSeratoFolder} size="xs" variant="subtle">
+                            {seratoFolder ? 'Change Serato Folder' : 'Choose Serato Folder'}
+                        </Button>
+                    </Group>
+                    <Text c="dimmed" size="xs" style={{ fontFamily: 'monospace' }}>
+                        {seratoFolder ?? 'No _Serato_ folder found — choose one to enable this'}
+                    </Text>
+                </Stack>
+            )}
+
             {/* Where the Rekordbox XML is saved (desktop only) */}
             {isElectron() && includeRekordboxXml && (
                 <Stack gap={4}>
@@ -1077,13 +1273,16 @@ export const SyncDownload = () => {
 
             <Button
                 disabled={
-                    // Nothing ticked, so there'd be nothing in the download.
-                    (!includeTracks && !includeRekordboxXml) ||
-                    // Tracks asked for, but there are none to fetch and no XML either.
+                    // Nothing ticked, so there'd be nothing to do. Serato crates
+                    // count: they can be written for tracks that are already here,
+                    // which is how you refresh a crate without re-downloading.
+                    (!includeTracks && !includeRekordboxXml && !writingSeratoCrates) ||
+                    // Tracks asked for, but there are none to fetch and nothing else either.
                     (includeTracks &&
                         summary.tracksMissing === 0 &&
                         metadata.updates.length === 0 &&
-                        !includeRekordboxXml) ||
+                        !includeRekordboxXml &&
+                        !writingSeratoCrates) ||
                     (!isElectron() && includeRekordboxXml && webExtractPath.trim().length === 0)
                 }
                 fullWidth

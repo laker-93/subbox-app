@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { Builder, Crate } from 'tserato';
+import { Builder, Crate, HotCue, HotCueType, Track, V2Mp3Encoder } from 'tserato';
 
 // ── Reading a Serato library ────────────────────────────────────────────────
 //
@@ -46,6 +46,42 @@ export interface CratePreview {
      *  tracks across a selection rather than summing counts that overlap. */
     trackKeys: string[];
 }
+
+export interface CrateToWrite {
+    /** Root first. One `.crate` file per level, which is how Serato spells a folder. */
+    pathComponents: string[];
+    tracks: Array<{ cues?: SeratoCueWire[]; localPath: string }>;
+}
+
+/** One cue or loop, in the shape pymix sends and receives. Positions in ms. */
+export interface SeratoCueWire {
+    end_ms?: null | number;
+    index: number;
+    name: string;
+    start_ms: number;
+    type: 'cue' | 'loop';
+}
+
+export interface WriteCratesResult {
+    /** Where the `.crate` files that were replaced were copied first, or null if
+     *  none were. The user's undo. */
+    backupFolder: null | string;
+    crateFiles: string[];
+    cratesWritten: number;
+    /** Tracks left out because the file wasn't where the download put it. */
+    missing: string[];
+    /** Crates whose name had to change to be a filename, so the UI can say so
+     *  rather than leaving the user to find a renamed crate in Serato. */
+    renamed: Array<{ from: string; to: string }>;
+    tracksWritten: number;
+}
+
+// ── Writing a Serato library ────────────────────────────────────────────────
+//
+// pymix used to write these files. It couldn't: a `.crate` stores an absolute
+// path per track and nothing else, and the server has never seen this
+// filesystem, so every path in them was a prediction. Here the paths are known
+// — these are the files that were just downloaded.
 
 export function nodeKey(components: string[]): string {
     return components.join(' / ');
@@ -147,4 +183,221 @@ export function resolveSeratoFolder(picked: string): null | string {
         if (fs.existsSync(path.join(candidate, 'SubCrates'))) return candidate;
     }
     return null;
+}
+
+/** Anything that would break the filename layout, and nothing else. */
+// eslint-disable-next-line no-control-regex
+const UNSAFE_IN_CRATE_NAME = /%%|[/\\\x00-\x1f]/g;
+
+export interface WriteCuesResult {
+    /** Files that already had cues in Serato and were left exactly as they were. */
+    alreadyCued: number;
+    failed: Array<{ reason: string; trackName: string }>;
+    /** Non-MP3 files. Neither tserato nor pyserato has an encoder for anything else. */
+    unsupported: number;
+    written: number;
+}
+
+/**
+ * The `.crate` files a branch of the tree occupies, root first.
+ *
+ * Nesting lives in the filename — `parent%%child.crate` — so this is derivable
+ * rather than discoverable, and it has to be, because the files that are about
+ * to be *replaced* must be known before anything is written.
+ * check-serato-crates.ts asserts these are the names tserato's own save produces.
+ */
+export function crateFileNames(components: string[]): string[] {
+    return components.map((_, i) => `${components.slice(0, i + 1).join('%%')}.crate`);
+}
+
+/**
+ * Make a crate name safe to be part of a filename, changing as little as possible.
+ *
+ * Only the things that would break the layout are touched: the path separators,
+ * the `%%` that encodes nesting, and control characters. Everything else Serato
+ * is happy to display is left alone, because the crate's name *is* its filename
+ * — sanitise more than necessary and the round trip renames the user's playlist.
+ *
+ * (tserato and pyserato both export a `sanitizeFilename` that strips everything
+ * outside `[A-Za-z0-9_ ]`, and neither actually calls it when saving. Using it
+ * here would rename most real crates, so this doesn't either.)
+ */
+export function sanitizeCrateName(name: string): string {
+    return name.replace(UNSAFE_IN_CRATE_NAME, '-').trim();
+}
+
+// ── Cues ────────────────────────────────────────────────────────────────────
+
+/**
+ * Write crates into a `_Serato_` folder, backing up anything they replace.
+ *
+ * Two rules make this safe to point at a real library:
+ *
+ *  * a `.crate` file about to be overwritten is copied to a timestamped folder
+ *    outside SubCrates first (inside it, Serato would try to read the copies);
+ *  * a *parent* crate that already exists is put back afterwards. Writing
+ *    `Sets / Deep` also writes `Sets.crate`, and if the user keeps tracks
+ *    directly in `Sets` an empty rewrite would silently delete them.
+ */
+export function writeCrates(seratoFolder: string, crates: CrateToWrite[]): WriteCratesResult {
+    const subcrates = path.join(seratoFolder, 'SubCrates');
+    fs.mkdirSync(subcrates, { recursive: true });
+
+    const renamed: Array<{ from: string; to: string }> = [];
+    const missing: string[] = [];
+    const leafFiles = new Set<string>();
+    const parentFiles = new Set<string>();
+    const roots: Crate[] = [];
+    let tracksWritten = 0;
+
+    for (const crate of crates) {
+        const components = crate.pathComponents
+            .map((name) => {
+                const safe = sanitizeCrateName(name);
+                if (safe !== name) renamed.push({ from: name, to: safe });
+                return safe;
+            })
+            .filter((name) => name.length > 0);
+        if (components.length === 0) continue;
+
+        const files = crateFileNames(components);
+        files.slice(0, -1).forEach((f) => parentFiles.add(f));
+        leafFiles.add(files[files.length - 1]);
+
+        // Build the branch outermost-in, so the root is what gets saved.
+        const nodes = components.map((name) => new Crate(name));
+        for (let i = 0; i < nodes.length - 1; i += 1) {
+            nodes[i].children.set(nodes[i + 1].name, nodes[i + 1]);
+        }
+        const leaf = nodes[nodes.length - 1];
+        for (const track of crate.tracks) {
+            if (!fs.existsSync(track.localPath)) {
+                // Nothing useful to write: a crate entry pointing at no file shows
+                // in Serato as a missing track, which reads as subbox having lost it.
+                missing.push(track.localPath);
+                continue;
+            }
+            leaf.addTrack(Track.fromPath(track.localPath));
+            tracksWritten += 1;
+        }
+        roots.push(nodes[0]);
+    }
+
+    // Back up before anything is written, and only what is actually at risk.
+    const atRisk = [...leafFiles, ...parentFiles].filter((f) =>
+        fs.existsSync(path.join(subcrates, f)),
+    );
+    let backupFolder: null | string = null;
+    if (atRisk.length > 0) {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        // Beside SubCrates, not inside it: Serato reads every file in SubCrates.
+        backupFolder = path.join(seratoFolder, `SubCrates-subbox-backup-${stamp}`);
+        fs.mkdirSync(backupFolder, { recursive: true });
+        for (const file of atRisk) {
+            fs.copyFileSync(path.join(subcrates, file), path.join(backupFolder, file));
+        }
+    }
+
+    // No encoder: the crate files only. Handing Builder an encoder makes it write
+    // Markers2 into *every* track it saves, including ones whose cues we have no
+    // business touching. Cues are written separately, and only where it is safe.
+    const builder = new Builder();
+    for (const root of roots) {
+        builder.save(root, seratoFolder, true);
+    }
+
+    // Put back the parent crates that already existed. They were only rewritten
+    // as a side effect of saving the branch under them.
+    if (backupFolder) {
+        for (const file of parentFiles) {
+            if (leafFiles.has(file)) continue;
+            const backedUp = path.join(backupFolder, file);
+            if (fs.existsSync(backedUp)) {
+                fs.copyFileSync(backedUp, path.join(subcrates, file));
+            }
+        }
+    }
+
+    return {
+        backupFolder,
+        crateFiles: [...leafFiles].sort(),
+        cratesWritten: leafFiles.size,
+        missing,
+        renamed,
+        tracksWritten,
+    };
+}
+
+/** Serato's own limits. Past these tserato throws and Serato ignores the rest. */
+const MAX_CUES = 8;
+const MAX_LOOPS = 4;
+
+/** Read the cues off a local file, or null if this file can't carry any. */
+export function readTrackCues(trackPath: string): null | SeratoCueWire[] {
+    if (path.extname(trackPath).toLowerCase() !== '.mp3') return null;
+    try {
+        return new V2Mp3Encoder().readCues(Track.fromPath(trackPath)).map((cue) => ({
+            end_ms: cue.end ?? null,
+            index: cue.index,
+            name: cue.name,
+            start_ms: cue.start,
+            type: cue.type === HotCueType.LOOP ? ('loop' as const) : ('cue' as const),
+        }));
+    } catch (err) {
+        console.warn(`[serato] could not read cues from ${path.basename(trackPath)}:`, err);
+        return null;
+    }
+}
+
+/**
+ * Write subbox's cues into the user's own audio files.
+ *
+ * Only ever into a file that has *no* cues of its own. A track the user has
+ * already cued in Serato is theirs, and subbox's copy of its cues is as old as
+ * the last import — overwriting is how a DJ loses an evening's work with no
+ * undo. The freshly downloaded track, which is what this is for, has none.
+ */
+export function writeTrackCues(
+    tracks: Array<{ cues: SeratoCueWire[]; localPath: string }>,
+): WriteCuesResult {
+    const result: WriteCuesResult = { alreadyCued: 0, failed: [], unsupported: 0, written: 0 };
+    const encoder = new V2Mp3Encoder();
+
+    for (const { cues, localPath } of tracks) {
+        const name = path.basename(localPath);
+        if (cues.length === 0) continue;
+        if (path.extname(localPath).toLowerCase() !== '.mp3') {
+            result.unsupported += 1;
+            continue;
+        }
+        try {
+            const track = Track.fromPath(localPath);
+            if (encoder.readCues(track).length > 0) {
+                result.alreadyCued += 1;
+                continue;
+            }
+            let nCues = 0;
+            let nLoops = 0;
+            for (const cue of cues) {
+                const isLoop = cue.type === 'loop';
+                if (isLoop ? nLoops >= MAX_LOOPS : nCues >= MAX_CUES) continue;
+                track.addHotCue(
+                    new HotCue({
+                        end: isLoop ? (cue.end_ms ?? null) : null,
+                        index: cue.index,
+                        name: cue.name,
+                        start: cue.start_ms,
+                        type: isLoop ? HotCueType.LOOP : HotCueType.CUE,
+                    }),
+                );
+                if (isLoop) nLoops += 1;
+                else nCues += 1;
+            }
+            encoder.write(track);
+            result.written += 1;
+        } catch (err: any) {
+            result.failed.push({ reason: err?.message || String(err), trackName: name });
+        }
+    }
+    return result;
 }

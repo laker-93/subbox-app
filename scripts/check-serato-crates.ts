@@ -7,9 +7,13 @@ import { Builder, Crate, Track } from 'tserato';
 
 import {
     CRATE_ZIP_FILENAME,
+    crateFileNames,
     nodeKey,
     readCrateTree,
+    readTrackCues,
     resolveSeratoFolder,
+    writeCrates,
+    writeTrackCues,
 } from '../src/main/features/core/sync/serato-crates';
 import { writeFlatZip } from '../src/main/features/core/sync/write-zip';
 
@@ -24,15 +28,25 @@ import { writeFlatZip } from '../src/main/features/core/sync/write-zip';
 //      not rglob(), so a `.crate` one level down parses to *zero* crates and the
 //      import fails with nothing pointing at the cause.
 //
-// The last section re-checks both against pyserato — the implementation pymix
-// actually runs — and is skipped when its interpreter isn't available.
+// Since P4 it also pins the export half, where the stakes are different: these
+// crate files are written into the user's own Serato library, so most of those
+// checks are about what must NOT be destroyed.
+//
+// Two sections re-check against pyserato — the implementation pymix actually
+// runs — and are skipped when its interpreter isn't available.
 //
 // Usage: pnpm run check:serato-crates
 
 const PYSERATO_PYTHON =
     process.env.PYSERATO_PYTHON ?? path.join(os.homedir(), 'workspace/pymix/.venv/bin/python');
 
-const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'serato-crates-check-'));
+// realpath'd, because the write checks below put real files in here and compare
+// the paths tserato stored against the ones pyserato reads back. pyserato's
+// Track.from_path calls Path.resolve(), which follows symlinks through whatever
+// part of the path exists — and on macOS /var is a symlink to /private/var. The
+// difference cannot arise on the server, where none of the user's paths exist at
+// all, so resolving the fixture's own root is the honest way to remove it.
+const workDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'serato-crates-check-')));
 const seratoFolder = path.join(workDir, '_Serato_');
 
 /**
@@ -208,7 +222,243 @@ function main(): void {
     checkFolderResolution();
     const zipPath = checkZipLayout();
     checkAgainstPyserato(zipPath);
+
+    console.log('\nSerato crate writing');
+    checkFileNamesMatchTseratoSave();
+    checkCratesAreWritten();
+    checkAnExistingParentCrateSurvives();
+    checkAReplacedCrateIsBackedUp();
+    checkNamesThatCannotBeFilenames();
+    checkCuesAreWrittenButNeverOverwritten();
+    checkWrittenCratesAgainstPyserato();
+
     console.log('\nAll Serato crate checks passed.');
+}
+// ── Writing ─────────────────────────────────────────────────────────────────
+//
+// The export half. Three of these guard damage rather than correctness: the crate
+// files go into the user's own Serato library, and a wrong write costs them work
+// they cannot get back.
+
+const writeDir = path.join(workDir, 'write');
+const writeSerato = path.join(writeDir, '_Serato_');
+const musicRoot = path.join(writeDir, 'music');
+
+function checkAnExistingParentCrateSurvives(): void {
+    // The damaging case. Writing "Sets / Deep" also writes "Sets.crate", and a
+    // user who keeps tracks directly in "Sets" would lose all of them to an empty
+    // rewrite they never asked for.
+    const keeper = localTrack('Artist/Album/keeper.mp3');
+    const sets = new Crate('Sets');
+    sets.addTrack(Track.fromPath(keeper));
+    new Builder().save(sets, writeSerato, true);
+
+    const result = writeCrates(writeSerato, [
+        { pathComponents: ['Sets', 'Deep'], tracks: [{ localPath: localTrack('a/b/deep.mp3') }] },
+    ]);
+
+    assert.ok(result.backupFolder, 'the parent it was about to overwrite must be backed up');
+    const byKey = new Map(readCrateTree(writeSerato).map((n) => [nodeKey(n.components), n]));
+    assert.deepEqual(
+        byKey.get('Sets')!.tracks,
+        [keeper],
+        'a parent crate that already had tracks keeps them',
+    );
+    assert.deepEqual(byKey.get('Sets / Deep')!.tracks, [path.join(musicRoot, 'a/b/deep.mp3')]);
+    console.log('  writing: an existing parent crate keeps its own tracks — OK');
+}
+
+function checkAReplacedCrateIsBackedUp(): void {
+    const before = fs.readFileSync(path.join(writeSerato, 'SubCrates', 'Subbox%%Peak Time.crate'));
+
+    const result = writeCrates(writeSerato, [
+        {
+            pathComponents: ['Subbox', 'Peak Time'],
+            tracks: [{ localPath: localTrack('Artist/Album/three.mp3') }],
+        },
+    ]);
+
+    assert.ok(result.backupFolder, 'replacing a crate must leave a copy behind');
+    assert.ok(
+        !result.backupFolder!.startsWith(path.join(writeSerato, 'SubCrates') + path.sep),
+        'the backup must sit outside SubCrates, which Serato reads in full',
+    );
+    assert.deepEqual(
+        fs.readFileSync(path.join(result.backupFolder!, 'Subbox%%Peak Time.crate')),
+        before,
+        'the backup is the crate exactly as it was',
+    );
+    const byKey = new Map(readCrateTree(writeSerato).map((n) => [nodeKey(n.components), n]));
+    assert.deepEqual(byKey.get('Subbox / Peak Time')!.tracks, [
+        path.join(musicRoot, 'Artist/Album/three.mp3'),
+    ]);
+    console.log('  writing: a replaced crate is backed up outside SubCrates — OK');
+}
+
+function checkCratesAreWritten(): void {
+    const result = writeCrates(writeSerato, [
+        {
+            pathComponents: ['Subbox', 'Peak Time'],
+            tracks: [
+                { localPath: localTrack('Artist/Album/one.mp3') },
+                { localPath: localTrack('Artist/Album/two.mp3') },
+                { localPath: path.join(musicRoot, 'Artist/Album/gone.mp3') },
+            ],
+        },
+    ]);
+
+    assert.equal(result.cratesWritten, 1);
+    assert.equal(result.tracksWritten, 2);
+    assert.deepEqual(result.missing, [path.join(musicRoot, 'Artist/Album/gone.mp3')]);
+    assert.equal(result.backupFolder, null, 'nothing existed, so nothing was backed up');
+
+    // Read back through the same parse the import uses, so the round trip is the
+    // assertion rather than the bytes.
+    const nodes = readCrateTree(writeSerato);
+    const byKey = new Map(nodes.map((n) => [nodeKey(n.components), n]));
+    assert.deepEqual([...byKey.keys()], ['Subbox / Peak Time']);
+    assert.deepEqual(byKey.get('Subbox / Peak Time')!.tracks, [
+        path.join(musicRoot, 'Artist/Album/one.mp3'),
+        path.join(musicRoot, 'Artist/Album/two.mp3'),
+    ]);
+    console.log('  writing: a nested crate round-trips through the import parse — OK');
+}
+
+function checkCuesAreWrittenButNeverOverwritten(): void {
+    const fresh = synthMp3('Artist/Album/fresh.mp3');
+    const cues = [
+        { end_ms: null, index: 0, name: 'in', start_ms: 8000, type: 'cue' as const },
+        { end_ms: 188000, index: 0, name: 'tail', start_ms: 180000, type: 'loop' as const },
+    ];
+
+    const first = writeTrackCues([{ cues, localPath: fresh }]);
+    assert.equal(first.written, 1, 'a track with no cues of its own gets subbox’s');
+
+    const readBack = readTrackCues(fresh)!;
+    assert.deepEqual(
+        readBack.map((c) => [c.type, c.start_ms, c.end_ms, c.name]),
+        [
+            ['cue', 8000, null, 'in'],
+            ['loop', 180000, 188000, 'tail'],
+        ],
+        'the loop keeps its end point, which is the tserato#11 signature',
+    );
+
+    // The rule that makes this safe to point at a real library: a track the user
+    // has already cued is theirs, and subbox’s copy is as old as the last import.
+    const second = writeTrackCues([
+        {
+            cues: [{ index: 0, name: 'clobber', start_ms: 1, type: 'cue' as const }],
+            localPath: fresh,
+        },
+    ]);
+    assert.equal(second.written, 0);
+    assert.equal(second.alreadyCued, 1);
+    assert.deepEqual(readTrackCues(fresh), readBack, 'existing cues are left exactly as they were');
+
+    // Nothing but MP3 has an encoder, on either side.
+    const flac = localTrack('Artist/Album/five.flac');
+    const skipped = writeTrackCues([{ cues, localPath: flac }]);
+    assert.equal(skipped.unsupported, 1);
+    assert.equal(readTrackCues(flac), null);
+
+    console.log('  cues: written into an uncued track, never over an existing one — OK');
+}
+
+function checkFileNamesMatchTseratoSave(): void {
+    // crateFileNames derives what save() names its files, because the files that
+    // are about to be replaced have to be known before anything is written. If
+    // tserato ever changes that naming, the backup would protect the wrong files.
+    const probe = path.join(writeDir, 'probe', '_Serato_');
+    const leaf = new Crate('Deep');
+    const mid = new Crate('Peak');
+    const root = new Crate('Sets');
+    mid.children.set(leaf.name, leaf);
+    root.children.set(mid.name, mid);
+    new Builder().save(root, probe, true);
+
+    const actual = fs.readdirSync(path.join(probe, 'SubCrates')).sort();
+    assert.deepEqual(
+        actual,
+        [...crateFileNames(['Sets', 'Peak', 'Deep'])].sort(),
+        'crateFileNames must name exactly the files tserato writes',
+    );
+    console.log('  crate filenames: derived names match what tserato writes — OK');
+}
+
+function checkNamesThatCannotBeFilenames(): void {
+    // A subbox playlist name is free text; a crate name is a filename, and `/` and
+    // `%%` are both structural. Renaming has to be reported, or the user goes
+    // looking in Serato for a crate that is there under another name.
+    const result = writeCrates(writeSerato, [
+        {
+            pathComponents: ['Deep / Dub', 'a%%b'],
+            tracks: [{ localPath: localTrack('Artist/Album/four.mp3') }],
+        },
+    ]);
+
+    assert.deepEqual(result.renamed, [
+        { from: 'Deep / Dub', to: 'Deep - Dub' },
+        { from: 'a%%b', to: 'a-b' },
+    ]);
+    assert.deepEqual(result.crateFiles, ['Deep - Dub%%a-b.crate']);
+    const keys = readCrateTree(writeSerato).map((n) => nodeKey(n.components));
+    assert.ok(keys.includes('Deep - Dub / a-b'), 'the renamed crate parses back as one branch');
+    console.log('  writing: a name that cannot be a filename is renamed and reported — OK');
+}
+
+function checkWrittenCratesAgainstPyserato(): void {
+    if (!fs.existsSync(PYSERATO_PYTHON)) {
+        console.log(`  pyserato write cross-check: skipped (no interpreter at ${PYSERATO_PYTHON})`);
+        return;
+    }
+    const script = `
+import json, sys
+from pathlib import Path
+from pyserato.builder import Builder
+
+def walk(crate, components, out):
+    here = components + [crate.name]
+    if crate.tracks:
+        out[' / '.join(here)] = sorted(str(t.path) for t in crate.tracks)
+    for child in crate.children.values():
+        walk(child, here, out)
+    return out
+
+out = {}
+for top in Builder().parse_crates_from_root_path(Path(sys.argv[1])).values():
+    walk(top, [], out)
+print(json.dumps(out))
+`;
+    const stdout = execFileSync(
+        PYSERATO_PYTHON,
+        ['-c', script, path.join(writeSerato, 'SubCrates')],
+        { encoding: 'utf8' },
+    );
+    const fromServer: Record<string, string[]> = JSON.parse(stdout);
+    const fromClient = Object.fromEntries(
+        readCrateTree(writeSerato).map((n) => [nodeKey(n.components), [...n.tracks].sort()]),
+    );
+
+    // The round trip that matters: crates written here get re-imported through
+    // pymix, which parses them with pyserato and keys the manifest on these exact
+    // paths.
+    assert.deepEqual(
+        fromServer,
+        fromClient,
+        'pyserato must read back exactly the crates and paths that were written',
+    );
+    console.log(
+        `  pyserato write cross-check: ${Object.keys(fromServer).length} crates agree — OK`,
+    );
+}
+
+/** A file for a crate to point at. writeCrates leaves out anything not on disk. */
+function localTrack(relative: string): string {
+    const full = path.join(musicRoot, relative);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, '');
+    return full;
 }
 
 function packSelected(files: string[]): string {
@@ -219,6 +469,19 @@ function packSelected(files: string[]): string {
         files.map((name) => ({ data: fs.readFileSync(path.join(subcrates, name)), name })),
     );
     return zipPath;
+}
+
+/** An mp3 real enough for mp3tag.js, after check-taglib-tagging.ts's builder. */
+function synthMp3(relative: string): string {
+    const full = path.join(musicRoot, relative);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    const header = Buffer.alloc(10);
+    header.write('ID3', 0, 'latin1');
+    header[3] = 3;
+    // A 128kbps 44.1kHz mono MPEG-1 Layer III frame, followed by its 417 bytes.
+    const frame = Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x44]), Buffer.alloc(417)]);
+    fs.writeFileSync(full, Buffer.concat([header, frame, frame, frame]));
+    return full;
 }
 
 try {

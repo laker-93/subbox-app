@@ -214,13 +214,70 @@ const rbImportParameters = z.object({
  * and sends the mapping. `crate_path` must be the path exactly as the crate
  * stores it, because that is the key pymix looks the entry up by.
  */
+const seratoCue = z.object({
+    end_ms: z.number().nullish(),
+    index: z.number(),
+    name: z.string(),
+    start_ms: z.number(),
+    type: z.enum(['cue', 'loop']),
+});
+
 const seratoImportParameters = z.object({
     track_identities: z.array(
         z.object({
             crate_path: z.string(),
+            /**
+             * The cues as read off the user's own file. pymix can only read its
+             * copy, which is frozen at whatever was uploaded — so for a track the
+             * library already has, every cue set in Serato since is invisible to
+             * it. Absent means "we couldn't read them, use your copy"; an empty
+             * array means "we read them and there are none", which pymix leaves
+             * alone rather than treating as a deletion.
+             */
+            cues: z.array(seratoCue).optional(),
             subbox_id: z.string(),
         }),
     ),
+});
+
+/**
+ * The playlists to write as Serato crates, and what goes in them.
+ *
+ * pymix used to write the `.crate` files itself, against a `user_root` this
+ * client sent it — a prediction about a filesystem the server has never seen,
+ * and a wrong one produces crates that parse perfectly and resolve nothing. So
+ * it returns the structure and the main process writes the files against the
+ * paths the download actually landed on.
+ */
+const seratoExportParameters = z.object({
+    /** Empty for every playlist. */
+    playlistIds: z.array(z.string()),
+});
+
+const seratoExport = z.object({
+    crates: z.array(
+        z.object({
+            display_name: z.string(),
+            /** Root first. One `.crate` file per level — that is how Serato spells a folder. */
+            path_components: z.array(z.string()),
+            tracks: z.array(
+                z.object({
+                    album: z.string(),
+                    artist: z.string(),
+                    cues: z.array(seratoCue),
+                    rating: z.number(),
+                    /** Inside the download, under `music/`. Join onto the music folder. */
+                    relative_path: z.string(),
+                    subbox_id: z.string().nullish(),
+                    title: z.string(),
+                }),
+            ),
+        }),
+    ),
+    n_crates: z.number(),
+    n_tracks: z.number(),
+    reason: z.string(),
+    success: z.boolean(),
 });
 
 const importProgressParameters = z.object({
@@ -466,6 +523,7 @@ export const pymixType = {
         login: loginParameters,
         matchTracks: matchTracksParameters,
         rbImport: rbImportParameters,
+        seratoExport: seratoExportParameters,
         seratoImport: seratoImportParameters,
         storageCheck: storageCheckParameters,
         sync: syncParameters,
@@ -496,6 +554,7 @@ export const pymixType = {
         matchTracks,
         matchYoutubeResponse,
         parseLinkResponse,
+        seratoExport,
         storageCheck,
         sync,
         syncPlan,

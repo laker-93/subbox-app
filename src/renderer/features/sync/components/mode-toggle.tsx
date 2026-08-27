@@ -62,7 +62,7 @@ export const ModeToggle = ({ withAppMenu = true }: ModeToggleProps) => {
                             <Tooltip
                                 label={t('page.modeToggle.syncTooltip', {
                                     defaultValue:
-                                        'Move music between your DJ software and Sub-box. Upload tracks from Rekordbox or Serato, or download playlists (with Rekordbox XML) to use elsewhere.',
+                                        'Move music between your DJ software and Sub-box. Upload tracks from Rekordbox or Serato, or download playlists back out as a Rekordbox XML or Serato crates.',
                                 })}
                                 multiline
                                 openDelay={300}
