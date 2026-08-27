@@ -246,7 +246,16 @@ async function main() {
     const allEvents = await page.evaluate(() => window.__watchEvents.slice());
     await page.evaluate(() => window.api.ipc.invoke('sync:stop-watch')).catch(() => {});
 
-    const active = (e) => e.phase === 'scanning' || e.phase === 'uploading';
+    // Only 'uploading' represents real network contention with the download
+    // stream. 'scanning' fires unconditionally at the top of every poll pass —
+    // including one that immediately finds an empty watch dir and does zero
+    // I/O (`pollAndUpload`'s watchPaused check precedes it, but a no-op scan
+    // still emits it) — so counting it as "active" false-flags a poll that
+    // merely began during the window's first/last few ms (IPC round-trip
+    // latency between the renderer clocking downloadStart/downloadEnd and
+    // main actually setting/clearing `watchPaused`), not a real violation.
+    // See docs/qa/features/watch-download-concurrency.md.
+    const active = (e) => e.phase === 'uploading';
     const duringDownload = allEvents.filter(
         (e) => e.t >= downloadStart && e.t <= downloadEnd && active(e),
     );
