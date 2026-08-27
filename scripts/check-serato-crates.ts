@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { Builder, Crate, Track } from 'tserato';
+import { Builder, Crate, Track, V2Mp3Encoder } from 'tserato';
 
 import {
     CRATE_ZIP_FILENAME,
@@ -12,6 +12,7 @@ import {
     readCrateTree,
     readTrackCues,
     resolveSeratoFolder,
+    SeratoCueWire,
     writeCrates,
     writeTrackCues,
 } from '../src/main/features/core/sync/serato-crates';
@@ -39,6 +40,22 @@ import { writeFlatZip } from '../src/main/features/core/sync/write-zip';
 
 const PYSERATO_PYTHON =
     process.env.PYSERATO_PYTHON ?? path.join(os.homedir(), 'workspace/pymix/.venv/bin/python');
+
+/**
+ * The one irreversible thing this code can do, checked against real analysed files.
+ *
+ * A Serato-analysed MP3 carries six GEOB frames. Five of them — Analysis,
+ * Autotags, BeatGrid, Markers_, Overview — are minutes of the user's work
+ * (beatgrid, waveform, key/BPM) that cannot be recovered without re-analysing,
+ * losing any manual gridding with it. laker-93/tserato#9 was a write that
+ * replaced the whole GEOB array and took all five with it.
+ *
+ * Skipped when the fixture library isn't on this machine. It has to be real
+ * Serato output: a synthesised file has none of the frames whose survival is the
+ * thing being checked.
+ */
+const ANALYSED_FIXTURES =
+    process.env.SERATO_QA_LIBRARY ?? path.join(os.homedir(), 'Music', 'SubboxSeratoQA');
 
 // realpath'd, because the write checks below put real files in here and compare
 // the paths tserato stored against the ones pyserato reads back. pyserato's
@@ -230,6 +247,7 @@ function main(): void {
     checkAReplacedCrateIsBackedUp();
     checkNamesThatCannotBeFilenames();
     checkCuesAreWrittenButNeverOverwritten();
+    checkCueWritesPreserveTheAnalysis();
     checkWrittenCratesAgainstPyserato();
 
     console.log('\nAll Serato crate checks passed.');
@@ -365,6 +383,72 @@ function checkCuesAreWrittenButNeverOverwritten(): void {
     console.log('  cues: written into an uncued track, never over an existing one — OK');
 }
 
+function checkCueWritesPreserveTheAnalysis(): void {
+    if (!fs.existsSync(PYSERATO_PYTHON)) {
+        console.log(`  GEOB preservation: skipped (no interpreter at ${PYSERATO_PYTHON})`);
+        return;
+    }
+    const analysed = findAnalysedFixtures().filter((f) => geobFrames(f).length >= 6);
+    if (analysed.length === 0) {
+        console.log(
+            `  GEOB preservation: skipped (no analysed fixtures under ${ANALYSED_FIXTURES})`,
+        );
+        return;
+    }
+
+    const dir = path.join(workDir, 'analysed');
+    fs.mkdirSync(dir, { recursive: true });
+    const cues: SeratoCueWire[] = [
+        { end_ms: null, index: 0, name: 'subbox-in', start_ms: 4000, type: 'cue' },
+        { end_ms: 20000, index: 0, name: 'subbox-loop', start_ms: 12000, type: 'loop' },
+    ];
+
+    // ── An already-cued track is not touched at all ─────────────────────────
+    const cued = path.join(dir, 'cued.mp3');
+    fs.copyFileSync(analysed[0], cued);
+    assert.ok(readTrackCues(cued)!.length > 0, 'fixture should already carry cues');
+    const bytesBefore = fs.readFileSync(cued);
+    const skipped = writeTrackCues([{ cues, localPath: cued }]);
+    assert.equal(skipped.written, 0);
+    assert.equal(skipped.alreadyCued, 1);
+    assert.deepEqual(fs.readFileSync(cued), bytesBefore, 'the file must not be rewritten at all');
+    console.log('  GEOB preservation: an already-cued analysed track is left byte-identical — OK');
+
+    // ── An analysed track with no cues gets them, and keeps everything else ──
+    const fresh = path.join(dir, 'fresh.mp3');
+    fs.copyFileSync(analysed[0], fresh);
+    // Clear just the cues, the way a user who deleted them in Serato would: an
+    // empty Markers2, with the other five frames still in place.
+    const cleared = Track.fromPath(fresh);
+    new V2Mp3Encoder().write(cleared);
+    const framesBefore = geobFrames(fresh);
+    assert.equal(readTrackCues(fresh)!.length, 0, 'cues cleared, frames kept');
+    assert.ok(framesBefore.length >= 6, `expected the full frame set, got ${framesBefore}`);
+
+    const result = writeTrackCues([{ cues, localPath: fresh }]);
+    assert.equal(result.written, 1, `write failed: ${JSON.stringify(result.failed)}`);
+
+    const framesAfter = geobFrames(fresh);
+    assert.deepEqual(
+        framesAfter,
+        framesBefore,
+        'writing cues must not disturb the beatgrid, waveform or analysis frames',
+    );
+    const back = readTrackCues(fresh)!;
+    assert.deepEqual(
+        back.map((c) => [c.type, c.start_ms, c.end_ms ?? null]),
+        [
+            ['cue', 4000, null],
+            ['loop', 12000, 20000],
+        ],
+        'and the cues it did write must read back intact',
+    );
+    console.log(
+        `  GEOB preservation: cues written into an analysed track, all ` +
+            `${framesAfter.length} frames intact — OK`,
+    );
+}
+
 function checkFileNamesMatchTseratoSave(): void {
     // crateFileNames derives what save() names its files, because the files that
     // are about to be replaced have to be known before anything is written. If
@@ -453,6 +537,33 @@ print(json.dumps(out))
     );
 }
 
+/** Every analysed mp3 under the fixture library, deepest frame sets first. */
+function findAnalysedFixtures(): string[] {
+    if (!fs.existsSync(ANALYSED_FIXTURES)) return [];
+    return fs
+        .readdirSync(ANALYSED_FIXTURES, { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile() && e.name.toLowerCase().endsWith('.mp3'))
+        .map((e) => path.join(e.parentPath ?? (e as any).path, e.name));
+}
+
+function geobFrames(file: string): string[] {
+    if (!fs.existsSync(PYSERATO_PYTHON)) return [];
+    const script = `
+import sys
+from mutagen.mp3 import MP3
+print("\\n".join(sorted(k[5:] for k in MP3(sys.argv[1]).keys() if k.startswith("GEOB:"))))
+`;
+    return execFileSync(PYSERATO_PYTHON, ['-c', script, file], { encoding: 'utf8' })
+        .split('\n')
+        .filter(Boolean);
+}
+
+try {
+    main();
+} finally {
+    fs.rmSync(workDir, { force: true, recursive: true });
+}
+
 /** A file for a crate to point at. writeCrates leaves out anything not on disk. */
 function localTrack(relative: string): string {
     const full = path.join(musicRoot, relative);
@@ -482,10 +593,4 @@ function synthMp3(relative: string): string {
     const frame = Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x44]), Buffer.alloc(417)]);
     fs.writeFileSync(full, Buffer.concat([header, frame, frame, frame]));
     return full;
-}
-
-try {
-    main();
-} finally {
-    fs.rmSync(workDir, { force: true, recursive: true });
 }
