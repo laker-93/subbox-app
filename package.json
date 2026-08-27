@@ -56,6 +56,7 @@
         "check:serato-crates": "tsx scripts/check-serato-crates.ts",
         "dev:serato-roundtrip": "tsx scripts/dev-serato-roundtrip.ts",
         "dev:serato-reimport": "tsx scripts/dev-serato-reimport.ts",
+        "dev:serato-ui": "tsx scripts/dev-serato-ui.ts",
         "check:taglib-tagging": "tsx scripts/check-taglib-tagging.ts",
         "postinstall": "electron-builder install-app-deps",
         "lint": "pnpm run typecheck && pnpm run lint-code && pnpm run lint-styles",

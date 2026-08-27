@@ -708,7 +708,13 @@ export const SyncDownload = () => {
         return (
             <Center style={{ height: '100%' }}>
                 <Stack align="center" gap="md">
-                    <TextTitle order={3}>Download Complete</TextTitle>
+                    {/* Nothing was fetched in the crates-only case, so don't call it
+                        a download — the sentence underneath would contradict it. */}
+                    <TextTitle order={3}>
+                        {!includeTracks && !includeRekordboxXml
+                            ? 'Crates Written'
+                            : 'Download Complete'}
+                    </TextTitle>
                     <Text c="dimmed" size="sm">
                         {!includeTracks
                             ? includeRekordboxXml
@@ -755,7 +761,16 @@ export const SyncDownload = () => {
                         </Group>
                     )}
                     {seratoResult && (
-                        <Stack align="center" gap={4}>
+                        // Bounded and breakable: the backup folder is a full path with
+                        // no spaces in it, and unconstrained it ran off both edges of
+                        // the window rather than wrapping.
+                        <Stack
+                            align="center"
+                            gap={4}
+                            maw={620}
+                            style={{ overflowWrap: 'anywhere' }}
+                            ta="center"
+                        >
                             <Text size="sm">
                                 {`${seratoResult.cratesWritten} Serato crate${seratoResult.cratesWritten === 1 ? '' : 's'} written with ${seratoResult.tracksWritten} track${seratoResult.tracksWritten === 1 ? '' : 's'}.`}
                             </Text>
