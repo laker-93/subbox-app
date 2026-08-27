@@ -78,28 +78,17 @@ const beetsImportProgress = z.object({
     phase_n_total: z.number().optional(),
     reason: z.string(),
     result: z.boolean(),
+    // Set on a job that *succeeded* but did not do everything asked of it — a
+    // Serato import whose crates named tracks that are not in the library. `reason`
+    // only reaches the client on a failed job, so a partial success routed through
+    // it would say nothing at all.
+    warnings: z.string().nullish(),
 });
 
 const librarySize = z.object({
     reason: z.string(),
     success: z.boolean(),
     total_size_bytes: z.number(),
-});
-
-const rbImport = z.object({
-    beets_output: z.string(),
-    imported_tracks: z.number(),
-    n_tracks_fir_imort: z.number(),
-    reason: z.string(),
-    success: z.boolean(),
-});
-
-const seratoImport = z.object({
-    beets_output: z.string(),
-    imported_tracks: z.number(),
-    n_tracks_fir_imort: z.number(),
-    reason: z.string(),
-    success: z.boolean(),
 });
 
 const exportJob = z.object({
@@ -215,6 +204,23 @@ const matchTracksParameters = z.object({
 
 const rbImportParameters = z.object({
     playlistNames: z.array(z.array(z.string())).nullable(),
+});
+
+/**
+ * Which subbox track each crate entry refers to.
+ *
+ * A `.crate` file stores an absolute path on the user's machine and nothing else,
+ * and pymix never sees their files — so the client reads SUBBOX_ID off each one
+ * and sends the mapping. `crate_path` must be the path exactly as the crate
+ * stores it, because that is the key pymix looks the entry up by.
+ */
+const seratoImportParameters = z.object({
+    track_identities: z.array(
+        z.object({
+            crate_path: z.string(),
+            subbox_id: z.string(),
+        }),
+    ),
 });
 
 const importProgressParameters = z.object({
@@ -460,6 +466,7 @@ export const pymixType = {
         login: loginParameters,
         matchTracks: matchTracksParameters,
         rbImport: rbImportParameters,
+        seratoImport: seratoImportParameters,
         storageCheck: storageCheckParameters,
         sync: syncParameters,
         syncPlan: syncPlanParameters,
@@ -489,8 +496,6 @@ export const pymixType = {
         matchTracks,
         matchYoutubeResponse,
         parseLinkResponse,
-        rbImport,
-        seratoImport,
         storageCheck,
         sync,
         syncPlan,
