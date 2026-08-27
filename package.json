@@ -54,6 +54,7 @@
         "check:rekordbox-paths": "tsx scripts/check-rekordbox-path-resolution.ts",
         "check:export-zip-extraction": "tsx scripts/check-export-zip-extraction.ts",
         "check:serato-crates": "tsx scripts/check-serato-crates.ts",
+        "dev:rekordbox-export": "tsx scripts/dev-rekordbox-export.ts",
         "dev:serato-roundtrip": "tsx scripts/dev-serato-roundtrip.ts",
         "dev:serato-reimport": "tsx scripts/dev-serato-reimport.ts",
         "dev:serato-ui": "tsx scripts/dev-serato-ui.ts",
