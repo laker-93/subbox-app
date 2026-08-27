@@ -135,12 +135,12 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
-    seratoDownload: {
-        body: pymixType._parameters.exportJob,
+    seratoExport: {
+        body: pymixType._parameters.seratoExport,
         method: 'POST',
         path: 'serato/export',
         responses: {
-            200: resultWithHeaders(pymixType._response.exportJob),
+            200: resultWithHeaders(pymixType._response.seratoExport),
             500: resultWithHeaders(pymixType._response.error),
         },
     },

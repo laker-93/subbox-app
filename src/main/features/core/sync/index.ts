@@ -725,6 +725,12 @@ ipcMain.handle(
 
 // ── Download playlists from cloud ──────────────────────────────────────────
 
+/** Where a download puts the tracks. Exported so the Serato export can point
+ *  crates at it without the renderer having to know the layout. */
+export function getMusicPath(): string {
+    return path.join(getAppPath(), 'music');
+}
+
 async function downloadFileFromFilebrowser(
     filebrowserUrl: string,
     auth: FbAuth,
@@ -783,10 +789,6 @@ function getAppPath(): string {
     // `staging` and `production` use the plain `subbox` path. See
     // `src/main/config/app-config.ts`.
     return path.join(path.dirname(userPath), appConfig.subboxDir);
-}
-
-function getMusicPath(): string {
-    return path.join(getAppPath(), 'music');
 }
 
 /**

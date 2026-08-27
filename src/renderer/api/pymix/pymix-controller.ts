@@ -70,8 +70,8 @@ type RbImportArgs = {
     body: z.infer<typeof pymixType._parameters.rbImport>;
 };
 
-type SeratoDownloadArgs = {
-    body: z.infer<typeof pymixType._parameters.exportJob>;
+type SeratoExportArgs = {
+    body: z.infer<typeof pymixType._parameters.seratoExport>;
 };
 
 type SeratoImportArgs = {
@@ -346,12 +346,12 @@ export const PymixController = {
         return res.body.data;
     },
 
-    seratoDownload: async (args: PymixClientArgs & SeratoDownloadArgs) => {
+    seratoExport: async (args: PymixClientArgs & SeratoExportArgs) => {
         const { baseUrl, body, signal, token } = args;
-        const res = await pymixApiClient({ baseUrl, signal, token }).seratoDownload({ body });
+        const res = await pymixApiClient({ baseUrl, signal, token }).seratoExport({ body });
 
         if (res.status !== 200) {
-            throw new Error('Failed to export serato');
+            throw new Error('Failed to build the Serato export');
         }
 
         return res.body.data;

@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as tus from 'tus-js-client';
 
+import { getMusicPath } from '/@/main/features/core/sync';
 import {
     createFbAuth,
     createPymixAuth,
@@ -18,10 +19,17 @@ import { sanitizePathSegment } from '/@/main/features/core/sync/rekordbox-xml';
 import {
     CRATE_ZIP_FILENAME,
     CratePreview,
+    CrateToWrite,
     DEFAULT_SERATO_FOLDER,
     nodeKey,
     readCrateTree,
+    readTrackCues,
     resolveSeratoFolder,
+    SeratoCueWire,
+    writeCrates,
+    WriteCratesResult,
+    WriteCuesResult,
+    writeTrackCues,
 } from '/@/main/features/core/sync/serato-crates';
 import { getOrCreateSubboxId } from '/@/main/features/core/sync/subbox-id-tags';
 import { writeFlatZip } from '/@/main/features/core/sync/write-zip';
@@ -67,7 +75,7 @@ export interface SeratoUploadResult {
     skipped: number;
     totalTracksInCrates: number;
     /** The manifest to send as `track_identities` on POST /serato/import. */
-    trackIdentities: Array<{ crate_path: string; subbox_id: string }>;
+    trackIdentities: Array<{ crate_path: string; cues?: SeratoCueWire[]; subbox_id: string }>;
     uploaded: number;
 }
 
@@ -204,7 +212,11 @@ ipcMain.handle(
         });
 
         const dropped: Array<{ reason: string; trackName: string }> = [];
-        const trackIdentities: Array<{ crate_path: string; subbox_id: string }> = [];
+        const trackIdentities: Array<{
+            crate_path: string;
+            cues?: SeratoCueWire[];
+            subbox_id: string;
+        }> = [];
         /** subbox_id → absolute local path, for the upload pass below. */
         const pathById = new Map<string, string>();
 
@@ -239,11 +251,23 @@ ipcMain.handle(
                 });
                 continue;
             }
+            // The cues, read off the file the user is actually cueing. pymix can
+            // only read its own copy, which is frozen at whatever was uploaded, so
+            // for a track the library already has, every cue set in Serato since is
+            // invisible to it. null means this file can't carry cues (not an MP3,
+            // or unreadable) and pymix should fall back to its own copy; an empty
+            // array means it can and there are none.
+            const cues = readTrackCues(trackPath);
+
             // pymix keys the manifest on the path as stored in the crate, which is
             // exactly what tserato handed us. Two crate entries can share an id --
             // the same track filed under two paths -- and both belong in the
             // manifest, because both crates need the playlist entry.
-            trackIdentities.push({ crate_path: trackPath, subbox_id: subboxId });
+            trackIdentities.push({
+                crate_path: trackPath,
+                subbox_id: subboxId,
+                ...(cues === null ? {} : { cues }),
+            });
             const alreadySeen = pathById.get(subboxId);
             if (alreadySeen && alreadySeen !== trackPath) {
                 console.log(
@@ -538,5 +562,103 @@ ipcMain.handle(
             uploaded: result.uploaded,
         });
         return result;
+    },
+);
+
+// ── Serato export ───────────────────────────────────────────────────────────
+//
+// The other direction, and the same argument. pymix used to write `.crate` files
+// itself against a `user_root` the client sent it — a prediction about this
+// filesystem, made by a machine that has never seen it. Now the server returns
+// the structure (POST /serato/export) and the crates are written here, against
+// the paths the download actually landed on.
+//
+// It also means the cues can go into the real files. Writing them is deliberately
+// timid: only into a track that has no cues of its own. See writeTrackCues.
+
+export interface SeratoExportResult extends WriteCratesResult {
+    cues: WriteCuesResult;
+    seratoFolder: string;
+}
+
+ipcMain.handle(
+    'sync:write-serato-crates',
+    async (
+        _event,
+        args: {
+            /** As returned by POST /serato/export. */
+            crates: Array<{
+                display_name: string;
+                path_components: string[];
+                tracks: Array<{ cues?: SeratoCueWire[]; relative_path: string }>;
+            }>;
+            /** Where the download put the tracks — the `music` folder, not its
+             *  parent. Empty falls back to the app's own music folder, which is
+             *  where a download would have put them anyway. */
+            musicRoot: string;
+            seratoFolder: string;
+            /** Write subbox's cues into files that have none of their own. */
+            writeCues?: boolean;
+        },
+    ): Promise<SeratoExportResult> => {
+        const { crates, seratoFolder, writeCues = true } = args;
+        const musicRoot = args.musicRoot || getMusicPath();
+
+        if (!fs.existsSync(path.join(seratoFolder, 'SubCrates'))) {
+            // Refuse rather than create one: a typo'd path would otherwise produce
+            // a second, invisible Serato library that the user never sees again.
+            throw new Error(
+                `${path.basename(seratoFolder)} has no SubCrates folder in it. Pick the ` +
+                    `_Serato_ folder itself — it is normally in your Music folder.`,
+            );
+        }
+
+        const toWrite: CrateToWrite[] = crates.map((crate) => ({
+            pathComponents:
+                crate.path_components.length > 0 ? crate.path_components : [crate.display_name],
+            tracks: crate.tracks.map((track) => ({
+                cues: track.cues,
+                localPath: path.join(musicRoot, track.relative_path),
+            })),
+        }));
+
+        const written = writeCrates(seratoFolder, toWrite);
+        console.log(
+            `[serato] wrote ${written.cratesWritten} crate(s), ${written.tracksWritten} track(s)` +
+                `${written.backupFolder ? `, replaced files backed up to ${written.backupFolder}` : ''}`,
+        );
+        if (written.missing.length > 0) {
+            console.warn(
+                `[serato] ${written.missing.length} track(s) were not on disk and were left out ` +
+                    `of the crates: ${written.missing.slice(0, 5).join(', ')}` +
+                    `${written.missing.length > 5 ? ' …' : ''}`,
+            );
+        }
+
+        // One entry per track file, not per crate entry: the same track in two
+        // playlists is one file, and writing it twice would find its own cues the
+        // second time round and count itself as already cued.
+        const cueTargets = new Map<string, SeratoCueWire[]>();
+        if (writeCues) {
+            for (const crate of toWrite) {
+                for (const track of crate.tracks) {
+                    if (track.cues && track.cues.length > 0 && !cueTargets.has(track.localPath)) {
+                        cueTargets.set(track.localPath, track.cues);
+                    }
+                }
+            }
+        }
+        const cues = writeTrackCues(
+            Array.from(cueTargets, ([localPath, trackCues]) => ({ cues: trackCues, localPath })),
+        );
+        if (cues.written > 0 || cues.alreadyCued > 0 || cues.failed.length > 0) {
+            console.log(
+                `[serato] cues: ${cues.written} written, ${cues.alreadyCued} left alone ` +
+                    `(already cued in Serato), ${cues.unsupported} unsupported format, ` +
+                    `${cues.failed.length} failed`,
+            );
+        }
+
+        return { ...written, cues, seratoFolder };
     },
 );
