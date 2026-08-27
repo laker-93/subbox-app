@@ -29,21 +29,12 @@ interface ImportProgress {
     n_tracks_processed: number;
     n_tracks_to_process: number;
     percentage_complete: number;
-    // Which pass of the import the server is on, and how far through it is. An
-    // import is three passes, and only the first shows up in the track count the
-    // percentage used to be derived from -- so the bar read a frozen 100% for the
-    // whole tail (laker-93/pymix#51). Optional: a server predating that fix, or an
-    // import job created before it, sends neither.
     phase?: ImportPhase | null;
     phase_n_processed?: number;
     phase_n_total?: number;
     reason: string;
     result: boolean;
-    /**
-     * What a *successful* job could not do. `reason` only reaches the client on a
-     * failed job, so a job that finished but left something out has nowhere else to
-     * say so (laker-93/pymix#136).
-     */
+    /** Set on a job that finished but left crate entries out — see the done screen. */
     warnings?: null | string;
 }
 
@@ -54,11 +45,29 @@ const IMPORT_PHASE_LABELS: Record<ImportPhase, string> = {
     mapping_ids: 'Linking tracks to your library...',
 };
 
-interface PlaylistPreview {
+interface CratePreview {
+    files: string[];
     name: string;
     path: string[];
     trackCount: number;
     trackKeys: string[];
+}
+
+interface SeratoUploadProgress {
+    activeTracks?: string[];
+    currentTrack: string;
+    phase: 'checking' | 'done' | 'error' | 'identifying' | 'mapping-metadata' | 'uploading';
+    total: number;
+    uploaded: number;
+}
+
+interface SeratoUploadResult {
+    dropped?: Array<{ reason: string; trackName: string }>;
+    failed?: Array<{ reason: string; trackName: string }>;
+    skipped: number;
+    totalTracksInCrates: number;
+    trackIdentities: Array<{ crate_path: string; subbox_id: string }>;
+    uploaded: number;
 }
 
 type SyncStep =
@@ -71,217 +80,176 @@ type SyncStep =
     | 'upload-forbidden'
     | 'uploading';
 
-interface UploadProgress {
-    activeTracks?: string[];
-    currentTrack: string;
-    phase: 'done' | 'error' | 'mapping-metadata' | 'matching' | 'uploading';
-    total: number;
-    uploaded: number;
-}
-
-/** The completion screen is a narrow column; beyond this the full list is in the
- *  main-process log rather than pushing the "Sync Another Library" button off-screen. */
+/** Beyond this the full list is in the main-process log rather than pushing the
+ *  "Sync Another Library" button off a narrow column. */
 const MAX_LISTED_DROPPED = 5;
 
-function playlistKey(pl: PlaylistPreview): string {
-    return [...pl.path, pl.name].join('/');
+function crateKey(crate: CratePreview): string {
+    return [...crate.path, crate.name].join(' / ');
 }
 
-export const SyncRekordbox = () => {
+export const SyncSerato = () => {
     const { t } = useTranslation();
     const currentServer = useCurrentServerWithCredential();
 
     const [step, setStep] = useState<SyncStep>('idle');
-    const [xmlPath, setXmlPath] = useState<null | string>(null);
-    const [playlists, setPlaylists] = useState<PlaylistPreview[]>([]);
-    const [selectedPlaylists, setSelectedPlaylists] = useState<Set<string>>(new Set());
-    const [metadataOnly, setMetadataOnly] = useState(false);
-    const [progress, setProgress] = useState<null | UploadProgress>(null);
+    const [seratoFolder, setSeratoFolder] = useState<null | string>(null);
+    const [crates, setCrates] = useState<CratePreview[]>([]);
+    const [selectedCrates, setSelectedCrates] = useState<Set<string>>(new Set());
+    const [cratesOnly, setCratesOnly] = useState(false);
+    const [progress, setProgress] = useState<null | SeratoUploadProgress>(null);
     const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
     const [jobId, setJobId] = useState<null | string>(null);
-    // `dropped` holds tracks the XML lists that could never be uploaded — their tags
-    // leave nothing to match on. They are counted in neither totalTracksInXml nor the
-    // preview badge, so the completion screen names them rather than letting them
-    // vanish into a gap between two numbers.
-    const [uploadResult, setUploadResult] = useState<null | {
-        dropped?: Array<{ reason: string; trackName: string }>;
-        failed?: Array<{ reason: string; trackName: string }>;
-        skipped: number;
-        totalTracksInXml?: number;
-        uploaded: number;
-    }>(null);
+    const [uploadResult, setUploadResult] = useState<null | SeratoUploadResult>(null);
     const [error, setError] = useState<null | string>(null);
     const [storageInfo, setStorageInfo] = useState<null | {
         currentUsageBytes: number;
         maxStorageBytes: number;
-        remainingBytes: number;
     }>(null);
 
-    // Listen for upload progress events
     useEffect(() => {
         if (!ipc) return;
-        const handler = (_event: any, prog: UploadProgress) => {
-            setProgress(prog);
-        };
-        ipc.on('sync:upload-progress', handler);
+        const handler = (_event: any, prog: SeratoUploadProgress) => setProgress(prog);
+        ipc.on('sync:serato-progress', handler);
         return () => {
-            ipc.removeListener('sync:upload-progress', handler);
+            ipc.removeListener('sync:serato-progress', handler);
         };
     }, []);
 
-    const handleSelectXml = useCallback(async () => {
+    const parseFolder = useCallback(async (folder: string) => {
         if (!ipc) return;
+        setSeratoFolder(folder);
+        setStep('parsing');
+        setError(null);
         try {
-            const filePath = await ipc.invoke('open-file-selector', {
-                filters: [{ extensions: ['xml'], name: 'Rekordbox XML' }],
-                title: 'Select Rekordbox XML',
-            });
-
-            if (!filePath) return;
-
-            setXmlPath(filePath);
-            setStep('parsing');
-            setError(null);
-
-            const previews: PlaylistPreview[] = await ipc.invoke(
-                'sync:parse-rekordbox-xml',
-                filePath,
-            );
-            setPlaylists(previews);
-            setSelectedPlaylists(new Set(previews.map((p) => playlistKey(p))));
+            const previews: CratePreview[] = await ipc.invoke('sync:parse-serato-crates', folder);
+            if (previews.length === 0) {
+                setError('No crates with tracks in them were found in that Serato library.');
+                setStep('idle');
+                return;
+            }
+            setCrates(previews);
+            setSelectedCrates(new Set(previews.map(crateKey)));
             setStep('preview');
         } catch (err: any) {
-            setError(err?.message || 'Failed to parse XML');
+            setError(err?.message || 'Failed to read the Serato library');
             setStep('idle');
         }
     }, []);
 
-    const handleTogglePlaylist = useCallback((key: string) => {
-        setSelectedPlaylists((prev) => {
+    // Offer the standard location straight away. Nearly every Serato user has their
+    // library exactly there, and a preloaded folder turns the first screen from "go
+    // find a hidden folder" into one button.
+    useEffect(() => {
+        if (!ipc) return;
+        ipc.invoke('sync:get-default-serato-folder')
+            .then((folder: null | string) => {
+                if (folder) setSeratoFolder(folder);
+            })
+            .catch(() => {
+                // No default is not a problem — the user can still pick one.
+            });
+    }, []);
+
+    const handleSelectFolder = useCallback(async () => {
+        if (!ipc) return;
+        try {
+            const folder: null | string = await ipc.invoke('sync:select-serato-folder');
+            if (!folder) return;
+            await parseFolder(folder);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to open that folder');
+            setStep('idle');
+        }
+    }, [parseFolder]);
+
+    const handleUseDefaultFolder = useCallback(async () => {
+        if (seratoFolder) await parseFolder(seratoFolder);
+    }, [parseFolder, seratoFolder]);
+
+    const handleToggleCrate = useCallback((key: string) => {
+        setSelectedCrates((prev) => {
             const next = new Set(prev);
-            if (next.has(key)) {
-                next.delete(key);
-            } else {
-                next.add(key);
-            }
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
             return next;
         });
     }, []);
 
     const handleSelectAll = useCallback(() => {
-        setSelectedPlaylists(new Set(playlists.map((p) => playlistKey(p))));
-    }, [playlists]);
+        setSelectedCrates(new Set(crates.map(crateKey)));
+    }, [crates]);
 
-    const handleSelectNone = useCallback(() => {
-        setSelectedPlaylists(new Set());
-    }, []);
+    const handleSelectNone = useCallback(() => setSelectedCrates(new Set()), []);
 
     const handleUpload = useCallback(async () => {
-        if (!ipc || !xmlPath || !currentServer) return;
-
-        // In metadata-only mode with nothing selected, null tells the backend to process all tracks
-        const selectedPlaylistPaths =
-            metadataOnly && selectedPlaylists.size === 0
-                ? null
-                : playlists
-                      .filter((p) => selectedPlaylists.has(playlistKey(p)))
-                      .map((p) => [...p.path, p.name]);
+        if (!ipc || !seratoFolder || !currentServer) return;
 
         setStep('uploading');
         setError(null);
         setUploadResult(null);
+        setProgress(null);
 
         try {
-            if (metadataOnly) {
-                // XML-only path: upload XML file then trigger import without processing tracks
-                await ipc.invoke('sync:upload-xml', {
-                    filebrowserToken: currentServer.fbToken,
-                    filebrowserUrl: urlConfig.filebrowser,
-                    // serverId/username let the main process re-login for a fresh
-                    // filebrowser token if this upload outlives the current one.
-                    serverId: currentServer.id,
-                    username: currentServer.username,
-                    xmlPath,
-                });
-
-                setUploadResult({ dropped: [], failed: [], skipped: 0, uploaded: 0 });
-            } else {
-                // Pre-flight storage check (renderer-side, works for both Electron and web)
+            // Ask before reading tags off a few thousand files. This is the cheap,
+            // approximate check — the main process does an exact one once it knows
+            // how many of those tracks the library is actually missing.
+            if (!cratesOnly) {
                 try {
                     const storage = await PymixController.checkStorage({
                         baseUrl: urlConfig.pymix,
                         query: { uploadSizeBytes: 0 },
                     });
-
-                    console.log('[storage-check] pre-flight response:', storage);
-
                     if (!storage.allowed) {
-                        console.warn('[storage-check] pre-flight blocked:', {
-                            allowed: storage.allowed,
-                            currentUsageBytes: storage.currentUsageBytes,
-                            maxStorageBytes: storage.maxStorageBytes,
-                            reason: storage.reason,
-                            remainingBytes: storage.remainingBytes,
-                        });
                         setStorageInfo({
                             currentUsageBytes: storage.currentUsageBytes,
                             maxStorageBytes: storage.maxStorageBytes,
-                            remainingBytes: storage.remainingBytes,
                         });
                         setStep('storage-exceeded');
                         return;
                     }
                 } catch (storageErr) {
+                    // The main process checks again with a real figure; don't block on this.
                     console.warn(
                         '[storage-check] pre-flight threw — proceeding anyway:',
                         storageErr,
                     );
-                    // If the check fails, proceed anyway — the main process will do a precise check
                 }
-
-                const result = await ipc.invoke('sync:upload-from-xml', {
-                    filebrowserToken: currentServer.fbToken,
-                    filebrowserUrl: urlConfig.filebrowser,
-                    playlistNames: playlists
-                        .filter((p) => selectedPlaylists.has(playlistKey(p)))
-                        .map((p) => p.name),
-                    pymixUrl: urlConfig.pymix,
-                    // serverId lets the main process re-login for a fresh pymix session
-                    // cookie if this upload outlives the current one.
-                    serverId: currentServer.id,
-                    username: currentServer.username,
-                    xmlPath,
-                });
-                console.log('Upload result:', result);
-                setUploadResult(result);
             }
 
-            // Trigger rekordbox import via pymix API
+            const result: SeratoUploadResult = await ipc.invoke('sync:upload-from-crates', {
+                crateKeys: crates
+                    .filter((c) => selectedCrates.has(crateKey(c)))
+                    .map((c) => [...c.path, c.name]),
+                cratesOnly,
+                filebrowserToken: currentServer.fbToken,
+                filebrowserUrl: urlConfig.filebrowser,
+                pymixUrl: urlConfig.pymix,
+                seratoFolder,
+                // serverId/username let the main process re-login for a fresh
+                // filebrowser token or pymix cookie if this outlives the current one.
+                serverId: currentServer.id,
+                username: currentServer.username,
+            });
+            setUploadResult(result);
+
             try {
-                const importResult = await PymixController.rbImport({
+                // The manifest goes with the import, not with the upload: it is what
+                // tells pymix which subbox track each crate entry means, and it covers
+                // tracks that were already in the library as well as ones just sent.
+                const importResult = await PymixController.seratoImport({
                     baseUrl: urlConfig.pymix,
-                    body: {
-                        playlistNames: selectedPlaylistPaths,
-                    },
+                    body: { track_identities: result.trackIdentities },
                 });
 
-                const jobId = importResult?.job_id;
-                if (!jobId) {
-                    const reason = importResult?.reason || 'Unknown error';
-                    throw new Error(`Import failed: ${reason}`);
+                const newJobId = importResult?.job_id;
+                if (!newJobId) {
+                    throw new Error(`Import failed: ${importResult?.reason || 'Unknown error'}`);
                 }
-
-                // No tracks to import does NOT mean nothing left to do: pymix runs the
-                // playlist and metadata passes for a metadata-only import too, and this
-                // used to return "Success" the moment the upload came back — before the
-                // server had created a single playlist (laker-93/subbox-app#55). Poll the
-                // job either way; it is the only thing that can tell us it finished.
-                setJobId(jobId);
+                setJobId(newJobId);
                 setStep('importing');
                 setImportProgress(null);
             } catch (importErr: any) {
-                // A refused write is an account limit, not a failure — say so instead of
-                // showing "Import Failed" over something that was never going to work.
                 if (isUploadForbidden(importErr)) {
                     setStep('upload-forbidden');
                     return;
@@ -294,21 +262,21 @@ export const SyncRekordbox = () => {
                 setStep('upload-forbidden');
                 return;
             }
-
             const msg = err?.message || 'Upload failed';
             const storagePrefix = 'STORAGE_LIMIT_EXCEEDED:';
-            const storagePrefixIdx = msg.indexOf(storagePrefix);
-            if (storagePrefixIdx !== -1) {
-                setError(msg.slice(storagePrefixIdx + storagePrefix.length));
+            const idx = msg.indexOf(storagePrefix);
+            if (idx !== -1) {
+                setError(msg.slice(idx + storagePrefix.length));
                 setStep('storage-exceeded');
             } else {
                 setError(msg);
                 setStep('preview');
             }
         }
-    }, [currentServer, metadataOnly, playlists, selectedPlaylists, xmlPath]);
+    }, [crates, cratesOnly, currentServer, selectedCrates, seratoFolder]);
 
-    // Poll import progress when in importing step
+    // Poll import progress. Same contract as the Rekordbox flow: the POST only
+    // starts a job, so the job is the only thing that can say it finished.
     useEffect(() => {
         if (step !== 'importing' || !jobId) return;
 
@@ -321,7 +289,6 @@ export const SyncRekordbox = () => {
                         baseUrl: urlConfig.pymix,
                         query: { job_id: jobId, public: false },
                     });
-
                     if (cancelled) break;
                     setImportProgress(prog as ImportProgress);
 
@@ -329,12 +296,10 @@ export const SyncRekordbox = () => {
                         setStep('done');
                         if (prog.result) {
                             toast.success({
-                                // A metadata-only import lands no tracks, and
-                                // "Imported 0 tracks" reads like a failure.
                                 message:
                                     prog.n_tracks_processed > 0
                                         ? `Imported ${prog.n_tracks_processed} tracks`
-                                        : 'Library updated from your Rekordbox XML',
+                                        : 'Your crates are now playlists in Sub-box',
                             });
                         } else {
                             setError(prog.reason || 'Import failed');
@@ -347,14 +312,11 @@ export const SyncRekordbox = () => {
                     setStep('done');
                     break;
                 }
-
-                // Wait 3 seconds between polls
                 await new Promise((resolve) => setTimeout(resolve, 3000));
             }
         };
 
         poll();
-
         return () => {
             cancelled = true;
         };
@@ -362,63 +324,73 @@ export const SyncRekordbox = () => {
 
     const handleReset = useCallback(() => {
         setStep('idle');
-        setXmlPath(null);
-        setPlaylists([]);
-        setSelectedPlaylists(new Set());
+        setCrates([]);
+        setSelectedCrates(new Set());
         setProgress(null);
         setImportProgress(null);
         setJobId(null);
         setUploadResult(null);
         setError(null);
         setStorageInfo(null);
-        setMetadataOnly(false);
+        setCratesOnly(false);
     }, []);
 
-    // Dedup across selected playlists by track key (same scheme as the upload-time
-    // trackMap in main), since a track shared by multiple playlists must only count once.
+    // A track can sit in several crates; count it once, the way the upload will.
     const totalSelectedTracks = new Set(
-        playlists.filter((p) => selectedPlaylists.has(playlistKey(p))).flatMap((p) => p.trackKeys),
+        crates.filter((c) => selectedCrates.has(crateKey(c))).flatMap((c) => c.trackKeys),
     ).size;
 
-    // ── Idle: source selection ─────────────────────────────────────────────
+    // ── Idle: pick the library ─────────────────────────────────────────────
     if (step === 'idle') {
         return (
             <Center style={{ height: '100%' }}>
-                <Stack align="center" gap="lg" maw={400}>
+                <Stack align="center" gap="lg" maw={420}>
                     <Icon icon="disc" size="3rem" />
                     <TextTitle order={3}>
-                        {t('page.sync.rekordbox.title', {
-                            defaultValue: 'Sync from Rekordbox',
+                        {t('page.sync.serato.title', {
+                            defaultValue: 'Sync from Serato',
                             postProcess: 'titleCase',
                         })}
                     </TextTitle>
                     <Text c="dimmed" size="sm" ta="center">
-                        {t('page.sync.rekordbox.description', {
+                        {t('page.sync.serato.description', {
                             defaultValue:
-                                'Select your Rekordbox XML export file to preview and upload playlists to your Sub-box cloud library.',
+                                'Sub-box reads your crates straight out of your Serato library and turns them into playlists, with your hot cues and loops. Quit Serato first — it rewrites its crate files when it closes.',
                         })}
                     </Text>
                     {error && (
-                        <Text c="red" size="sm">
+                        <Text c="red" size="sm" ta="center">
                             {error}
                         </Text>
                     )}
+                    {seratoFolder && (
+                        <Stack align="center" gap="xs" w="100%">
+                            <Text c="dimmed" size="xs" ta="center">
+                                {seratoFolder}
+                            </Text>
+                            <Button fullWidth onClick={handleUseDefaultFolder} variant="filled">
+                                {t('page.sync.serato.useDefault', {
+                                    defaultValue: 'Read This Serato Library',
+                                    postProcess: 'titleCase',
+                                })}
+                            </Button>
+                        </Stack>
+                    )}
                     <Button
                         fullWidth
-                        onClick={handleSelectXml}
+                        onClick={handleSelectFolder}
                         tooltip={{
-                            label: t('page.sync.rekordbox.selectXmlTooltip', {
-                                defaultValue:
-                                    'In Rekordbox, go to File → Export Collection in xml format, then choose that .xml file here. Sub-box reads your playlists and tracks from it.',
-                            }),
+                            label: 'Pick your _Serato_ folder. It is normally inside your Music folder; if your library lives on an external drive, it is at the top level of that drive.',
                             multiline: true,
                             openDelay: 300,
                             w: 300,
                         }}
-                        variant="filled"
+                        variant={seratoFolder ? 'subtle' : 'filled'}
                     >
-                        {t('page.sync.rekordbox.selectXml', {
-                            defaultValue: 'Select XML File',
+                        {t('page.sync.serato.selectFolder', {
+                            defaultValue: seratoFolder
+                                ? 'Choose a Different Folder'
+                                : 'Select Serato Folder',
                             postProcess: 'titleCase',
                         })}
                     </Button>
@@ -434,22 +406,20 @@ export const SyncRekordbox = () => {
                 <Stack align="center" gap="md">
                     <Spinner />
                     <Text c="dimmed" size="sm">
-                        {t('page.sync.rekordbox.parsing', {
-                            defaultValue: 'Parsing Rekordbox XML...',
-                        })}
+                        {t('page.sync.serato.parsing', { defaultValue: 'Reading your crates...' })}
                     </Text>
                 </Stack>
             </Center>
         );
     }
 
-    // ── Preview: playlist selection ────────────────────────────────────────
+    // ── Preview: crate selection ───────────────────────────────────────────
     if (step === 'preview') {
         return (
             <Stack gap="md" p="xl" style={{ height: '100%', overflow: 'hidden' }}>
                 <Group justify="space-between">
                     <TextTitle order={3}>
-                        {t('page.sync.rekordbox.previewTitle', {
+                        {t('page.sync.serato.previewTitle', {
                             defaultValue: 'Preview Changes',
                             postProcess: 'titleCase',
                         })}
@@ -460,7 +430,7 @@ export const SyncRekordbox = () => {
                 </Group>
 
                 <Text c="dimmed" size="sm">
-                    {xmlPath}
+                    {seratoFolder}
                 </Text>
 
                 {error && (
@@ -471,10 +441,10 @@ export const SyncRekordbox = () => {
 
                 <Group gap="md">
                     <Badge size="lg" variant="light">
-                        {playlists.length} {playlists.length === 1 ? 'playlist' : 'playlists'}
+                        {crates.length} {crates.length === 1 ? 'crate' : 'crates'}
                     </Badge>
                     <Badge size="lg" variant="light">
-                        {selectedPlaylists.size} selected
+                        {selectedCrates.size} selected
                     </Badge>
                     <Badge size="lg" variant="light">
                         {totalSelectedTracks} tracks
@@ -491,7 +461,7 @@ export const SyncRekordbox = () => {
                 </Group>
 
                 <Tooltip
-                    label="Only update track info (cue points, ratings, tags) for music already in your library. Nothing is uploaded. Untick to upload the tracks themselves."
+                    label="Rebuild the playlists from your crates without uploading any audio. Tracks already in your library keep their place; anything else is left out."
                     multiline
                     openDelay={300}
                     position="right"
@@ -499,40 +469,40 @@ export const SyncRekordbox = () => {
                 >
                     <span style={{ width: 'fit-content' }}>
                         <Checkbox
-                            checked={metadataOnly}
-                            label="Import metadata only (no track uploads)"
-                            onChange={(e) => setMetadataOnly(e.currentTarget.checked)}
+                            checked={cratesOnly}
+                            label="Playlists only (no track uploads)"
+                            onChange={(e) => setCratesOnly(e.currentTarget.checked)}
                         />
                     </span>
                 </Tooltip>
 
                 <Stack gap="xs" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                    {playlists.map((pl) => {
-                        const key = playlistKey(pl);
+                    {crates.map((crate) => {
+                        const key = crateKey(crate);
                         return (
                             <Group
                                 gap="md"
                                 key={key}
-                                onClick={() => handleTogglePlaylist(key)}
+                                onClick={() => handleToggleCrate(key)}
                                 style={{
                                     borderRadius: 'var(--theme-radius-sm)',
                                     cursor: 'pointer',
                                     padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
                                 }}
                             >
-                                <Checkbox checked={selectedPlaylists.has(key)} readOnly size="sm" />
+                                <Checkbox checked={selectedCrates.has(key)} readOnly size="sm" />
                                 <Stack gap={2} style={{ flex: 1 }}>
                                     <Text fw={500} size="sm">
-                                        {pl.path.length > 0 && (
+                                        {crate.path.length > 0 && (
                                             <Text c="dimmed" component="span" size="xs">
-                                                {pl.path.join(' / ')} /{' '}
+                                                {crate.path.join(' / ')} /{' '}
                                             </Text>
                                         )}
-                                        {pl.name}
+                                        {crate.name}
                                     </Text>
                                 </Stack>
                                 <Text c="dimmed" size="xs">
-                                    {pl.trackCount} {pl.trackCount === 1 ? 'track' : 'tracks'}
+                                    {crate.trackCount} {crate.trackCount === 1 ? 'track' : 'tracks'}
                                 </Text>
                             </Group>
                         );
@@ -540,28 +510,28 @@ export const SyncRekordbox = () => {
                 </Stack>
 
                 <Button
-                    disabled={!metadataOnly && selectedPlaylists.size === 0}
+                    disabled={selectedCrates.size === 0}
                     fullWidth
                     onClick={handleUpload}
                     size="md"
                     style={{ flexShrink: 0 }}
                     tooltip={{
-                        label: metadataOnly
-                            ? 'Send the selected playlists’ track info to your library without uploading any audio files.'
-                            : 'Upload the selected playlists and their audio files to your Sub-box cloud library, then import them so they appear in your collection.',
+                        label: cratesOnly
+                            ? 'Recreate the selected crates as playlists using tracks already in your library.'
+                            : 'Upload the tracks in the selected crates that are not in your library yet, then recreate the crates as playlists.',
                         multiline: true,
                         openDelay: 300,
                         w: 300,
                     }}
                     variant="filled"
                 >
-                    {metadataOnly
-                        ? t('page.sync.rekordbox.importMetadata', {
-                              defaultValue: 'Import Metadata Only',
+                    {cratesOnly
+                        ? t('page.sync.serato.importCratesOnly', {
+                              defaultValue: 'Import Playlists Only',
                               postProcess: 'titleCase',
                           })
-                        : t('page.sync.rekordbox.uploadSelected', {
-                              defaultValue: 'Upload Selected Playlists',
+                        : t('page.sync.serato.uploadSelected', {
+                              defaultValue: 'Upload Selected Crates',
                               postProcess: 'titleCase',
                           })}
                 </Button>
@@ -574,26 +544,25 @@ export const SyncRekordbox = () => {
         const activeTracks = progress?.activeTracks ?? [];
         const phaseLabel = progress
             ? {
+                  checking: 'Checking what your library already has...',
                   done: 'Complete!',
                   error: 'Error',
-                  importing: 'Starting import...',
+                  identifying: `Identifying tracks (${progress.total})...`,
                   'mapping-metadata': 'Mapping metadata...',
-                  matching: 'Matching tracks with cloud library...',
                   uploading: `Uploading tracks (${Math.floor(progress.uploaded)}/${progress.total})...`,
               }[progress.phase]
-            : 'Starting...';
+            : 'Reading your crates...';
 
         return (
             <Center style={{ height: '100%' }}>
                 <Stack align="center" gap="md" maw={400}>
                     <Spinner />
                     <TextTitle order={4}>{phaseLabel}</TextTitle>
-                    {activeTracks.length > 0 &&
-                        activeTracks.map((track, idx) => (
-                            <Text c="dimmed" key={`${idx}-${track}`} size="sm" ta="center">
-                                {track}
-                            </Text>
-                        ))}
+                    {activeTracks.map((track, idx) => (
+                        <Text c="dimmed" key={`${idx}-${track}`} size="sm" ta="center">
+                            {track}
+                        </Text>
+                    ))}
                     {activeTracks.length === 0 && progress?.currentTrack && (
                         <Text c="dimmed" size="sm" ta="center">
                             {progress.currentTrack}
@@ -612,16 +581,11 @@ export const SyncRekordbox = () => {
 
         const phase = importProgress?.phase ?? 'importing_audio';
         const title = IMPORT_PHASE_LABELS[phase] ?? IMPORT_PHASE_LABELS.importing_audio;
-        // The audio phase counts tracks landing in the library; the later passes
-        // count their own work, so show whichever the current phase is about.
         const phaseTotal = importProgress?.phase_n_total ?? 0;
         const counts =
             phase === 'importing_audio' || phaseTotal === 0
                 ? `${processed} / ${total} tracks`
                 : `${importProgress?.phase_n_processed ?? 0} / ${phaseTotal} tracks`;
-        // A metadata-only import has no tracks to land and hasn't reached a pass with
-        // its own total yet, so "0 / 0 tracks" is all we'd have to say — show the
-        // percentage on its own rather than a count that reads like nothing is happening.
         const hasCounts = total > 0 || phaseTotal > 0;
 
         return (
@@ -644,13 +608,13 @@ export const SyncRekordbox = () => {
     if (step === 'upload-forbidden') {
         return (
             <InviteLockedPanel
-                description="Uploading a Rekordbox library writes to your collection, and this account can't. Your own Sub-box library imports your playlists, cue points and all."
-                title="Rekordbox upload needs your own library"
+                description="Importing a Serato library writes to your collection, and this account can't. Your own Sub-box library imports your crates, hot cues and all."
+                title="Serato import needs your own library"
             />
         );
     }
 
-    // ── Storage Exceeded ───────────────────────────────────────────────────
+    // ── Storage exceeded ───────────────────────────────────────────────────
     if (step === 'storage-exceeded') {
         const currentMB = storageInfo
             ? Math.round(storageInfo.currentUsageBytes / (1024 * 1024))
@@ -662,29 +626,17 @@ export const SyncRekordbox = () => {
                 <Stack align="center" gap="md" maw={400}>
                     <Icon color="warn" icon="error" size="3rem" />
                     <TextTitle order={3}>
-                        {t('page.sync.rekordbox.storageLimitTitle', {
+                        {t('page.sync.serato.storageLimitTitle', {
                             defaultValue: 'Storage Limit Reached',
                             postProcess: 'titleCase',
                         })}
                     </TextTitle>
                     <Text c="dimmed" size="sm" ta="center">
-                        {error ||
-                            t('page.sync.rekordbox.storageLimitDescription', {
-                                defaultValue: 'Your upload would exceed your storage limit.',
-                            })}
+                        {error || 'Your upload would exceed your storage limit.'}
                     </Text>
                     <Text c="dimmed" size="sm" ta="center">
-                        To get more storage, join our{' '}
-                        <Text
-                            c="blue"
-                            component="a"
-                            href={urlConfig.discord}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                        >
-                            Discord community
-                        </Text>{' '}
-                        and request an upgrade from the Sub-box team.
+                        You can still tick “Playlists only” to rebuild your crates from the tracks
+                        already in your library.
                     </Text>
                     {currentMB !== null && maxMB !== null && (
                         <Text size="sm" ta="center">
@@ -699,7 +651,7 @@ export const SyncRekordbox = () => {
                         target="_blank"
                         variant="filled"
                     >
-                        {t('page.sync.rekordbox.requestStorage', {
+                        {t('page.sync.serato.requestStorage', {
                             defaultValue: 'Request More Storage',
                             postProcess: 'titleCase',
                         })}
@@ -714,20 +666,19 @@ export const SyncRekordbox = () => {
 
     // ── Done (failed) ─────────────────────────────────────────────────────
     if (error) {
-        // The user's actual question is "is my music in there?", and the answer
-        // decides what they do next. A failed job keeps the phase it died in, so
-        // a failure in one of the two passes that run *after* `beet import` means
-        // the audio already landed and only metadata is missing — re-uploading
-        // 1.2 GB would be the wrong reaction to that (laker-93/subbox-app#48).
+        // A job that died after the audio pass means the tracks are in the library and
+        // only the playlists or metadata are missing — re-uploading would be the wrong
+        // reaction to that.
         const failedPhase = importProgress?.phase;
         const tracksAreSafe = failedPhase === 'applying_metadata' || failedPhase === 'mapping_ids';
 
         const diagnostics = [
-            `Rekordbox import failed${tracksAreSafe ? ' (after tracks were imported)' : ''}`,
+            `Serato import failed${tracksAreSafe ? ' (after tracks were imported)' : ''}`,
             `reason: ${error}`,
             jobId ? `job: ${jobId}` : null,
             failedPhase ? `phase: ${failedPhase}` : null,
             uploadResult ? `uploaded: ${uploadResult.uploaded}` : null,
+            uploadResult ? `identified: ${uploadResult.trackIdentities.length}` : null,
             importProgress ? `imported: ${importProgress.n_tracks_processed}` : null,
         ]
             .filter(Boolean)
@@ -738,24 +689,13 @@ export const SyncRekordbox = () => {
                 <Stack align="center" gap="md" maw={400}>
                     <Icon color="warn" icon="error" size="3rem" />
                     <TextTitle order={3}>
-                        {tracksAreSafe
-                            ? t('page.sync.rekordbox.importPartial', {
-                                  defaultValue: 'Imported, with problems',
-                                  postProcess: 'sentenceCase',
-                              })
-                            : t('page.sync.rekordbox.importFailed', {
-                                  defaultValue: 'Import Failed',
-                                  postProcess: 'titleCase',
-                              })}
+                        {tracksAreSafe ? 'Imported, with problems' : 'Import Failed'}
                     </TextTitle>
                     <Text size="sm" ta="center">
                         {tracksAreSafe
-                            ? 'Your tracks were uploaded and are in your library, but some of the metadata from the XML (ratings, BPM, cue points) or some playlists could not be applied. There is no need to upload them again.'
+                            ? 'Your tracks were uploaded and are in your library, but some playlists or cue points could not be applied. There is no need to upload them again.'
                             : 'The import did not finish, so some or all of your tracks may not be in your library. Check the Tracks page before uploading again.'}
                     </Text>
-                    {/* What actually landed. Whatever broke, these numbers are real,
-                        and they are the difference between an error screen and one the
-                        user can act on. */}
                     {(uploadResult || importProgress) && (
                         <Stack align="center" gap={2}>
                             {uploadResult && (
@@ -794,87 +734,63 @@ export const SyncRekordbox = () => {
     }
 
     // ── Done ───────────────────────────────────────────────────────────────
+    const dropped = uploadResult?.dropped ?? [];
+
     return (
         <Center style={{ height: '100%' }}>
-            <Stack align="center" gap="md" maw={400}>
+            <Stack align="center" gap="md" maw={420}>
                 <Icon color="success" icon="success" size="3rem" />
                 <TextTitle order={3}>
-                    {t('page.sync.rekordbox.uploadComplete', {
-                        defaultValue: 'Upload Complete',
+                    {t('page.sync.serato.importComplete', {
+                        defaultValue: 'Import Complete',
                         postProcess: 'titleCase',
                     })}
                 </TextTitle>
                 {uploadResult && (
                     <Stack align="center" gap="xs">
-                        {uploadResult.totalTracksInXml !== undefined && (
+                        <Text c="dimmed" size="sm">
+                            {uploadResult.totalTracksInCrates} tracks in the crates you selected
+                        </Text>
+                        {uploadResult.uploaded > 0 && (
+                            <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
+                        )}
+                        {uploadResult.uploaded === 0 && (
                             <Text c="dimmed" size="sm">
-                                {uploadResult.totalTracksInXml} tracks found in XML
+                                Everything was already in your library.
                             </Text>
                         )}
-                        {/* Nothing uploaded and nothing landed in the library. This used
-                            to key off `!importProgress`, which stopped meaning "nothing
-                            was imported" once we started polling the metadata-only path
-                            through to the end (#55) — that path always has progress now. */}
-                        {uploadResult.uploaded === 0 &&
-                        (importProgress?.n_tracks_processed ?? 0) === 0 ? (
-                            <Text c="dimmed" size="sm">
-                                Everything is already up to date.
+                        {importProgress && importProgress.n_tracks_processed > 0 && (
+                            <Text size="sm">
+                                {importProgress.n_tracks_processed} tracks imported into library
                             </Text>
-                        ) : (
-                            <>
-                                <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
-                                {uploadResult.skipped > 0 && (
-                                    <Text c="dimmed" size="sm">
-                                        {uploadResult.skipped} tracks skipped
-                                        {uploadResult.failed && uploadResult.failed.length > 0
-                                            ? ` (${uploadResult.failed.length} failed to upload, rest not found or already uploaded)`
-                                            : ' (files not found)'}
-                                    </Text>
-                                )}
-                                {uploadResult.failed && uploadResult.failed.length > 0 && (
-                                    <Stack align="center" gap={2}>
-                                        {uploadResult.failed.map((f) => (
-                                            <Text
-                                                c="dimmed"
-                                                key={f.trackName}
-                                                size="xs"
-                                                ta="center"
-                                            >
-                                                {f.trackName}: {f.reason}
-                                            </Text>
-                                        ))}
-                                    </Stack>
-                                )}
-                                {importProgress && (
-                                    <Text size="sm">
-                                        {importProgress.n_tracks_processed} tracks imported into
-                                        library
-                                    </Text>
-                                )}
-                            </>
                         )}
-                        {/* A job can succeed and still not have done everything asked
-                            of it. Nothing else on this screen would show that. */}
+                        {uploadResult.failed && uploadResult.failed.length > 0 && (
+                            <Stack align="center" gap={2}>
+                                {uploadResult.failed.map((f) => (
+                                    <Text c="dimmed" key={f.trackName} size="xs" ta="center">
+                                        {f.trackName}: {f.reason}
+                                    </Text>
+                                ))}
+                            </Stack>
+                        )}
+                        {/* The server's own account of what it left out. A crate can
+                            name a track that is in no state to be placed in a playlist,
+                            and the job still succeeds — so this is the only place the
+                            shortfall is ever explained. */}
                         {importProgress?.warnings && (
                             <Text c="dimmed" size="sm" ta="center">
                                 {importProgress.warnings}
                             </Text>
                         )}
-                        {/* Outside the branch above: a run can upload nothing and still
-                            have dropped tracks, and "everything is already up to date"
-                            would be wrong without this qualifying it. */}
-                        {uploadResult.dropped && uploadResult.dropped.length > 0 && (
+                        {dropped.length > 0 && (
                             <Stack align="center" gap={2}>
-                                <Text c="dimmed" size="sm">
-                                    {uploadResult.dropped.length}{' '}
-                                    {uploadResult.dropped.length === 1 ? 'track' : 'tracks'} in the
-                                    XML could not be uploaded (missing or unusable title)
+                                <Text c="dimmed" size="sm" ta="center">
+                                    {dropped.length} {dropped.length === 1 ? 'track' : 'tracks'} in
+                                    your crates could not be read from this computer
                                 </Text>
-                                {uploadResult.dropped.slice(0, MAX_LISTED_DROPPED).map((d) => (
+                                {dropped.slice(0, MAX_LISTED_DROPPED).map((d) => (
                                     <Text
                                         c="dimmed"
-                                        // Main dedupes on name + reason, so the same
-                                        // name can legitimately appear twice.
                                         key={`${d.trackName}:${d.reason}`}
                                         size="xs"
                                         ta="center"
@@ -882,9 +798,9 @@ export const SyncRekordbox = () => {
                                         {d.trackName}: {d.reason}
                                     </Text>
                                 ))}
-                                {uploadResult.dropped.length > MAX_LISTED_DROPPED && (
+                                {dropped.length > MAX_LISTED_DROPPED && (
                                     <Text c="dimmed" size="xs" ta="center">
-                                        …and {uploadResult.dropped.length - MAX_LISTED_DROPPED} more
+                                        …and {dropped.length - MAX_LISTED_DROPPED} more
                                     </Text>
                                 )}
                             </Stack>
@@ -892,7 +808,7 @@ export const SyncRekordbox = () => {
                     </Stack>
                 )}
                 <Button fullWidth onClick={handleReset} variant="filled">
-                    {t('page.sync.rekordbox.syncAnother', {
+                    {t('page.sync.serato.syncAnother', {
                         defaultValue: 'Sync Another Library',
                         postProcess: 'titleCase',
                     })}

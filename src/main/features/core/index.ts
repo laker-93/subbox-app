@@ -5,3 +5,4 @@ import './remote';
 import './settings';
 import './discord-rpc';
 import './sync';
+import './sync/serato';

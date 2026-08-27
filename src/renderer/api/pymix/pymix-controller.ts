@@ -74,6 +74,10 @@ type SeratoDownloadArgs = {
     body: z.infer<typeof pymixType._parameters.exportJob>;
 };
 
+type SeratoImportArgs = {
+    body: z.infer<typeof pymixType._parameters.seratoImport>;
+};
+
 type StorageCheckArgs = {
     query: z.infer<typeof pymixType._parameters.storageCheck>;
 };
@@ -353,9 +357,9 @@ export const PymixController = {
         return res.body.data;
     },
 
-    seratoImport: async (args: PymixClientArgs) => {
-        const { baseUrl, signal, token } = args;
-        const res = await pymixApiClient({ baseUrl, signal, token }).seratoImport();
+    seratoImport: async (args: PymixClientArgs & SeratoImportArgs) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).seratoImport({ body });
 
         if (res.status === 403) {
             throw new PymixUploadForbiddenError('import a Serato library');

@@ -145,11 +145,12 @@ export const contract = c.router({
         },
     },
     seratoImport: {
-        body: null,
+        body: pymixType._parameters.seratoImport,
         method: 'POST',
         path: 'serato/import',
         responses: {
-            200: resultWithHeaders(pymixType._response.seratoImport),
+            200: resultWithHeaders(pymixType._response.importJob),
+            403: resultWithHeaders(pymixType._response.error),
             500: resultWithHeaders(pymixType._response.error),
         },
     },
