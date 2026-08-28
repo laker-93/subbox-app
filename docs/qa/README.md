@@ -201,11 +201,21 @@ naturally passes through it.
       linger / slow-write dribble / relaunch, exactly-once): verified 2026-08-21
       — `features/watch-upload.md` "Dedup guard" section, driver
       `watch-dedup-guard.mjs`.
-- [x] `[subbox]` Rekordbox/Serato import-export UI (subbox-app side of pymix
-      `/rekordbox/*`, `/serato/*` — see pymix-qa journal): `features/rekordbox-import.md`
-      (Rekordbox metadata-only + full track-upload paths verified; Serato has
-      **no client UI at all** — confirmed absent, not undriven. Landing-page
-      "Serato" claim logged as a ux-note)
+- [x] `[subbox]` Rekordbox import-export UI (subbox-app side of pymix
+      `/rekordbox/*` — see pymix-qa journal): `features/rekordbox-import.md`
+      (metadata-only + full track-upload paths verified)
+- [x] `[subbox]` **Serato import + crate export, and the round trip through
+      Rekordbox** — verified 2026-08-27 from an empty library:
+      `features/serato-roundtrip.md`, driver `serato-roundtrip.mjs`, skill
+      `/test-serato-roundtrip`. (Supersedes the old "Serato has no client UI at
+      all" row — it shipped in subbox-app #113/#114.) One OPEN bug: a crate that
+      has both its own tracks and a sub-crate is written empty.
+- [ ] `[subbox]` Serato edge cases not yet driven: `--no-cues` fixture (proves
+      pymix carries cues back rather than the local file already having them),
+      `--with-stale-track` (a crate entry whose file has moved off the machine),
+      "Playlists only (no track uploads)", a partial crate selection, and a
+      library on an external volume (the open import-side path bug,
+      pymix#142 / subbox-app#115)
 - [x] `[subbox]` Sharing — `features/sharing.md`: Navidrome-native share, offered app-wide but **always fails** (per-user Navidrome has sharing disabled → `/api/share` 404s → "Failed to create share" toast). Logged ux-note (design call: enable server-side vs hide client-side)
 - [x] `[subbox]` Filebrowser integration — no standalone UI; `FilebrowserController` methods all already exercised via other sync flows: `features/filebrowser-integration.md`
 

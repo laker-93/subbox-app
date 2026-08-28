@@ -20,6 +20,60 @@ future cycle re-investigating; the archive has the detail if ever needed.
      Step 1½). Remove an entry (move to FIXED) once actually fixed and verified,
      don't just mark it done. -->
 
+### Writing a crate that has both its own tracks and a sub-crate loses the parent's tracks
+
+Added: 2026-08-27. Found by `scripts/qa/serato-roundtrip.mjs` phase `serato-export`
+(Sync → Download → "Write Serato crates"), the first end-to-end run of the Serato
+export shipped in subbox-app #114.
+
+**Symptom.** The done screen says *"3 Serato crates written with 16 tracks"* and the
+top-level crate arrives in Serato **empty**. In the round trip the fixture's
+`Subbox QA` crate holds all 8 tracks and also has children (`Cues`,
+`Nested / Deep`); on disk `Subbox QA.crate` is a 212-byte empty-crate header, the
+same size as `Subbox QA%%Nested.crate`, which genuinely is an empty folder. Reading
+the folder back through `readCrateTree` finds only the two child crates.
+
+**Repro** (no stack, no app, ~1s) — `writeCrates` with a parent and its child in one call:
+
+```ts
+writeCrates(serato, [
+    { pathComponents: ['Sets'], tracks: [{ localPath: a }, { localPath: b }, { localPath: c }] },
+    { pathComponents: ['Sets', 'Deep'], tracks: [{ localPath: c }] },
+]);
+// reported: { cratesWritten: 2, tracksWritten: 4, backupFolder: null }
+// on disk:  Sets%%Deep.crate (396b), Sets.crate (212b)   ← the parent is empty
+// read back: only "Sets / Deep"
+```
+
+**Root cause** (`src/main/features/core/sync/serato-crates.ts`, `writeCrates`). Each
+branch is saved separately — `for (const root of roots) builder.save(root, ...)` —
+and tserato's save writes a `.crate` file for *every* level of the branch, so saving
+`Sets → Deep` rewrites `Sets.crate` as an empty parent stub over the copy that was
+written with its 3 tracks a moment earlier. The function already guards the
+neighbouring case: a parent that **pre-existed on disk** is backed up and restored
+afterwards. That guard cannot fire here — the parent is one of *our* crates, so it
+is in `leafFiles` and explicitly skipped by the restore loop (`if
+(leafFiles.has(file)) continue;`), and on a fresh library there is nothing to back
+up at all (`backupFolder: null`).
+
+The reported counts come from the in-memory intent, not from what landed, which is
+why the UI says 16 tracks while the user gets 8.
+
+**Why it matters.** "A big crate plus sub-crates" is the ordinary shape of a Serato
+library, and it is exactly what a Serato → subbox → Serato round trip reproduces, so
+the user gets their crates back with the largest one emptied. Silent: nothing on
+screen, in the result object, or in the logs says a track was dropped.
+
+**Scope.** subbox-app only (client-side crate writing; pymix hands over structure and
+never touches a `.crate`). Not covered by `pnpm check:serato-crates` — its
+`checkAnExistingParentCrateKeepsItsTracks` case writes the parent to disk *before*
+calling `writeCrates`, i.e. the restore-from-backup path, never the both-in-one-call
+path. A fix should merge the branches into one tree and save each root once (or
+re-save the crates that own tracks after the stubs), and the check script should gain
+the shape above.
+
+Issue: _(not yet filed)_
+
 ### (reachable-but-broken dead end, NOT user-reachable in practice — no issue filed by design) `/login`'s logged-out state dumps raw internal JSON with no way back
 
 Added: 2026-08-03. Found while closing out the README's "Login / servers" coverage

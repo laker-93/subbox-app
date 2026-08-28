@@ -26,3 +26,8 @@ release
 # and _jamendo100-* scratch from 2026-08-06 sat untracked and disabled the
 # rebase for the whole pause.
 scripts/qa/_*.mjs
+
+# Serato round-trip fixtures + snapshots (scripts/qa/serato-roundtrip.mjs). Real
+# audio and a generated _Serato_ library — regenerated every run, kept on disk
+# rather than in /tmp so a failed nightly run can still be opened by hand.
+.qa-serato
