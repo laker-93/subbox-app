@@ -5,15 +5,22 @@ import { useTranslation } from 'react-i18next';
 import { isUploadForbidden, PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
+import {
+    SelectableList,
+    SyncCenteredState,
+    SyncFlow,
+    SyncLoading,
+    SyncProgress,
+    SyncResult,
+    SyncStorageExceeded,
+    SyncSummary,
+    useSelection,
+} from '/@/renderer/features/sync/components/shared';
 import { useCurrentServerWithCredential } from '/@/renderer/store';
-import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
-import { Center } from '/@/shared/components/center/center';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { CopyButton } from '/@/shared/components/copy-button/copy-button';
-import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
@@ -94,7 +101,13 @@ export const SyncRekordbox = () => {
     const [step, setStep] = useState<SyncStep>('idle');
     const [xmlPath, setXmlPath] = useState<null | string>(null);
     const [playlists, setPlaylists] = useState<PlaylistPreview[]>([]);
-    const [selectedPlaylists, setSelectedPlaylists] = useState<Set<string>>(new Set());
+    const {
+        selectAll,
+        selected: selectedPlaylists,
+        selectNone: handleSelectNone,
+        setSelected: setSelectedPlaylists,
+        toggle: handleTogglePlaylist,
+    } = useSelection();
     const [metadataOnly, setMetadataOnly] = useState(false);
     const [progress, setProgress] = useState<null | UploadProgress>(null);
     const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
@@ -148,33 +161,18 @@ export const SyncRekordbox = () => {
                 filePath,
             );
             setPlaylists(previews);
-            setSelectedPlaylists(new Set(previews.map((p) => playlistKey(p))));
+            selectAll(previews.map((p) => playlistKey(p)));
             setStep('preview');
         } catch (err: any) {
             setError(err?.message || 'Failed to parse XML');
             setStep('idle');
         }
-    }, []);
+    }, [selectAll]);
 
-    const handleTogglePlaylist = useCallback((key: string) => {
-        setSelectedPlaylists((prev) => {
-            const next = new Set(prev);
-            if (next.has(key)) {
-                next.delete(key);
-            } else {
-                next.add(key);
-            }
-            return next;
-        });
-    }, []);
-
-    const handleSelectAll = useCallback(() => {
-        setSelectedPlaylists(new Set(playlists.map((p) => playlistKey(p))));
-    }, [playlists]);
-
-    const handleSelectNone = useCallback(() => {
-        setSelectedPlaylists(new Set());
-    }, []);
+    const handleSelectAll = useCallback(
+        () => selectAll(playlists.map((p) => playlistKey(p))),
+        [playlists, selectAll],
+    );
 
     const handleUpload = useCallback(async () => {
         if (!ipc || !xmlPath || !currentServer) return;
@@ -372,7 +370,7 @@ export const SyncRekordbox = () => {
         setError(null);
         setStorageInfo(null);
         setMetadataOnly(false);
-    }, []);
+    }, [setSelectedPlaylists]);
 
     // Dedup across selected playlists by track key (same scheme as the upload-time
     // trackMap in main), since a track shared by multiple playlists must only count once.
@@ -383,195 +381,148 @@ export const SyncRekordbox = () => {
     // ── Idle: source selection ─────────────────────────────────────────────
     if (step === 'idle') {
         return (
-            <Center style={{ height: '100%' }}>
-                <Stack align="center" gap="lg" maw={400}>
-                    <Icon icon="disc" size="3rem" />
-                    <TextTitle order={3}>
-                        {t('page.sync.rekordbox.title', {
-                            defaultValue: 'Sync from Rekordbox',
-                            postProcess: 'titleCase',
-                        })}
-                    </TextTitle>
-                    <Text c="dimmed" size="sm" ta="center">
-                        {t('page.sync.rekordbox.description', {
-                            defaultValue:
-                                'Select your Rekordbox XML export file to preview and upload playlists to your Sub-box cloud library.',
-                        })}
-                    </Text>
-                    {error && (
-                        <Text c="red" size="sm">
-                            {error}
-                        </Text>
-                    )}
-                    <Button
-                        fullWidth
-                        onClick={handleSelectXml}
-                        tooltip={{
-                            label: t('page.sync.rekordbox.selectXmlTooltip', {
-                                defaultValue:
-                                    'In Rekordbox, go to File → Export Collection in xml format, then choose that .xml file here. Sub-box reads your playlists and tracks from it.',
-                            }),
-                            multiline: true,
-                            openDelay: 300,
-                            w: 300,
-                        }}
-                        variant="filled"
-                    >
-                        {t('page.sync.rekordbox.selectXml', {
-                            defaultValue: 'Select XML File',
-                            postProcess: 'titleCase',
-                        })}
-                    </Button>
-                </Stack>
-            </Center>
-        );
-    }
-
-    // ── Parsing ────────────────────────────────────────────────────────────
-    if (step === 'parsing') {
-        return (
-            <Center style={{ height: '100%' }}>
-                <Stack align="center" gap="md">
-                    <Spinner />
-                    <Text c="dimmed" size="sm">
-                        {t('page.sync.rekordbox.parsing', {
-                            defaultValue: 'Parsing Rekordbox XML...',
-                        })}
-                    </Text>
-                </Stack>
-            </Center>
-        );
-    }
-
-    // ── Preview: playlist selection ────────────────────────────────────────
-    if (step === 'preview') {
-        return (
-            <Stack gap="md" p="xl" style={{ height: '100%', overflow: 'hidden' }}>
-                <Group justify="space-between">
-                    <TextTitle order={3}>
-                        {t('page.sync.rekordbox.previewTitle', {
-                            defaultValue: 'Preview Changes',
-                            postProcess: 'titleCase',
-                        })}
-                    </TextTitle>
-                    <Button onClick={handleReset} size="sm" variant="subtle">
-                        {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
-                    </Button>
-                </Group>
-
-                <Text c="dimmed" size="sm">
-                    {xmlPath}
+            <SyncCenteredState gap="lg">
+                <Icon icon="disc" size="3rem" />
+                <TextTitle order={3}>
+                    {t('page.sync.rekordbox.title', {
+                        defaultValue: 'Sync from Rekordbox',
+                        postProcess: 'titleCase',
+                    })}
+                </TextTitle>
+                <Text c="dimmed" size="sm" ta="center">
+                    {t('page.sync.rekordbox.description', {
+                        defaultValue:
+                            'Select your Rekordbox XML export file to preview and upload playlists to your Sub-box cloud library.',
+                    })}
                 </Text>
-
                 {error && (
                     <Text c="red" size="sm">
                         {error}
                     </Text>
                 )}
-
-                <Group gap="md">
-                    <Badge size="lg" variant="light">
-                        {playlists.length} {playlists.length === 1 ? 'playlist' : 'playlists'}
-                    </Badge>
-                    <Badge size="lg" variant="light">
-                        {selectedPlaylists.size} selected
-                    </Badge>
-                    <Badge size="lg" variant="light">
-                        {totalSelectedTracks} tracks
-                    </Badge>
-                </Group>
-
-                <Group gap="xs">
-                    <Button onClick={handleSelectAll} size="xs" variant="subtle">
-                        Select all
-                    </Button>
-                    <Button onClick={handleSelectNone} size="xs" variant="subtle">
-                        Select none
-                    </Button>
-                </Group>
-
-                <Tooltip
-                    label="Only update track info (cue points, ratings, tags) for music already in your library. Nothing is uploaded. Untick to upload the tracks themselves."
-                    multiline
-                    openDelay={300}
-                    position="right"
-                    w={300}
-                >
-                    <span style={{ width: 'fit-content' }}>
-                        <Checkbox
-                            checked={metadataOnly}
-                            label="Import metadata only (no track uploads)"
-                            onChange={(e) => setMetadataOnly(e.currentTarget.checked)}
-                        />
-                    </span>
-                </Tooltip>
-
-                <Stack gap="xs" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                    {playlists.map((pl) => {
-                        const key = playlistKey(pl);
-                        return (
-                            <Group
-                                gap="md"
-                                key={key}
-                                onClick={() => handleTogglePlaylist(key)}
-                                style={{
-                                    borderRadius: 'var(--theme-radius-sm)',
-                                    cursor: 'pointer',
-                                    padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
-                                }}
-                            >
-                                <Checkbox checked={selectedPlaylists.has(key)} readOnly size="sm" />
-                                <Stack gap={2} style={{ flex: 1 }}>
-                                    <Text fw={500} size="sm">
-                                        {pl.path.length > 0 && (
-                                            <Text c="dimmed" component="span" size="xs">
-                                                {pl.path.join(' / ')} /{' '}
-                                            </Text>
-                                        )}
-                                        {pl.name}
-                                    </Text>
-                                </Stack>
-                                <Text c="dimmed" size="xs">
-                                    {pl.trackCount} {pl.trackCount === 1 ? 'track' : 'tracks'}
-                                </Text>
-                            </Group>
-                        );
-                    })}
-                </Stack>
-
                 <Button
-                    disabled={!metadataOnly && selectedPlaylists.size === 0}
                     fullWidth
-                    onClick={handleUpload}
-                    size="md"
-                    style={{ flexShrink: 0 }}
+                    onClick={handleSelectXml}
                     tooltip={{
-                        label: metadataOnly
-                            ? 'Send the selected playlists’ track info to your library without uploading any audio files.'
-                            : 'Upload the selected playlists and their audio files to your Sub-box cloud library, then import them so they appear in your collection.',
+                        label: t('page.sync.rekordbox.selectXmlTooltip', {
+                            defaultValue:
+                                'In Rekordbox, go to File → Export Collection in xml format, then choose that .xml file here. Sub-box reads your playlists and tracks from it.',
+                        }),
                         multiline: true,
                         openDelay: 300,
                         w: 300,
                     }}
                     variant="filled"
                 >
-                    {metadataOnly
-                        ? t('page.sync.rekordbox.importMetadata', {
-                              defaultValue: 'Import Metadata Only',
-                              postProcess: 'titleCase',
-                          })
-                        : t('page.sync.rekordbox.uploadSelected', {
-                              defaultValue: 'Upload Selected Playlists',
-                              postProcess: 'titleCase',
-                          })}
+                    {t('page.sync.rekordbox.selectXml', {
+                        defaultValue: 'Select XML File',
+                        postProcess: 'titleCase',
+                    })}
                 </Button>
-            </Stack>
+            </SyncCenteredState>
+        );
+    }
+
+    // ── Parsing ────────────────────────────────────────────────────────────
+    if (step === 'parsing') {
+        return (
+            <SyncLoading
+                label={t('page.sync.rekordbox.parsing', {
+                    defaultValue: 'Parsing Rekordbox XML...',
+                })}
+            />
+        );
+    }
+
+    // ── Preview: playlist selection ────────────────────────────────────────
+    if (step === 'preview') {
+        return (
+            <SyncFlow
+                error={error}
+                footer={
+                    <Button
+                        disabled={!metadataOnly && selectedPlaylists.size === 0}
+                        fullWidth
+                        onClick={handleUpload}
+                        size="md"
+                        style={{ flexShrink: 0 }}
+                        tooltip={{
+                            label: metadataOnly
+                                ? 'Send the selected playlists’ track info to your library without uploading any audio files.'
+                                : 'Upload the selected playlists and their audio files to your Sub-box cloud library, then import them so they appear in your collection.',
+                            multiline: true,
+                            openDelay: 300,
+                            w: 300,
+                        }}
+                        variant="filled"
+                    >
+                        {metadataOnly
+                            ? t('page.sync.rekordbox.importMetadata', {
+                                  defaultValue: 'Import Metadata Only',
+                                  postProcess: 'titleCase',
+                              })
+                            : t('page.sync.rekordbox.uploadSelected', {
+                                  defaultValue: 'Upload Selected Playlists',
+                                  postProcess: 'titleCase',
+                              })}
+                    </Button>
+                }
+                onBack={handleReset}
+                subtitle={
+                    <Text c="dimmed" size="sm">
+                        {xmlPath}
+                    </Text>
+                }
+                title={t('page.sync.rekordbox.previewTitle', {
+                    defaultValue: 'Preview Changes',
+                    postProcess: 'titleCase',
+                })}
+            >
+                <SyncSummary
+                    items={[
+                        {
+                            label: `${playlists.length} ${playlists.length === 1 ? 'playlist' : 'playlists'}`,
+                        },
+                        { label: `${selectedPlaylists.size} selected` },
+                        { label: `${totalSelectedTracks} tracks` },
+                    ]}
+                />
+
+                <SelectableList
+                    items={playlists.map((pl) => ({
+                        detail: `${pl.trackCount} ${pl.trackCount === 1 ? 'track' : 'tracks'}`,
+                        id: playlistKey(pl),
+                        label: pl.name,
+                        prefix: pl.path.length > 0 ? `${pl.path.join(' / ')} / ` : undefined,
+                    }))}
+                    onSelectAll={handleSelectAll}
+                    onSelectNone={handleSelectNone}
+                    onToggle={handleTogglePlaylist}
+                    options={
+                        <Tooltip
+                            label="Only update track info (cue points, ratings, tags) for music already in your library. Nothing is uploaded. Untick to upload the tracks themselves."
+                            multiline
+                            openDelay={300}
+                            position="right"
+                            w={300}
+                        >
+                            <span style={{ width: 'fit-content' }}>
+                                <Checkbox
+                                    checked={metadataOnly}
+                                    label="Import metadata only (no track uploads)"
+                                    onChange={(e) => setMetadataOnly(e.currentTarget.checked)}
+                                />
+                            </span>
+                        </Tooltip>
+                    }
+                    selected={selectedPlaylists}
+                />
+            </SyncFlow>
         );
     }
 
     // ── Uploading ──────────────────────────────────────────────────────────
     if (step === 'uploading') {
-        const activeTracks = progress?.activeTracks ?? [];
         const phaseLabel = progress
             ? {
                   done: 'Complete!',
@@ -584,23 +535,11 @@ export const SyncRekordbox = () => {
             : 'Starting...';
 
         return (
-            <Center style={{ height: '100%' }}>
-                <Stack align="center" gap="md" maw={400}>
-                    <Spinner />
-                    <TextTitle order={4}>{phaseLabel}</TextTitle>
-                    {activeTracks.length > 0 &&
-                        activeTracks.map((track, idx) => (
-                            <Text c="dimmed" key={`${idx}-${track}`} size="sm" ta="center">
-                                {track}
-                            </Text>
-                        ))}
-                    {activeTracks.length === 0 && progress?.currentTrack && (
-                        <Text c="dimmed" size="sm" ta="center">
-                            {progress.currentTrack}
-                        </Text>
-                    )}
-                </Stack>
-            </Center>
+            <SyncProgress
+                activeTracks={progress?.activeTracks}
+                currentTrack={progress?.currentTrack}
+                phaseLabel={phaseLabel}
+            />
         );
     }
 
@@ -625,18 +564,19 @@ export const SyncRekordbox = () => {
         const hasCounts = total > 0 || phaseTotal > 0;
 
         return (
-            <Center style={{ height: '100%' }}>
-                <Stack align="center" gap="md" maw={400}>
-                    <Spinner />
-                    <TextTitle order={4}>{title}</TextTitle>
-                    <Text size="sm">
-                        {hasCounts ? `${counts} (${Math.round(pct)}%)` : `${Math.round(pct)}%`}
-                    </Text>
-                    <Text c="dimmed" size="xs" ta="center">
-                        This may take a while for large libraries.
-                    </Text>
-                </Stack>
-            </Center>
+            <SyncProgress
+                detail={
+                    <>
+                        <Text size="sm">
+                            {hasCounts ? `${counts} (${Math.round(pct)}%)` : `${Math.round(pct)}%`}
+                        </Text>
+                        <Text c="dimmed" size="xs" ta="center">
+                            This may take a while for large libraries.
+                        </Text>
+                    </>
+                }
+                phaseLabel={title}
+            />
         );
     }
 
@@ -652,27 +592,10 @@ export const SyncRekordbox = () => {
 
     // ── Storage Exceeded ───────────────────────────────────────────────────
     if (step === 'storage-exceeded') {
-        const currentMB = storageInfo
-            ? Math.round(storageInfo.currentUsageBytes / (1024 * 1024))
-            : null;
-        const maxMB = storageInfo ? Math.round(storageInfo.maxStorageBytes / (1024 * 1024)) : null;
-
         return (
-            <Center style={{ height: '100%' }}>
-                <Stack align="center" gap="md" maw={400}>
-                    <Icon color="warn" icon="error" size="3rem" />
-                    <TextTitle order={3}>
-                        {t('page.sync.rekordbox.storageLimitTitle', {
-                            defaultValue: 'Storage Limit Reached',
-                            postProcess: 'titleCase',
-                        })}
-                    </TextTitle>
-                    <Text c="dimmed" size="sm" ta="center">
-                        {error ||
-                            t('page.sync.rekordbox.storageLimitDescription', {
-                                defaultValue: 'Your upload would exceed your storage limit.',
-                            })}
-                    </Text>
+            <SyncStorageExceeded
+                error={error}
+                note={
                     <Text c="dimmed" size="sm" ta="center">
                         To get more storage, join our{' '}
                         <Text
@@ -686,29 +609,10 @@ export const SyncRekordbox = () => {
                         </Text>{' '}
                         and request an upgrade from the Sub-box team.
                     </Text>
-                    {currentMB !== null && maxMB !== null && (
-                        <Text size="sm" ta="center">
-                            Current usage: {currentMB} MB / {maxMB} MB
-                        </Text>
-                    )}
-                    <Button
-                        component="a"
-                        fullWidth
-                        href={urlConfig.discord}
-                        rel="noopener noreferrer"
-                        target="_blank"
-                        variant="filled"
-                    >
-                        {t('page.sync.rekordbox.requestStorage', {
-                            defaultValue: 'Request More Storage',
-                            postProcess: 'titleCase',
-                        })}
-                    </Button>
-                    <Button fullWidth onClick={handleReset} variant="subtle">
-                        {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
-                    </Button>
-                </Stack>
-            </Center>
+                }
+                onBack={handleReset}
+                storageInfo={storageInfo}
+            />
         );
     }
 
@@ -734,45 +638,10 @@ export const SyncRekordbox = () => {
             .join('\n');
 
         return (
-            <Center style={{ height: '100%' }}>
-                <Stack align="center" gap="md" maw={400}>
-                    <Icon color="warn" icon="error" size="3rem" />
-                    <TextTitle order={3}>
-                        {tracksAreSafe
-                            ? t('page.sync.rekordbox.importPartial', {
-                                  defaultValue: 'Imported, with problems',
-                                  postProcess: 'sentenceCase',
-                              })
-                            : t('page.sync.rekordbox.importFailed', {
-                                  defaultValue: 'Import Failed',
-                                  postProcess: 'titleCase',
-                              })}
-                    </TextTitle>
-                    <Text size="sm" ta="center">
-                        {tracksAreSafe
-                            ? 'Your tracks were uploaded and are in your library, but some of the metadata from the XML (ratings, BPM, cue points) or some playlists could not be applied. There is no need to upload them again.'
-                            : 'The import did not finish, so some or all of your tracks may not be in your library. Check the Tracks page before uploading again.'}
-                    </Text>
-                    {/* What actually landed. Whatever broke, these numbers are real,
-                        and they are the difference between an error screen and one the
-                        user can act on. */}
-                    {(uploadResult || importProgress) && (
-                        <Stack align="center" gap={2}>
-                            {uploadResult && (
-                                <Text c="dimmed" size="sm">
-                                    {uploadResult.uploaded} tracks uploaded
-                                </Text>
-                            )}
-                            {importProgress && (
-                                <Text c="dimmed" size="sm">
-                                    {importProgress.n_tracks_processed} tracks imported into library
-                                </Text>
-                            )}
-                        </Stack>
-                    )}
-                    <Text c="dimmed" size="xs" ta="center">
-                        {error}
-                    </Text>
+            <SyncResult
+                actionLabel={t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
+                onAction={handleReset}
+                secondaryAction={
                     <CopyButton timeout={2000} value={diagnostics}>
                         {({ copied, copy }) => (
                             <Button
@@ -785,119 +654,144 @@ export const SyncRekordbox = () => {
                             </Button>
                         )}
                     </CopyButton>
-                    <Button fullWidth onClick={handleReset} variant="filled">
-                        {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
-                    </Button>
-                </Stack>
-            </Center>
+                }
+                status="warn"
+                title={
+                    tracksAreSafe
+                        ? t('page.sync.rekordbox.importPartial', {
+                              defaultValue: 'Imported, with problems',
+                              postProcess: 'sentenceCase',
+                          })
+                        : t('page.sync.rekordbox.importFailed', {
+                              defaultValue: 'Import Failed',
+                              postProcess: 'titleCase',
+                          })
+                }
+            >
+                <Text size="sm" ta="center">
+                    {tracksAreSafe
+                        ? 'Your tracks were uploaded and are in your library, but some of the metadata from the XML (ratings, BPM, cue points) or some playlists could not be applied. There is no need to upload them again.'
+                        : 'The import did not finish, so some or all of your tracks may not be in your library. Check the Tracks page before uploading again.'}
+                </Text>
+                {/* What actually landed. Whatever broke, these numbers are real,
+                    and they are the difference between an error screen and one the
+                    user can act on. */}
+                {(uploadResult || importProgress) && (
+                    <Stack align="center" gap={2}>
+                        {uploadResult && (
+                            <Text c="dimmed" size="sm">
+                                {uploadResult.uploaded} tracks uploaded
+                            </Text>
+                        )}
+                        {importProgress && (
+                            <Text c="dimmed" size="sm">
+                                {importProgress.n_tracks_processed} tracks imported into library
+                            </Text>
+                        )}
+                    </Stack>
+                )}
+                <Text c="dimmed" size="xs" ta="center">
+                    {error}
+                </Text>
+            </SyncResult>
         );
     }
 
     // ── Done ───────────────────────────────────────────────────────────────
     return (
-        <Center style={{ height: '100%' }}>
-            <Stack align="center" gap="md" maw={400}>
-                <Icon color="success" icon="success" size="3rem" />
-                <TextTitle order={3}>
-                    {t('page.sync.rekordbox.uploadComplete', {
-                        defaultValue: 'Upload Complete',
-                        postProcess: 'titleCase',
-                    })}
-                </TextTitle>
-                {uploadResult && (
-                    <Stack align="center" gap="xs">
-                        {uploadResult.totalTracksInXml !== undefined && (
-                            <Text c="dimmed" size="sm">
-                                {uploadResult.totalTracksInXml} tracks found in XML
-                            </Text>
-                        )}
-                        {/* Nothing uploaded and nothing landed in the library. This used
-                            to key off `!importProgress`, which stopped meaning "nothing
-                            was imported" once we started polling the metadata-only path
-                            through to the end (#55) — that path always has progress now. */}
-                        {uploadResult.uploaded === 0 &&
-                        (importProgress?.n_tracks_processed ?? 0) === 0 ? (
-                            <Text c="dimmed" size="sm">
-                                Everything is already up to date.
-                            </Text>
-                        ) : (
-                            <>
-                                <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
-                                {uploadResult.skipped > 0 && (
-                                    <Text c="dimmed" size="sm">
-                                        {uploadResult.skipped} tracks skipped
-                                        {uploadResult.failed && uploadResult.failed.length > 0
-                                            ? ` (${uploadResult.failed.length} failed to upload, rest not found or already uploaded)`
-                                            : ' (files not found)'}
-                                    </Text>
-                                )}
-                                {uploadResult.failed && uploadResult.failed.length > 0 && (
-                                    <Stack align="center" gap={2}>
-                                        {uploadResult.failed.map((f) => (
-                                            <Text
-                                                c="dimmed"
-                                                key={f.trackName}
-                                                size="xs"
-                                                ta="center"
-                                            >
-                                                {f.trackName}: {f.reason}
-                                            </Text>
-                                        ))}
-                                    </Stack>
-                                )}
-                                {importProgress && (
-                                    <Text size="sm">
-                                        {importProgress.n_tracks_processed} tracks imported into
-                                        library
-                                    </Text>
-                                )}
-                            </>
-                        )}
-                        {/* A job can succeed and still not have done everything asked
-                            of it. Nothing else on this screen would show that. */}
-                        {importProgress?.warnings && (
-                            <Text c="dimmed" size="sm" ta="center">
-                                {importProgress.warnings}
-                            </Text>
-                        )}
-                        {/* Outside the branch above: a run can upload nothing and still
-                            have dropped tracks, and "everything is already up to date"
-                            would be wrong without this qualifying it. */}
-                        {uploadResult.dropped && uploadResult.dropped.length > 0 && (
-                            <Stack align="center" gap={2}>
+        <SyncResult
+            actionLabel={t('page.sync.rekordbox.syncAnother', {
+                defaultValue: 'Sync Another Library',
+                postProcess: 'titleCase',
+            })}
+            onAction={handleReset}
+            status="success"
+            title={t('page.sync.rekordbox.uploadComplete', {
+                defaultValue: 'Upload Complete',
+                postProcess: 'titleCase',
+            })}
+        >
+            {uploadResult && (
+                <Stack align="center" gap="xs">
+                    {uploadResult.totalTracksInXml !== undefined && (
+                        <Text c="dimmed" size="sm">
+                            {uploadResult.totalTracksInXml} tracks found in XML
+                        </Text>
+                    )}
+                    {/* Nothing uploaded and nothing landed in the library. This used
+                        to key off `!importProgress`, which stopped meaning "nothing
+                        was imported" once we started polling the metadata-only path
+                        through to the end (#55) — that path always has progress now. */}
+                    {uploadResult.uploaded === 0 &&
+                    (importProgress?.n_tracks_processed ?? 0) === 0 ? (
+                        <Text c="dimmed" size="sm">
+                            Everything is already up to date.
+                        </Text>
+                    ) : (
+                        <>
+                            <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
+                            {uploadResult.skipped > 0 && (
                                 <Text c="dimmed" size="sm">
-                                    {uploadResult.dropped.length}{' '}
-                                    {uploadResult.dropped.length === 1 ? 'track' : 'tracks'} in the
-                                    XML could not be uploaded (missing or unusable title)
+                                    {uploadResult.skipped} tracks skipped
+                                    {uploadResult.failed && uploadResult.failed.length > 0
+                                        ? ` (${uploadResult.failed.length} failed to upload, rest not found or already uploaded)`
+                                        : ' (files not found)'}
                                 </Text>
-                                {uploadResult.dropped.slice(0, MAX_LISTED_DROPPED).map((d) => (
-                                    <Text
-                                        c="dimmed"
-                                        // Main dedupes on name + reason, so the same
-                                        // name can legitimately appear twice.
-                                        key={`${d.trackName}:${d.reason}`}
-                                        size="xs"
-                                        ta="center"
-                                    >
-                                        {d.trackName}: {d.reason}
-                                    </Text>
-                                ))}
-                                {uploadResult.dropped.length > MAX_LISTED_DROPPED && (
-                                    <Text c="dimmed" size="xs" ta="center">
-                                        …and {uploadResult.dropped.length - MAX_LISTED_DROPPED} more
-                                    </Text>
-                                )}
-                            </Stack>
-                        )}
-                    </Stack>
-                )}
-                <Button fullWidth onClick={handleReset} variant="filled">
-                    {t('page.sync.rekordbox.syncAnother', {
-                        defaultValue: 'Sync Another Library',
-                        postProcess: 'titleCase',
-                    })}
-                </Button>
-            </Stack>
-        </Center>
+                            )}
+                            {uploadResult.failed && uploadResult.failed.length > 0 && (
+                                <Stack align="center" gap={2}>
+                                    {uploadResult.failed.map((f) => (
+                                        <Text c="dimmed" key={f.trackName} size="xs" ta="center">
+                                            {f.trackName}: {f.reason}
+                                        </Text>
+                                    ))}
+                                </Stack>
+                            )}
+                            {importProgress && (
+                                <Text size="sm">
+                                    {importProgress.n_tracks_processed} tracks imported into library
+                                </Text>
+                            )}
+                        </>
+                    )}
+                    {/* A job can succeed and still not have done everything asked
+                        of it. Nothing else on this screen would show that. */}
+                    {importProgress?.warnings && (
+                        <Text c="dimmed" size="sm" ta="center">
+                            {importProgress.warnings}
+                        </Text>
+                    )}
+                    {/* Outside the branch above: a run can upload nothing and still
+                        have dropped tracks, and "everything is already up to date"
+                        would be wrong without this qualifying it. */}
+                    {uploadResult.dropped && uploadResult.dropped.length > 0 && (
+                        <Stack align="center" gap={2}>
+                            <Text c="dimmed" size="sm">
+                                {uploadResult.dropped.length}{' '}
+                                {uploadResult.dropped.length === 1 ? 'track' : 'tracks'} in the XML
+                                could not be uploaded (missing or unusable title)
+                            </Text>
+                            {uploadResult.dropped.slice(0, MAX_LISTED_DROPPED).map((d) => (
+                                <Text
+                                    c="dimmed"
+                                    // Main dedupes on name + reason, so the same
+                                    // name can legitimately appear twice.
+                                    key={`${d.trackName}:${d.reason}`}
+                                    size="xs"
+                                    ta="center"
+                                >
+                                    {d.trackName}: {d.reason}
+                                </Text>
+                            ))}
+                            {uploadResult.dropped.length > MAX_LISTED_DROPPED && (
+                                <Text c="dimmed" size="xs" ta="center">
+                                    …and {uploadResult.dropped.length - MAX_LISTED_DROPPED} more
+                                </Text>
+                            )}
+                        </Stack>
+                    )}
+                </Stack>
+            )}
+        </SyncResult>
     );
 };
