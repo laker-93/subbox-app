@@ -72,7 +72,7 @@ path. A fix should merge the branches into one tree and save each root once (or
 re-save the crates that own tracks after the stubs), and the check script should gain
 the shape above.
 
-Issue: _(not yet filed)_
+Issue: https://github.com/laker-93/subbox-app/issues/117
 
 ### (reachable-but-broken dead end, NOT user-reachable in practice — no issue filed by design) `/login`'s logged-out state dumps raw internal JSON with no way back
 
