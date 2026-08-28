@@ -3,19 +3,28 @@ import path from 'path';
 import { _electron as electron } from 'playwright';
 
 import {
+    checkedSegment,
     forceFreshLogin,
     getCredentials,
     isLoggedOut,
     performLogin,
     resolveAppEntry,
+    segment,
+    selectSegment,
     SNAPSHOT_DIR,
 } from '../ui-snapshot-shared.mjs';
 
-// Regression driver for the rebuilt Sync -> Download screen (subbox-app #101/#102/#103):
-// one download, "Include tracks" / "Include Rekordbox XML" tick-boxes choosing its
-// contents, desktop keeping the full local-vs-server diff. Desktop (Electron) only —
-// the web build takes a structurally different branch (manifest, no diff, `user_root`
-// gets a `music` segment) and needs its own driver against `pnpm dev:web`.
+// Regression driver for the rebuilt Sync -> Download screen (subbox-app #101/#102/#103),
+// updated for the sync-ui substrate work: the three tick-boxes ("Include tracks",
+// "Include Rekordbox XML", "Write Serato crates") are now two segmented controls —
+// "Format" (Rekordbox | Serato) and "Include" (Tracks + XML | XML only). The file keeps
+// its old name so the QA journal's references to it still resolve. Desktop (Electron)
+// only — the web build takes a structurally different branch (manifest, no diff,
+// `user_root` gets a `music` segment) and has its own driver, web-sync-manifest.mjs.
+//
+// "Format" is persisted in the app store (`libraryFormat.download`), NOT component
+// state, so it survives app relaunches and leaks between driver runs. Every phase here
+// selects it explicitly rather than trusting a default.
 //
 // Usage: node scripts/qa/sync-download-tickboxes.mjs
 // Env: QA_PLAYLIST (default "Downtempo", 9 tracks on test060826 — smallest real playlist)
@@ -85,21 +94,29 @@ async function main() {
     });
     await page.waitForTimeout(500);
 
-    // ── Preview screen: confirm tick-boxes + full diff (desktop) render ────
-    const includeTracksBox = page.getByRole('checkbox', { name: /include tracks/i });
-    const includeXmlBox = page.getByRole('checkbox', { name: /include rekordbox xml/i });
-    const bothPresent =
-        (await includeTracksBox.isVisible().catch(() => false)) &&
-        (await includeXmlBox.isVisible().catch(() => false));
-    console.log('both tick-boxes present:', bothPresent);
-    const tracksCheckedInitially = await includeTracksBox.isChecked().catch(() => null);
-    const xmlCheckedInitially = await includeXmlBox.isChecked().catch(() => null);
-    console.log(
-        'default state - includeTracks:',
-        tracksCheckedInitially,
-        'includeXml:',
-        xmlCheckedInitially,
-    );
+    // ── Preview screen: confirm the format controls + full diff (desktop) ──
+    // Both segmented controls must exist; the radios are 0x0 so ask the a11y tree
+    // whether they are attached rather than isVisible(), which is false by design.
+    const formatOptions = [/^rekordbox$/i, /^serato$/i];
+    const includeOptions = [/^tracks \+ xml$/i, /^xml only$/i];
+    const controlsPresent =
+        (await segment(page, formatOptions[0]).count()) > 0 &&
+        (await segment(page, includeOptions[0]).count()) > 0;
+    console.log('format + include controls present:', controlsPresent);
+    if (!controlsPresent) {
+        await shot('format-controls-missing');
+        throw new Error('Format/Include segmented controls not found on the preview screen');
+    }
+    console.log('format on arrival:', await checkedSegment(page, formatOptions));
+    console.log('include on arrival:', await checkedSegment(page, includeOptions));
+
+    // Pin the format, since it persists across runs (see the header note). Serato must
+    // be offered on desktop — it is the half of the control the web build cannot have.
+    console.log('Serato selectable on desktop:', !(await segment(page, /^serato$/i).isDisabled()));
+    await selectSegment(page, /^rekordbox$/i);
+    await page.waitForTimeout(300);
+    const includeDefault = await checkedSegment(page, includeOptions);
+    console.log('include default under Rekordbox:', includeDefault);
 
     // Desktop keeps the full diff: 3 tabs + already-present/to-download/metadata badges.
     const missingTab = page.getByRole('button', { name: /^missing \(\d+\)$/i });
@@ -122,8 +139,8 @@ async function main() {
     );
     await shot('preview');
 
-    // ── XML-only download (untick "Include tracks") ────────────────────────
-    await includeTracksBox.uncheck();
+    // ── XML-only download (switch "Include" to XML only) ───────────────────
+    await selectSegment(page, /^xml only$/i);
     await page.waitForTimeout(300);
     const downloadBtnLabel1 = await page
         .getByRole('button', { name: /download rekordbox xml|download & extract|download zip/i })
@@ -188,18 +205,17 @@ async function main() {
         await generating.waitFor({ state: 'hidden', timeout: 60_000 }).catch(() => {});
         await page.waitForTimeout(500);
 
-        // includeTracks/includeRekordboxXml are component state, not reset by
-        // handleBack ("Start Over") — so the XML-only run above should have left
-        // "Include tracks" still unticked here. Re-tick it explicitly to test the
-        // tracks+XML combo (this is the real, verified behavior, not a driver bug —
-        // see the log/doc note).
-        const includeTracksBox2 = page.getByRole('checkbox', { name: /include tracks/i });
-        const persistedUnchecked = !(await includeTracksBox2.isChecked().catch(() => true));
-        console.log('includeTracks persisted unticked from the XML-only run:', persistedUnchecked);
-        if (persistedUnchecked) {
-            await includeTracksBox2.check();
-            await page.waitForTimeout(300);
-        }
+        // "Include" is still component state, not reset by handleBack ("Start Over")
+        // — only step/plan/error/downloadResult are — so the XML-only run above should
+        // have left it on "XML only" here. (The real, verified behavior, not a driver
+        // bug — see the log/doc note. "Format" persists for a different reason: it is
+        // in the app store.) Switch back explicitly to test the tracks+XML combo.
+        const persistedXmlOnly = await segment(page, /^xml only$/i)
+            .isChecked()
+            .catch(() => false);
+        console.log('include persisted on "XML only" from the previous run:', persistedXmlOnly);
+        await selectSegment(page, /^tracks \+ xml$/i);
+        await page.waitForTimeout(300);
 
         const downloadButton2 = page.getByRole('button', {
             name: /download & extract|download zip/i,
@@ -251,8 +267,9 @@ async function main() {
     console.log(
         JSON.stringify(
             {
-                bothTickboxesPresent: bothPresent,
                 desktopDiffTabsPresent: diffTabsPresent,
+                formatControlsPresent: controlsPresent,
+                includeDefault,
                 tracksAndXmlOutcome,
                 xmlOnlyOutcome,
             },

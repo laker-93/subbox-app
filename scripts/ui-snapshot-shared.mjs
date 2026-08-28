@@ -131,3 +131,59 @@ export async function waitForRouteSettled(page) {
 
     return spinner.isVisible().catch(() => false);
 }
+
+// ── Mantine SegmentedControl (Sync's "Format" / "Include" controls) ──────────
+//
+// Sync's format choice used to be tick-boxes; since the sync-ui substrate work it
+// is a `SegmentedControl`. Mantine builds one from real `<input type="radio">`s, so
+// `getByRole('radio', …)` finds each option and `isChecked()`/`isDisabled()` read it
+// without any actionability check. Driving it is the part that needs care: the
+// inputs are styled `height: 0; width: 0; opacity: 0`, so `check()` and `click()`
+// can never satisfy Playwright's actionability rules against the input itself
+// (verified: `check()` times out). The clickable thing is the sibling
+// `<label for="…">`, which is what these helpers target.
+
+/** The `<input type="radio">` behind one segmented-control option. */
+export function segment(page, name) {
+    return page.getByRole('radio', { name });
+}
+
+/**
+ * Select a segmented-control option by its visible label.
+ *
+ * Returns true if it clicked, false if the option was already selected. Throws if
+ * the option is missing or disabled, so a driver fails on the locator rather than
+ * silently going on to assert against the wrong format.
+ */
+export async function selectSegment(page, name, { timeout = 15_000 } = {}) {
+    const radio = segment(page, name);
+    await radio.waitFor({ state: 'attached', timeout });
+
+    if (await radio.isDisabled()) {
+        throw new Error(`segmented-control option ${name} is disabled — cannot select it`);
+    }
+    if (await radio.isChecked()) return false;
+
+    const id = await radio.getAttribute('id');
+    if (!id) throw new Error(`segmented-control option ${name} has no id to click its label by`);
+    await page.locator(`label[for="${id}"]`).click();
+
+    // The click goes through the label, so confirm it actually landed on the input
+    // rather than assuming — a mis-associated label would otherwise pass silently.
+    for (let attempt = 0; attempt < 20; attempt++) {
+        if (await radio.isChecked()) return true;
+        await page.waitForTimeout(100);
+    }
+    throw new Error(`clicked the label for ${name} but the option never became selected`);
+}
+
+/** Which option of a segmented control is selected, as its visible label. */
+export async function checkedSegment(page, names) {
+    for (const name of names) {
+        const checked = await segment(page, name)
+            .isChecked()
+            .catch(() => false);
+        if (checked) return name;
+    }
+    return null;
+}

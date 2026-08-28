@@ -1,7 +1,14 @@
 import path from 'path';
 import { chromium } from 'playwright';
 
-import { getCredentials, performLogin, SNAPSHOT_DIR } from '../ui-snapshot-shared.mjs';
+import {
+    checkedSegment,
+    getCredentials,
+    performLogin,
+    segment,
+    selectSegment,
+    SNAPSHOT_DIR,
+} from '../ui-snapshot-shared.mjs';
 
 // Regression driver for the rebuilt Sync -> Download screen's WEB branch
 // (subbox-app #101/#102/#103), against `pnpm dev:web` (port 4343) — the only
@@ -10,6 +17,13 @@ import { getCredentials, performLogin, SNAPSHOT_DIR } from '../ui-snapshot-share
 // sync-download-tickboxes.mjs; this is the web-only manifest view + `user_root`
 // `music` segment + one-zip-with-tick-boxes behaviour, never driven since the
 // #101/#102/#103 rebuild superseded the pre-rebuild web-sync-download-zip.mjs.
+//
+// Updated for the sync-ui substrate work: the tick-boxes are now "Format" and
+// "Include" segmented controls. Web is the surface where the format choice is
+// constrained — Serato writes crates onto a filesystem a browser cannot reach, so
+// the option is present-but-disabled and the format is pinned to Rekordbox. That
+// means "tracks with no XML" is not expressible on web at all; every web download
+// carries the XML. This driver asserts that pin rather than assuming it.
 //
 // Usage: node scripts/qa/web-sync-manifest.mjs
 // Env: QA_PLAYLIST (default "Downtempo", 9 tracks on test060826)
@@ -58,21 +72,24 @@ async function main() {
     await previewBtn.click();
 
     // ── Manifest checks (web has no diff, just what's in the file) ─────────
-    const includeTracksBox = page.getByRole('checkbox', { name: /include tracks/i });
-    const includeXmlBox = page.getByRole('checkbox', { name: /include rekordbox xml/i });
-    await includeTracksBox.waitFor({ timeout: 20_000 });
+    const includeOptions = [/^tracks \+ xml$/i, /^xml only$/i];
+    const includeTracksSeg = segment(page, includeOptions[0]);
+    await includeTracksSeg.waitFor({ state: 'attached', timeout: 20_000 });
 
-    const bothPresent =
-        (await includeTracksBox.isVisible().catch(() => false)) &&
-        (await includeXmlBox.isVisible().catch(() => false));
-    const tracksCheckedInitially = await includeTracksBox.isChecked().catch(() => null);
-    const xmlCheckedInitially = await includeXmlBox.isChecked().catch(() => null);
-    console.log('both tick-boxes present:', bothPresent);
+    const controlsPresent =
+        (await segment(page, /^rekordbox$/i).count()) > 0 &&
+        (await includeTracksSeg.count()) > 0;
+    console.log('format + include controls present:', controlsPresent);
+    console.log('include on arrival:', await checkedSegment(page, includeOptions));
+
+    // The web pin: Serato offered but disabled, Rekordbox selected and unchangeable.
+    const seratoDisabled = await segment(page, /^serato$/i).isDisabled().catch(() => null);
+    const rekordboxPinned = await segment(page, /^rekordbox$/i).isChecked().catch(() => null);
+    console.log('Serato disabled on web:', seratoDisabled, '| Rekordbox pinned:', rekordboxPinned);
+    const bodyTextFormat = await page.locator('body').innerText().catch(() => '');
     console.log(
-        'default state - includeTracks:',
-        tracksCheckedInitially,
-        'includeXml:',
-        xmlCheckedInitially,
+        'reason for the disabled option is on screen:',
+        /need the desktop app/i.test(bodyTextFormat),
     );
 
     // No diff tabs/badges on web — "Missing (N)" etc. must NOT be present.
@@ -101,8 +118,8 @@ async function main() {
         await page.waitForTimeout(300);
     }
 
-    // ── XML-only download (untick "Include tracks") ─────────────────────────
-    await includeTracksBox.uncheck();
+    // ── XML-only download (switch "Include" to XML only) ────────────────────
+    await selectSegment(page, /^xml only$/i);
     await page.waitForTimeout(300);
     const downloadButton = page.getByRole('button', {
         name: /download rekordbox xml|download zip/i,
@@ -148,16 +165,14 @@ async function main() {
         }
         console.log('preview button enabled after retry loop:', await previewBtn.isEnabled().catch(() => false));
         await previewBtn.click();
-        await includeTracksBox.waitFor({ timeout: 20_000 });
+        await includeTracksSeg.waitFor({ state: 'attached', timeout: 20_000 });
 
-        // includeTracks/includeRekordboxXml are plain state, not reset by "Start
-        // Over" (confirmed on desktop 2026-08-14) — expect it's still unticked here.
-        const persistedUnchecked = !(await includeTracksBox.isChecked().catch(() => true));
-        console.log('includeTracks persisted unticked from the XML-only run:', persistedUnchecked);
-        if (persistedUnchecked) {
-            await includeTracksBox.check();
-            await page.waitForTimeout(300);
-        }
+        // "Include" is plain component state, not reset by "Start Over" (confirmed on
+        // desktop 2026-08-14) — expect it's still on "XML only" here.
+        const persistedXmlOnly = await segment(page, /^xml only$/i).isChecked().catch(() => false);
+        console.log('include persisted on "XML only" from the previous run:', persistedXmlOnly);
+        await selectSegment(page, /^tracks \+ xml$/i);
+        await page.waitForTimeout(300);
         const extractPathInput2 = page.getByPlaceholder(/Users\/you\/(Desktop|Music)/i);
         if (await extractPathInput2.isVisible().catch(() => false)) {
             const currentVal = await extractPathInput2.inputValue().catch(() => '');
@@ -193,10 +208,12 @@ async function main() {
     console.log(
         JSON.stringify(
             {
-                bothTickboxesPresent: bothPresent,
                 extractPathVisible,
+                formatControlsPresent: controlsPresent,
                 noDiffUi,
                 pymixResponses,
+                rekordboxPinned,
+                seratoDisabled,
                 tracksAndXmlOutcome,
                 xmlOnlyOutcome,
             },
@@ -209,7 +226,9 @@ async function main() {
 
     const badResponse = pymixResponses.some((r) => r.status !== 200);
     const ok =
-        bothPresent &&
+        controlsPresent &&
+        seratoDisabled === true &&
+        rekordboxPinned === true &&
         noDiffUi &&
         !badResponse &&
         xmlOnlyOutcome.startsWith('done') &&

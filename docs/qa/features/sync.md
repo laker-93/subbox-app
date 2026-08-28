@@ -62,6 +62,33 @@ Verified 2026-07-09 against subbox-app `claude/continuous-ux` (rebased onto
 
 ## Desktop tick-boxes, re-verified 2026-08-14
 
+> **Superseded by the sync-ui substrate work (`serato/sync-ui-substrate`, not yet
+> merged).** The three tick-boxes below — "Include tracks", "Include Rekordbox
+> XML", "Write Serato crates" — are now two segmented controls, **Format**
+> (Rekordbox | Serato) and **Include** (Tracks + XML | XML only, relabelled
+> Tracks + crates | Crates only under Serato). "Also write Serato crates" survives
+> as a checkbox under the Rekordbox format, deliberately: it is the one way to
+> feed both DJ apps in a single pass. What is recorded below still describes the
+> behaviour under test, but the *controls* have moved; the findings about button
+> labels, done-screen copy and files on disk all still stand.
+>
+> Two things changed that a driver has to know about:
+> - **Format is persisted in the app store** (`libraryFormat.download`), not
+>   component state, so it survives an app relaunch and leaks between driver runs.
+>   Each phase must select it explicitly instead of trusting a default.
+> - **Mantine's `SegmentedControl` radios are 0x0 / `opacity: 0`**, so
+>   `getByRole('radio', …)` finds them and `isChecked()` reads them, but `check()`
+>   times out. Drive them through `selectSegment()` in `ui-snapshot-shared.mjs`,
+>   which clicks the associated `<label for=…>`. (Both verified against a repro of
+>   Mantine's DOM, 2026-08-28.)
+>
+> `sync-download-tickboxes.mjs` (name kept so the journal's references resolve),
+> `serato-roundtrip.mjs` and `web-sync-manifest.mjs` were updated for this on
+> 2026-08-28. **They have not been re-run live since** — the update is a
+> locator/API change made alongside the client change, not a fresh verification.
+> `external-drive-rekordbox-xml.mjs` is untouched: External Drive keeps its
+> checkbox until step 4 of the design.
+
 Driven live (Electron, `electron-vite build --mode development`) against
 `test060826`'s "Downtempo" playlist (9 tracks — smallest real playlist on this
 account; `test260526`'s fixtures no longer exist, see `README.md`). New driver
@@ -98,6 +125,14 @@ requests, no image change needed for a client-only regression.
   tree left otherwise untouched.
 
 ## Web manifest view, verified 2026-08-17 (#101/#102/#103)
+
+> **Superseded, as above.** On web the format control is additionally *pinned*:
+> Serato writes crates onto a filesystem a browser cannot reach, so the option is
+> rendered disabled with the reason attached, and the format is forced to
+> Rekordbox regardless of what the store holds. The consequence is a real
+> capability change — **"tracks with no XML" is no longer expressible on web**;
+> every web download now carries the Rekordbox XML. `web-sync-manifest.mjs` now
+> asserts the pin (Serato disabled, Rekordbox checked) rather than assuming it.
 
 Driven live via `pnpm dev:web` (port 4343, the only origin in pymix's local CORS
 allowlist) against `test060826`'s "Downtempo" playlist (9 tracks). New driver

@@ -12,6 +12,7 @@ import {
     performLogin,
     resolveAppEntry,
     ROOT,
+    selectSegment,
     SNAPSHOT_DIR,
 } from '../ui-snapshot-shared.mjs';
 
@@ -26,13 +27,14 @@ import {
 //                     generate a fresh synthetic Serato library to import
 //   serato-upload     Sync -> Upload (Serato): read the crates, upload the tracks,
 //                     assert the crate tree came back as playlists
-//   rekordbox-export  Sync -> Download with "Include Rekordbox XML": assert the XML
+//   rekordbox-export  Sync -> Download in the Rekordbox format: assert the XML
 //                     carries the same playlists and that every Location resolves
 //                     to a file that is actually there
 //   rekordbox-import  wipe again, then Sync -> Upload (Rekordbox) with that XML:
 //                     the same library, rebuilt from the other format
-//   serato-export     Sync -> Download with "Write Serato crates": assert the crates
-//                     written read back with the right tree, tracks and cues
+//   serato-export     Sync -> Download in the Rekordbox format with "Also write
+//                     Serato crates": assert the crates written read back with the
+//                     right tree, tracks and cues
 //
 // The two conversions are deliberately run against each other's output: the XML
 // that phase 3 exports is what phase 4 imports, and the crates phase 5 writes are
@@ -361,10 +363,10 @@ async function phaseRekordboxExport(fixtureSnap) {
             .catch(() => {});
         await page.waitForTimeout(1000);
 
-        const xmlBox = page.getByRole('checkbox', { name: /include rekordbox xml/i });
-        await xmlBox.check();
-        const tracksBox = page.getByRole('checkbox', { name: /include tracks/i });
-        await tracksBox.check();
+        // "Format" persists in the app store, so it carries over between phases and
+        // between runs — select it rather than trusting whatever the last one left.
+        await selectSegment(page, /^rekordbox$/i);
+        await selectSegment(page, /^tracks \+ xml$/i);
         await page.waitForTimeout(300);
         await shot(page, 'download-preview');
 
@@ -498,14 +500,21 @@ async function phaseSeratoExport(fixtureSnap) {
             .catch(() => {});
         await page.waitForTimeout(1000);
 
-        // Point the crate writer at the throwaway _Serato_ (the stubbed dialog
-        // resolves to it), then tick the box it enables.
+        // "Also write Serato crates" only exists under the Rekordbox format — it is the
+        // deliberate exception to one-format-at-a-time, kept so a Rekordbox user can
+        // also feed Serato in one pass. Selecting the Serato format instead would write
+        // crates *without* an XML, which is a different thing and not what this phase
+        // is asserting. Select Rekordbox first, then point the crate writer at the
+        // throwaway _Serato_ (the stubbed dialog resolves to it), then tick the box the
+        // folder enables.
+        await selectSegment(page, /^rekordbox$/i);
+        await selectSegment(page, /^tracks \+ xml$/i);
         await page
             .getByRole('button', { name: /choose serato folder|change serato folder/i })
             .first()
             .click();
         await page.waitForTimeout(500);
-        const crateBox = page.getByRole('checkbox', { name: /write serato crates/i });
+        const crateBox = page.getByRole('checkbox', { name: /also write serato crates/i });
         await crateBox.check();
         await page.waitForTimeout(300);
         await shot(page, 'serato-export-preview');
