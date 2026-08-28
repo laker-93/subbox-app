@@ -2,9 +2,9 @@ import isElectron from 'is-electron';
 import { useCallback, useEffect, useState } from 'react';
 
 import { urlConfig } from '/@/renderer/config/url-config';
+import { SyncDesktopOnly } from '/@/renderer/features/sync/components/shared';
 import { useCurrentServerWithCredential } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
-import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
@@ -204,9 +204,9 @@ export const SyncWatch = () => {
             )}
 
             {!isElectron() && (
-                <Center style={{ height: '100%' }}>
-                    <Text c="dimmed">Watch directory is only available in the desktop app.</Text>
-                </Center>
+                <SyncDesktopOnly>
+                    Watch directory is only available in the desktop app.
+                </SyncDesktopOnly>
             )}
         </Stack>
     );

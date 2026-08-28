@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Button } from '/@/shared/components/button/button';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Group } from '/@/shared/components/group/group';
+import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 
@@ -26,7 +27,21 @@ interface SelectableListProps {
      * anything with a label of its own has to stay out of the click target.
      */
     options?: ReactNode;
+    /**
+     * A control above the list has claimed the whole set — External Drive's "All
+     * server tracks". Every row reads as ticked and stops responding, because the
+     * per-row selection no longer decides anything.
+     */
+    overriddenAll?: boolean;
+    /**
+     * `area` uses the app's overlay scrollbar, `native` the plain one. Both exist
+     * in Sync today and this preserves each screen's own; there is no behavioural
+     * reason to prefer one, so it is not worth a visible change to unify them here.
+     */
+    scroll?: 'area' | 'native';
     selected: Set<string>;
+    /** Replaces Select all · Select none, for a screen with more modes than two. */
+    toolbar?: ReactNode;
 }
 
 interface SelectionToolbarProps {
@@ -61,26 +76,26 @@ export const SelectableList = ({
     onSelectNone,
     onToggle,
     options,
+    overriddenAll = false,
+    scroll = 'native',
     selected,
-}: SelectableListProps) => (
-    <>
-        <Group gap="xs">
-            <SelectionToolbar onSelectAll={onSelectAll} onSelectNone={onSelectNone} />
-        </Group>
-        {options}
-        <Stack gap="xs" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+    toolbar,
+}: SelectableListProps) => {
+    const rows = (
+        <Stack gap="xs">
             {items.map((item) => (
                 <Group
                     gap="md"
                     key={item.id}
-                    onClick={() => onToggle(item.id)}
+                    onClick={() => !overriddenAll && onToggle(item.id)}
                     style={{
                         borderRadius: 'var(--theme-radius-sm)',
-                        cursor: 'pointer',
+                        cursor: overriddenAll ? 'default' : 'pointer',
+                        opacity: overriddenAll ? 0.4 : 1,
                         padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
                     }}
                 >
-                    <Checkbox checked={selected.has(item.id)} readOnly size="sm" />
+                    <Checkbox checked={overriddenAll || selected.has(item.id)} readOnly size="sm" />
                     <Text fw={500} size="sm" style={{ flex: 1 }}>
                         {item.prefix && (
                             <Text c="dimmed" component="span" size="xs">
@@ -97,5 +112,23 @@ export const SelectableList = ({
                 </Group>
             ))}
         </Stack>
-    </>
-);
+    );
+
+    return (
+        <>
+            <Group gap="xs">
+                {toolbar ?? (
+                    <SelectionToolbar onSelectAll={onSelectAll} onSelectNone={onSelectNone} />
+                )}
+            </Group>
+            {options}
+            {scroll === 'area' ? (
+                <ScrollArea style={{ flex: 1 }}>{rows}</ScrollArea>
+            ) : (
+                <Stack gap="xs" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                    {rows}
+                </Stack>
+            )}
+        </>
+    );
+};

@@ -5,18 +5,29 @@ import { z } from 'zod';
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
+import {
+    DestinationPath,
+    formatBytes,
+    formatDuration,
+    RekordboxImportSteps,
+    SelectableList,
+    SyncFlow,
+    SyncLoading,
+    SyncResult,
+    SyncSummary,
+    TrackRow,
+    useSelection,
+} from '/@/renderer/features/sync/components/shared';
 import { useCurrentServerId, useCurrentServerWithCredential } from '/@/renderer/store';
 import { pymixType } from '/@/shared/api/pymix/pymix-types';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
-import { Center } from '/@/shared/components/center/center';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Modal } from '/@/shared/components/modal/modal';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
-import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
@@ -35,27 +46,18 @@ const XML_DIRECTORY_KEY = 'rekordbox_xml_directory';
 
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
 
-const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-};
-
-const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.round(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-};
-
 export const SyncExternalDrive = () => {
     const serverId = useCurrentServerId();
     const server = useCurrentServerWithCredential();
 
     const [step, setStep] = useState<Step>('select');
     const [drivePath, setDrivePath] = useState<null | string>(null);
-    const [selectedPlaylists, setSelectedPlaylists] = useState<Set<string>>(new Set());
+    const {
+        selectAll,
+        selected: selectedPlaylists,
+        selectNone,
+        toggle: handleTogglePlaylist,
+    } = useSelection();
     const [allTracks, setAllTracks] = useState(false);
     const [plan, setPlan] = useState<null | SyncPlanResponse>(null);
     const [error, setError] = useState<null | string>(null);
@@ -132,32 +134,20 @@ export const SyncExternalDrive = () => {
         }
     }, []);
 
-    const handleTogglePlaylist = useCallback((id: string) => {
-        setSelectedPlaylists((prev) => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
-            }
-            return next;
-        });
-    }, []);
-
     const handleSelectAll = useCallback(() => {
         setAllTracks(false);
-        setSelectedPlaylists(new Set([NOPLAYLIST_ID, ...playlists.map((p) => p.id)]));
-    }, [playlists]);
+        selectAll([NOPLAYLIST_ID, ...playlists.map((p) => p.id)]);
+    }, [playlists, selectAll]);
 
     const handleSelectNone = useCallback(() => {
         setAllTracks(false);
-        setSelectedPlaylists(new Set());
-    }, []);
+        selectNone();
+    }, [selectNone]);
 
     const handleSelectAllTracks = useCallback(() => {
         setAllTracks(true);
-        setSelectedPlaylists(new Set());
-    }, []);
+        selectNone();
+    }, [selectNone]);
 
     const handleCompare = useCallback(async () => {
         if (!drivePath || (!allTracks && selectedPlaylists.size === 0)) return;
@@ -319,101 +309,66 @@ export const SyncExternalDrive = () => {
                     </Group>
                 </Stack>
 
-                {/* Playlist selector */}
-                <Stack gap="xs">
-                    <Group gap="md">
-                        <Badge size="lg" variant="light">
-                            {playlists.length} {playlists.length === 1 ? 'playlist' : 'playlists'}
-                        </Badge>
-                        <Badge size="lg" variant="light">
-                            {selectedPlaylists.size} selected
-                        </Badge>
-                        <Badge size="lg" variant="light">
-                            {tracksLabel}
-                        </Badge>
-                    </Group>
+                {/* Playlist selector. NOPLAYLIST is a client-only virtual entry for
+                    tracks in no playlist at all, so it rides in the list as an item
+                    rather than as a control beside it. */}
+                <SyncSummary
+                    items={[
+                        {
+                            label: `${playlists.length} ${playlists.length === 1 ? 'playlist' : 'playlists'}`,
+                        },
+                        { label: `${selectedPlaylists.size} selected` },
+                        { label: tracksLabel },
+                    ]}
+                />
 
-                    <Group gap="xs">
-                        <Button
-                            onClick={handleSelectAllTracks}
-                            size="xs"
-                            variant={allTracks ? 'filled' : 'subtle'}
-                        >
-                            All server tracks
-                        </Button>
-                        <Button
-                            onClick={handleSelectAll}
-                            size="xs"
-                            variant={
-                                !allTracks &&
-                                selectedPlaylists.has(NOPLAYLIST_ID) &&
-                                selectedPlaylists.size === playlists.length + 1
-                                    ? 'filled'
-                                    : 'subtle'
-                            }
-                        >
-                            Select all
-                        </Button>
-                        <Button onClick={handleSelectNone} size="xs" variant="subtle">
-                            Select none
-                        </Button>
-                    </Group>
-                </Stack>
-
-                <ScrollArea style={{ flex: 1 }}>
-                    <Stack gap="xs">
-                        {/* NOPLAYLIST virtual entry */}
-                        <Group
-                            gap="md"
-                            onClick={() => !allTracks && handleTogglePlaylist(NOPLAYLIST_ID)}
-                            style={{
-                                borderRadius: 'var(--theme-radius-sm)',
-                                cursor: allTracks ? 'default' : 'pointer',
-                                opacity: allTracks ? 0.4 : 1,
-                                padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
-                            }}
-                        >
-                            <Checkbox
-                                checked={allTracks || selectedPlaylists.has(NOPLAYLIST_ID)}
-                                readOnly
-                                size="sm"
-                            />
-                            <Text fw={500} size="sm" style={{ flex: 1 }}>
-                                NOPLAYLIST
-                            </Text>
-                            <Text c="dimmed" size="xs">
-                                tracks not in any playlist
-                            </Text>
-                        </Group>
-
-                        {playlists.map((pl) => (
-                            <Group
-                                gap="md"
-                                key={pl.id}
-                                onClick={() => !allTracks && handleTogglePlaylist(pl.id)}
-                                style={{
-                                    borderRadius: 'var(--theme-radius-sm)',
-                                    cursor: allTracks ? 'default' : 'pointer',
-                                    opacity: allTracks ? 0.4 : 1,
-                                    padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
-                                }}
+                <SelectableList
+                    items={[
+                        {
+                            detail: 'tracks not in any playlist',
+                            id: NOPLAYLIST_ID,
+                            label: 'NOPLAYLIST',
+                        },
+                        ...playlists.map((pl) => ({
+                            detail: `${pl.songCount ?? 0} ${(pl.songCount ?? 0) === 1 ? 'track' : 'tracks'}`,
+                            id: pl.id,
+                            label: pl.name,
+                        })),
+                    ]}
+                    onSelectAll={handleSelectAll}
+                    onSelectNone={handleSelectNone}
+                    onToggle={handleTogglePlaylist}
+                    overriddenAll={allTracks}
+                    scroll="area"
+                    selected={selectedPlaylists}
+                    toolbar={
+                        <>
+                            <Button
+                                onClick={handleSelectAllTracks}
+                                size="xs"
+                                variant={allTracks ? 'filled' : 'subtle'}
                             >
-                                <Checkbox
-                                    checked={allTracks || selectedPlaylists.has(pl.id)}
-                                    readOnly
-                                    size="sm"
-                                />
-                                <Text fw={500} size="sm" style={{ flex: 1 }}>
-                                    {pl.name}
-                                </Text>
-                                <Text c="dimmed" size="xs">
-                                    {pl.songCount ?? 0}{' '}
-                                    {(pl.songCount ?? 0) === 1 ? 'track' : 'tracks'}
-                                </Text>
-                            </Group>
-                        ))}
-                    </Stack>
-                </ScrollArea>
+                                All server tracks
+                            </Button>
+                            <Button
+                                onClick={handleSelectAll}
+                                size="xs"
+                                variant={
+                                    !allTracks &&
+                                    selectedPlaylists.has(NOPLAYLIST_ID) &&
+                                    selectedPlaylists.size === playlists.length + 1
+                                        ? 'filled'
+                                        : 'subtle'
+                                }
+                            >
+                                Select all
+                            </Button>
+                            <Button onClick={handleSelectNone} size="xs" variant="subtle">
+                                Select none
+                            </Button>
+                        </>
+                    }
+                />
 
                 {error && (
                     <Text c="red" size="sm">
@@ -443,81 +398,68 @@ export const SyncExternalDrive = () => {
     // ── Scanning / Planning (loading) ─────────────────────────────────────
     if (step === 'scanning' || step === 'planning') {
         return (
-            <Center style={{ height: '100%' }}>
-                <Stack align="center" gap="md">
-                    <Spinner />
-                    <Text c="dimmed" size="sm">
-                        {step === 'scanning'
-                            ? 'Scanning drive for audio tracks...'
-                            : 'Comparing with server playlists...'}
-                    </Text>
-                </Stack>
-            </Center>
+            <SyncLoading
+                label={
+                    step === 'scanning'
+                        ? 'Scanning drive for audio tracks...'
+                        : 'Comparing with server playlists...'
+                }
+            />
         );
     }
 
     // ── Downloading ────────────────────────────────────────────────────────
     if (step === 'downloading') {
-        return (
-            <Center style={{ height: '100%' }}>
-                <Stack align="center" gap="md">
-                    <Spinner />
-                    <Text c="dimmed" size="sm">
-                        Downloading and extracting missing tracks...
-                    </Text>
-                </Stack>
-            </Center>
-        );
+        return <SyncLoading label="Downloading and extracting missing tracks..." />;
     }
 
     // ── Done ───────────────────────────────────────────────────────────────
     if (step === 'done') {
         return (
-            <Center style={{ height: '100%' }}>
-                <Stack align="center" gap="md">
-                    <TextTitle order={3}>Download Complete</TextTitle>
-                    <Text c="dimmed" size="sm">
-                        {downloadResult
-                            ? `${downloadResult.tracksExported} track${
-                                  downloadResult.tracksExported === 1 ? '' : 's'
-                              } downloaded to your Sub-box library.`
-                            : 'Download finished.'}
-                    </Text>
-                    {(downloadResult?.musicPath || downloadResult?.xmlPath) && (
-                        <Group gap="sm" justify="center" wrap="wrap">
-                            {downloadResult?.musicPath && (
-                                <Button
-                                    leftSection={<Icon icon="folder" />}
-                                    onClick={handleOpenMusicFolder}
-                                    size="sm"
-                                    tooltip={{
-                                        label: 'Open the folder your music was downloaded to',
-                                    }}
-                                    variant="default"
-                                >
-                                    Show Music
-                                </Button>
-                            )}
-                            {downloadResult?.xmlPath && (
-                                <Button
-                                    leftSection={<Icon icon="folder" />}
-                                    onClick={handleRevealXml}
-                                    size="sm"
-                                    tooltip={{
-                                        label: 'Reveal the downloaded Rekordbox XML in its folder',
-                                    }}
-                                    variant="default"
-                                >
-                                    Show Rekordbox XML
-                                </Button>
-                            )}
-                        </Group>
-                    )}
+            <SyncResult
+                action={
                     <Button onClick={handleBack} size="md" variant="filled">
                         Start Over
                     </Button>
-                </Stack>
-            </Center>
+                }
+                title="Download Complete"
+            >
+                <Text c="dimmed" size="sm">
+                    {downloadResult
+                        ? `${downloadResult.tracksExported} track${
+                              downloadResult.tracksExported === 1 ? '' : 's'
+                          } downloaded to your Sub-box library.`
+                        : 'Download finished.'}
+                </Text>
+                {(downloadResult?.musicPath || downloadResult?.xmlPath) && (
+                    <Group gap="sm" justify="center" wrap="wrap">
+                        {downloadResult?.musicPath && (
+                            <Button
+                                leftSection={<Icon icon="folder" />}
+                                onClick={handleOpenMusicFolder}
+                                size="sm"
+                                tooltip={{ label: 'Open the folder your music was downloaded to' }}
+                                variant="default"
+                            >
+                                Show Music
+                            </Button>
+                        )}
+                        {downloadResult?.xmlPath && (
+                            <Button
+                                leftSection={<Icon icon="folder" />}
+                                onClick={handleRevealXml}
+                                size="sm"
+                                tooltip={{
+                                    label: 'Reveal the downloaded Rekordbox XML in its folder',
+                                }}
+                                variant="default"
+                            >
+                                Show Rekordbox XML
+                            </Button>
+                        )}
+                    </Group>
+                )}
+            </SyncResult>
         );
     }
 
@@ -533,38 +475,52 @@ export const SyncExternalDrive = () => {
     ];
 
     return (
-        <Stack gap="md" p="xl" style={{ height: '100%', overflow: 'hidden' }}>
-            <Group justify="space-between">
-                <TextTitle order={3}>Comparison Preview</TextTitle>
-                <Button onClick={handleBack} size="sm" variant="subtle">
-                    Back
+        <SyncFlow
+            error={error}
+            footer={
+                <Button
+                    disabled={plan.tracks.missing.length === 0 && !includeRekordboxXml}
+                    fullWidth
+                    onClick={handleDownload}
+                    size="md"
+                    tooltip={{
+                        label: 'Download the missing tracks into your Sub-box library, ready to use (plus a Rekordbox XML if ticked above).',
+                        multiline: true,
+                        openDelay: 300,
+                        w: 280,
+                    }}
+                    variant="filled"
+                >
+                    Download Missing Tracks
                 </Button>
-            </Group>
-
-            <Text c="dimmed" size="xs" style={{ wordBreak: 'break-all' }}>
-                Drive: {drivePath}
-            </Text>
-
-            {/* Summary badges */}
-            <Group gap="sm" wrap="wrap">
-                <Badge color="blue" size="lg" variant="light">
-                    {summary.playlists} {summary.playlists === 1 ? 'playlist' : 'playlists'}
-                </Badge>
-                <Badge color="blue" size="lg" variant="light">
-                    {summary.tracksRequested} tracks requested
-                </Badge>
-                <Badge color="green" size="lg" variant="light">
-                    {summary.tracksAlreadyPresent} already on drive
-                </Badge>
-                <Badge color="orange" size="lg" variant="light">
-                    {summary.tracksMissing} missing from drive
-                </Badge>
-                {summary.downloadSizeBytes > 0 && (
-                    <Badge color="cyan" size="lg" variant="light">
-                        {formatBytes(summary.downloadSizeBytes)} missing
-                    </Badge>
-                )}
-            </Group>
+            }
+            onBack={handleBack}
+            subtitle={
+                <Text c="dimmed" size="xs" style={{ wordBreak: 'break-all' }}>
+                    Drive: {drivePath}
+                </Text>
+            }
+            title="Comparison Preview"
+        >
+            <SyncSummary
+                items={[
+                    {
+                        color: 'blue',
+                        label: `${summary.playlists} ${summary.playlists === 1 ? 'playlist' : 'playlists'}`,
+                    },
+                    { color: 'blue', label: `${summary.tracksRequested} tracks requested` },
+                    { color: 'green', label: `${summary.tracksAlreadyPresent} already on drive` },
+                    { color: 'orange', label: `${summary.tracksMissing} missing from drive` },
+                    ...(summary.downloadSizeBytes > 0
+                        ? [
+                              {
+                                  color: 'cyan',
+                                  label: `${formatBytes(summary.downloadSizeBytes)} missing`,
+                              },
+                          ]
+                        : []),
+                ]}
+            />
 
             {/* Tab buttons */}
             <Group gap="xs">
@@ -590,36 +546,26 @@ export const SyncExternalDrive = () => {
                             </Text>
                         ) : (
                             tracks.missing.map((track, i) => (
-                                <Group
-                                    gap="md"
+                                <TrackRow
+                                    album={track.album}
+                                    artist={track.artist}
+                                    detail={
+                                        <Group gap="xs">
+                                            {track.duration != null && (
+                                                <Text c="dimmed" size="xs">
+                                                    {formatDuration(track.duration)}
+                                                </Text>
+                                            )}
+                                            {track.fileSize != null && (
+                                                <Text c="dimmed" size="xs">
+                                                    {formatBytes(track.fileSize)}
+                                                </Text>
+                                            )}
+                                        </Group>
+                                    }
                                     key={`${track.artist}-${track.title}-${i}`}
-                                    style={{
-                                        borderRadius: 'var(--theme-radius-sm)',
-                                        padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
-                                    }}
-                                >
-                                    <Stack gap={2} style={{ flex: 1 }}>
-                                        <Text fw={500} size="sm">
-                                            {track.title}
-                                        </Text>
-                                        <Text c="dimmed" size="xs">
-                                            {track.artist}
-                                            {track.album ? ` · ${track.album}` : ''}
-                                        </Text>
-                                    </Stack>
-                                    <Group gap="xs">
-                                        {track.duration != null && (
-                                            <Text c="dimmed" size="xs">
-                                                {formatDuration(track.duration)}
-                                            </Text>
-                                        )}
-                                        {track.fileSize != null && (
-                                            <Text c="dimmed" size="xs">
-                                                {formatBytes(track.fileSize)}
-                                            </Text>
-                                        )}
-                                    </Group>
-                                </Group>
+                                    title={track.title}
+                                />
                             ))
                         )}
                     </Stack>
@@ -633,27 +579,17 @@ export const SyncExternalDrive = () => {
                             </Text>
                         ) : (
                             tracks.existing.map((track, i) => (
-                                <Group
-                                    gap="md"
+                                <TrackRow
+                                    album={track.album}
+                                    artist={track.artist}
+                                    detail={
+                                        <Badge color="green" size="sm" variant="light">
+                                            {track.status}
+                                        </Badge>
+                                    }
                                     key={`${track.artist}-${track.title}-${i}`}
-                                    style={{
-                                        borderRadius: 'var(--theme-radius-sm)',
-                                        padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
-                                    }}
-                                >
-                                    <Stack gap={2} style={{ flex: 1 }}>
-                                        <Text fw={500} size="sm">
-                                            {track.title}
-                                        </Text>
-                                        <Text c="dimmed" size="xs">
-                                            {track.artist}
-                                            {track.album ? ` · ${track.album}` : ''}
-                                        </Text>
-                                    </Stack>
-                                    <Badge color="green" size="sm" variant="light">
-                                        {track.status}
-                                    </Badge>
-                                </Group>
+                                    title={track.title}
+                                />
                             ))
                         )}
                     </Stack>
@@ -667,34 +603,24 @@ export const SyncExternalDrive = () => {
                             </Text>
                         ) : (
                             tracks.conflicts.map((track, i) => (
-                                <Group
-                                    gap="md"
+                                <TrackRow
+                                    album={track.album}
+                                    artist={track.artist}
+                                    detail={
+                                        <Stack align="flex-end" gap={2}>
+                                            <Badge color="red" size="sm" variant="light">
+                                                {track.status}
+                                            </Badge>
+                                            {track.reason && (
+                                                <Text c="dimmed" size="xs">
+                                                    {track.reason}
+                                                </Text>
+                                            )}
+                                        </Stack>
+                                    }
                                     key={`${track.artist}-${track.title}-${i}`}
-                                    style={{
-                                        borderRadius: 'var(--theme-radius-sm)',
-                                        padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
-                                    }}
-                                >
-                                    <Stack gap={2} style={{ flex: 1 }}>
-                                        <Text fw={500} size="sm">
-                                            {track.title}
-                                        </Text>
-                                        <Text c="dimmed" size="xs">
-                                            {track.artist}
-                                            {track.album ? ` · ${track.album}` : ''}
-                                        </Text>
-                                    </Stack>
-                                    <Stack align="flex-end" gap={2}>
-                                        <Badge color="red" size="sm" variant="light">
-                                            {track.status}
-                                        </Badge>
-                                        {track.reason && (
-                                            <Text c="dimmed" size="xs">
-                                                {track.reason}
-                                            </Text>
-                                        )}
-                                    </Stack>
-                                </Group>
+                                    title={track.title}
+                                />
                             ))
                         )}
                     </Stack>
@@ -733,31 +659,20 @@ export const SyncExternalDrive = () => {
             </Group>
 
             {includeRekordboxXml && (
-                <Stack gap={4}>
-                    <Group gap="sm">
-                        <Button
-                            onClick={handleSelectXmlDirectory}
-                            size="xs"
-                            tooltip={{
-                                label: 'Where the Rekordbox XML is saved. By default it goes alongside your downloaded tracks.',
-                                multiline: true,
-                                openDelay: 300,
-                                w: 300,
-                            }}
-                            variant="subtle"
-                        >
-                            {xmlDir ? 'Change XML Folder' : 'Choose XML Folder'}
-                        </Button>
-                        {xmlDir && (
+                <DestinationPath
+                    emptyLabel="Default download folder"
+                    extra={
+                        xmlDir ? (
                             <Button onClick={handleResetXmlDirectory} size="xs" variant="subtle">
                                 Reset to default
                             </Button>
-                        )}
-                    </Group>
-                    <Text c="dimmed" size="xs" style={{ fontFamily: 'monospace' }}>
-                        {xmlDir ?? defaultXmlDir ?? 'Default download folder'}
-                    </Text>
-                </Stack>
+                        ) : undefined
+                    }
+                    label="XML Folder"
+                    onChoose={handleSelectXmlDirectory}
+                    path={xmlDir ?? defaultXmlDir}
+                    tooltip="Where the Rekordbox XML is saved. By default it goes alongside your downloaded tracks."
+                />
             )}
 
             <Modal
@@ -773,32 +688,7 @@ export const SyncExternalDrive = () => {
                         already have won&apos;t be duplicated.
                     </Text>
                     <Stack gap="md">
-                        <Stack gap="xs">
-                            <TextTitle order={5}>1. Enable the XML View</TextTitle>
-                            <Text size="sm">
-                                Open Rekordbox, go to Preferences (File &gt; Preferences), click the
-                                View tab, and ensure &quot;rekordbox xml&quot; is checked under the
-                                Layout section.
-                            </Text>
-                        </Stack>
-                        <Stack gap="xs">
-                            <TextTitle order={5}>2. Link Your XML File</TextTitle>
-                            <Text size="sm">
-                                In the same Preferences window, navigate to the Advanced tab. Under
-                                the Database section, find Imported Library and click the Browse
-                                button to locate and select your .xml file.
-                            </Text>
-                        </Stack>
-                        <Stack gap="xs">
-                            <TextTitle order={5}>3. Import to Collection</TextTitle>
-                            <Text size="sm">
-                                Close the Preferences window. On the far left of your Rekordbox
-                                screen, click the newly appeared rekordbox xml icon. Click the
-                                little drop-down arrow/play button to refresh the file. Right-click
-                                your desired playlists and click Import Playlist to bring them into
-                                your primary Rekordbox collection.
-                            </Text>
-                        </Stack>
+                        <RekordboxImportSteps />
                         <Stack gap="xs">
                             <TextTitle order={5}>4. Export to your drive</TextTitle>
                             <Text size="sm">
@@ -809,28 +699,6 @@ export const SyncExternalDrive = () => {
                     </Stack>
                 </Stack>
             </Modal>
-
-            {error && (
-                <Text c="red" size="sm">
-                    {error}
-                </Text>
-            )}
-
-            <Button
-                disabled={plan.tracks.missing.length === 0 && !includeRekordboxXml}
-                fullWidth
-                onClick={handleDownload}
-                size="md"
-                tooltip={{
-                    label: 'Download the missing tracks into your Sub-box library, ready to use (plus a Rekordbox XML if ticked above).',
-                    multiline: true,
-                    openDelay: 300,
-                    w: 280,
-                }}
-                variant="filled"
-            >
-                Download Missing Tracks
-            </Button>
-        </Stack>
+        </SyncFlow>
     );
 };

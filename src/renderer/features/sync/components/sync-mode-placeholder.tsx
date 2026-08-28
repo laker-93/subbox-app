@@ -3,6 +3,7 @@ import { Suspense, useState } from 'react';
 
 import { useIsDemoSession } from '/@/renderer/config/demo-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
+import { SyncDesktopOnly } from '/@/renderer/features/sync/components/shared';
 import { SyncDownload } from '/@/renderer/features/sync/components/sync-download';
 import { SyncExternalDrive } from '/@/renderer/features/sync/components/sync-external-drive';
 import { SyncRekordbox } from '/@/renderer/features/sync/components/sync-rekordbox';
@@ -13,7 +14,6 @@ import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
-import { Text } from '/@/shared/components/text/text';
 
 type SyncTab = 'download' | 'external-drive' | 'serato' | 'upload' | 'watch';
 
@@ -121,11 +121,9 @@ export const SyncModePlaceholder = () => {
                     ) : electron ? (
                         <SyncRekordbox />
                     ) : (
-                        <Center style={{ height: '100%' }}>
-                            <Text c="dimmed">
-                                Rekordbox XML upload is only available in the desktop app.
-                            </Text>
-                        </Center>
+                        <SyncDesktopOnly>
+                            Rekordbox XML upload is only available in the desktop app.
+                        </SyncDesktopOnly>
                     ))}
                 {tab === 'serato' &&
                     (isDemo ? (
@@ -136,12 +134,10 @@ export const SyncModePlaceholder = () => {
                     ) : electron ? (
                         <SyncSerato />
                     ) : (
-                        <Center style={{ height: '100%' }}>
-                            <Text c="dimmed">
-                                Serato import is only available in the desktop app — it reads your
-                                crate files off this computer.
-                            </Text>
-                        </Center>
+                        <SyncDesktopOnly>
+                            Serato import is only available in the desktop app — it reads your crate
+                            files off this computer.
+                        </SyncDesktopOnly>
                     ))}
                 {tab === 'download' && (
                     <Suspense
@@ -163,11 +159,9 @@ export const SyncModePlaceholder = () => {
                     ) : electron ? (
                         <SyncWatch />
                     ) : (
-                        <Center style={{ height: '100%' }}>
-                            <Text c="dimmed">
-                                Watch directory is only available in the desktop app.
-                            </Text>
-                        </Center>
+                        <SyncDesktopOnly>
+                            Watch directory is only available in the desktop app.
+                        </SyncDesktopOnly>
                     ))}
                 {tab === 'external-drive' && (
                     <Suspense
