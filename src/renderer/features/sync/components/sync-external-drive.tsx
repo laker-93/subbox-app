@@ -9,21 +9,29 @@ import {
     DestinationPath,
     formatBytes,
     formatDuration,
+    FormatSelect,
     RekordboxImportSteps,
     SelectableList,
+    SeratoWriteSummary,
     SyncFlow,
     SyncLoading,
     SyncResult,
     SyncSummary,
     TrackRow,
     useSelection,
+    useSeratoCrates,
 } from '/@/renderer/features/sync/components/shared';
-import { useCurrentServerId, useCurrentServerWithCredential } from '/@/renderer/store';
+import {
+    type LibraryFormat,
+    useCurrentServerId,
+    useCurrentServerWithCredential,
+    useLibraryFormat,
+    useSetLibraryFormat,
+} from '/@/renderer/store';
 import { pymixType } from '/@/shared/api/pymix/pymix-types';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Button } from '/@/shared/components/button/button';
-import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Modal } from '/@/shared/components/modal/modal';
@@ -32,7 +40,6 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
-import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 import { Playlist, PlaylistListSort, SortOrder } from '/@/shared/types/domain-types';
 
@@ -67,7 +74,23 @@ export const SyncExternalDrive = () => {
         tracksExported: number;
         xmlPath?: string;
     }>(null);
-    const [includeRekordboxXml, setIncludeRekordboxXml] = useState(true);
+    // Same question, same slot, same memory as Download: this is the download
+    // direction too, so a DJ who picked Serato there finds Serato here. External
+    // Drive is desktop-only (the tab is hidden on web), so unlike Download there is
+    // no web pin to apply -- both formats are always reachable.
+    const format: LibraryFormat = useLibraryFormat('download') ?? 'rekordbox';
+    const setLibraryFormat = useSetLibraryFormat();
+    // Derived, not stored. Two independent tick boxes are how the two halves of one
+    // question drifted apart in the first place.
+    const includeRekordboxXml = format === 'rekordbox';
+    const {
+        reset: resetSeratoResult,
+        result: seratoResult,
+        selectFolder: handleSelectSeratoFolder,
+        seratoFolder,
+        showFolder: handleShowSeratoFolder,
+        writeCrates,
+    } = useSeratoCrates();
     const [xmlHelpOpened, xmlHelpHandlers] = useDisclosure(false);
     // The folder the Rekordbox XML is saved to. `xmlDir` is the user's override
     // (persisted in localSettings); `defaultXmlDir` is where it lands otherwise.
@@ -200,7 +223,8 @@ export const SyncExternalDrive = () => {
         setPlan(null);
         setError(null);
         setDownloadResult(null);
-    }, []);
+        resetSeratoResult();
+    }, [resetSeratoResult]);
 
     const handleDownload = useCallback(async () => {
         if (!plan) return;
@@ -213,6 +237,17 @@ export const SyncExternalDrive = () => {
             // playlist ids, so it's dropped here. An empty list exports every
             // playlist, which also covers the "All server tracks" selection.
             const playlistIds = Array.from(selectedPlaylists).filter((id) => id !== NOPLAYLIST_ID);
+
+            // Crates alone, with nothing to fetch: pymix rejects a download of no
+            // tracks and no XML, and rightly -- the crates are written from tracks
+            // already on disk. An empty musicRoot means "wherever the app keeps its
+            // music", which the main process is the side that knows.
+            if (format === 'serato' && plan.tracks.missing.length === 0) {
+                await writeCrates(playlistIds, '');
+                setDownloadResult({ tracksExported: 0 });
+                setStep('done');
+                return;
+            }
 
             const result = await window.api.ipc.invoke('sync:download-missing-tracks', {
                 filebrowserToken: server.fbToken ?? '',
@@ -233,9 +268,28 @@ export const SyncExternalDrive = () => {
                 username: server.username,
             });
 
-            setDownloadResult(
-                result as { musicPath?: string; tracksExported: number; xmlPath?: string },
-            );
+            const downloaded = result as {
+                musicPath?: string;
+                tracksExported: number;
+                xmlPath?: string;
+            };
+            setDownloadResult(downloaded);
+
+            // The Serato half of the same errand the XML does for Rekordbox: the
+            // tracks are now in the local library, and this is what brings them into
+            // the DJ software. Written after the audio, never before -- a crate names
+            // paths, so one written first names files that aren't there yet.
+            //
+            // Crates go into the *local* _Serato_ library, not onto the drive, and
+            // that is not a shortcut. Serato stores a track path relative to the
+            // volume its _Serato_ folder is on, so a crate on the USB pointing at
+            // tracks in the app's music folder is not expressible; the main process
+            // refuses that combination rather than write crates that open empty.
+            // The Rekordbox path works the same way -- an XML you import into
+            // Rekordbox, which then exports to the USB itself.
+            if (format === 'serato') {
+                await writeCrates(playlistIds, downloaded.musicPath ?? '');
+            }
             setStep('done');
         } catch (err: any) {
             toast.error({ message: err?.message || 'Download failed' });
@@ -243,12 +297,14 @@ export const SyncExternalDrive = () => {
             setStep('preview');
         }
     }, [
+        format,
         includeRekordboxXml,
         plan,
         selectedPlaylists,
         server.fbToken,
         server.username,
         serverId,
+        writeCrates,
         xmlDir,
     ]);
 
@@ -459,6 +515,12 @@ export const SyncExternalDrive = () => {
                         )}
                     </Group>
                 )}
+                {seratoResult && (
+                    <SeratoWriteSummary
+                        onShowFolder={handleShowSeratoFolder}
+                        result={seratoResult}
+                    />
+                )}
             </SyncResult>
         );
     }
@@ -479,19 +541,28 @@ export const SyncExternalDrive = () => {
             error={error}
             footer={
                 <Button
-                    disabled={plan.tracks.missing.length === 0 && !includeRekordboxXml}
+                    // A format always produces a file, so "nothing missing" is no
+                    // longer a dead end -- re-writing the XML or the crates for a
+                    // drive that already has every track is a real thing to want.
+                    // The only blocker left is Serato with nowhere to write to.
+                    disabled={format === 'serato' && !seratoFolder}
                     fullWidth
                     onClick={handleDownload}
                     size="md"
                     tooltip={{
-                        label: 'Download the missing tracks into your Sub-box library, ready to use (plus a Rekordbox XML if ticked above).',
+                        label:
+                            format === 'serato' && !seratoFolder
+                                ? 'Choose your _Serato_ folder above to write the crates into.'
+                                : `Download the missing tracks into your Sub-box library, ready to use, and write ${format === 'rekordbox' ? 'a Rekordbox XML' : 'your Serato crates'}.`,
                         multiline: true,
                         openDelay: 300,
                         w: 280,
                     }}
                     variant="filled"
                 >
-                    Download Missing Tracks
+                    {format === 'rekordbox'
+                        ? 'Download Missing Tracks + XML'
+                        : 'Download Missing Tracks + Crates'}
                 </Button>
             }
             onBack={handleBack}
@@ -502,6 +573,41 @@ export const SyncExternalDrive = () => {
             }
             title="Comparison Preview"
         >
+            {/* The format question, in the same slot it occupies on Download. It used
+                to be a lone "Include Rekordbox XML" tick box below the track list --
+                the only format control on this screen, with no Serato equivalent and
+                nothing saying so. */}
+            <Group align="flex-end" gap="sm" wrap="wrap">
+                <Stack gap={4}>
+                    <Text fw={500} size="sm">
+                        Format
+                    </Text>
+                    <FormatSelect
+                        description={
+                            format === 'rekordbox'
+                                ? 'A Rekordbox XML you import, then export to the drive from Rekordbox.'
+                                : 'Crates written into your Serato library, ready to sync to the drive.'
+                        }
+                        onChange={(next) => setLibraryFormat('download', next)}
+                        value={format}
+                    />
+                </Stack>
+                <ActionIcon
+                    icon="info"
+                    iconProps={{ size: 'md' }}
+                    mb={4}
+                    onClick={xmlHelpHandlers.open}
+                    size="sm"
+                    tooltip={{
+                        label:
+                            format === 'rekordbox'
+                                ? 'How to import the XML into Rekordbox'
+                                : 'How these crates reach your drive',
+                    }}
+                    variant="subtle"
+                />
+            </Group>
+
             <SyncSummary
                 items={[
                     {
@@ -627,37 +733,6 @@ export const SyncExternalDrive = () => {
                 )}
             </ScrollArea>
 
-            <Group gap="xs" style={{ width: 'fit-content' }}>
-                <Tooltip
-                    label="Also create a Rekordbox XML alongside the downloaded tracks, to bring these playlists into your collection. Click the info icon for the steps."
-                    multiline
-                    openDelay={300}
-                    position="top-start"
-                    w={300}
-                >
-                    <Group
-                        gap="md"
-                        onClick={() => setIncludeRekordboxXml((v) => !v)}
-                        style={{ cursor: 'pointer', width: 'fit-content' }}
-                    >
-                        <Checkbox
-                            checked={includeRekordboxXml}
-                            label="Include Rekordbox XML"
-                            readOnly
-                            size="sm"
-                        />
-                    </Group>
-                </Tooltip>
-                <ActionIcon
-                    icon="info"
-                    iconProps={{ size: 'md' }}
-                    onClick={xmlHelpHandlers.open}
-                    size="sm"
-                    tooltip={{ label: 'How to import the XML into Rekordbox' }}
-                    variant="subtle"
-                />
-            </Group>
-
             {includeRekordboxXml && (
                 <DestinationPath
                     emptyLabel="Default download folder"
@@ -675,28 +750,78 @@ export const SyncExternalDrive = () => {
                 />
             )}
 
+            {/* Where the crates go. Not optional when Serato is the format: without a
+                folder there is nothing to write, and the button below says so. */}
+            {format === 'serato' && (
+                <DestinationPath
+                    emptyLabel="No _Serato_ folder found — choose one to write crates"
+                    label="Serato Folder"
+                    onChoose={handleSelectSeratoFolder}
+                    path={seratoFolder}
+                    tooltip="The _Serato_ folder your crates are written into. It has to be on the same drive as your music, so this is normally the one in your Music folder — not one on the USB."
+                />
+            )}
+
+            {/* Both routes end the same way: the tracks land in the local library and
+                the DJ software does the export to the drive. Subbox tops up what the
+                drive is missing; it does not write the drive itself. */}
             <Modal
                 handlers={xmlHelpHandlers}
                 opened={xmlHelpOpened}
                 size="lg"
-                title="Importing the XML into Rekordbox"
+                title={
+                    format === 'rekordbox'
+                        ? 'Importing the XML into Rekordbox'
+                        : 'Getting these crates onto your drive'
+                }
             >
                 <Stack gap="lg">
-                    <Text size="sm">
-                        After downloading, follow these steps to bring the compared playlists into
-                        your Rekordbox collection. Rekordbox matches tracks by file path, so any you
-                        already have won&apos;t be duplicated.
-                    </Text>
-                    <Stack gap="md">
-                        <RekordboxImportSteps />
-                        <Stack gap="xs">
-                            <TextTitle order={5}>4. Export to your drive</TextTitle>
+                    {format === 'rekordbox' ? (
+                        <>
                             <Text size="sm">
-                                From your primary Rekordbox collection, export the imported
-                                playlists to your USB/external drive as you normally would.
+                                After downloading, follow these steps to bring the compared
+                                playlists into your Rekordbox collection. Rekordbox matches tracks
+                                by file path, so any you already have won&apos;t be duplicated.
                             </Text>
-                        </Stack>
-                    </Stack>
+                            <Stack gap="md">
+                                <RekordboxImportSteps />
+                                <Stack gap="xs">
+                                    <TextTitle order={5}>4. Export to your drive</TextTitle>
+                                    <Text size="sm">
+                                        From your primary Rekordbox collection, export the imported
+                                        playlists to your USB/external drive as you normally would.
+                                    </Text>
+                                </Stack>
+                            </Stack>
+                        </>
+                    ) : (
+                        <>
+                            <Text size="sm">
+                                The missing tracks are downloaded into your Sub-box library and the
+                                crates are written into your Serato library on this computer —
+                                pointing at those tracks, with their cues.
+                            </Text>
+                            <Stack gap="md">
+                                <Stack gap="xs">
+                                    <TextTitle order={5}>1. Restart Serato</TextTitle>
+                                    <Text size="sm">
+                                        Serato reads its crates at startup, so the new ones appear
+                                        once you reopen it.
+                                    </Text>
+                                </Stack>
+                                <Stack gap="xs">
+                                    <TextTitle order={5}>2. Export to your drive</TextTitle>
+                                    <Text size="sm">
+                                        Drag the crates onto your USB in Serato, as you normally
+                                        would. Serato copies the audio across and writes a library
+                                        on the drive itself — which is why the crates are written
+                                        here rather than straight onto the USB: a crate&apos;s track
+                                        paths are stored relative to the drive it lives on.
+                                    </Text>
+                                </Stack>
+                            </Stack>
+                        </>
+                    )}
                 </Stack>
             </Modal>
         </SyncFlow>

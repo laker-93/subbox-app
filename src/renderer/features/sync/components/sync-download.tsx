@@ -14,22 +14,21 @@ import {
     PathText,
     RekordboxImportSteps,
     SelectableList,
+    SeratoWriteSummary,
     SyncFlow,
     SyncLoading,
     SyncResult,
     SyncSummary,
     TrackRow,
     useSelection,
+    useSeratoCrates,
 } from '/@/renderer/features/sync/components/shared';
 import {
     type LibraryFormat,
-    useAppStore,
     useCurrentServerId,
     useCurrentServerWithCredential,
     useLibraryFormat,
-    useSeratoFolder,
     useSetLibraryFormat,
-    useSetSeratoFolder,
 } from '/@/renderer/store';
 import { pymixType } from '/@/shared/api/pymix/pymix-types';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
@@ -77,9 +76,6 @@ const WEB_EXTRACT_PATH_KEY = 'sync_web_extract_path';
  */
 const ZIP_MUSIC_DIR = 'music';
 
-/** localSettings key holding the user-chosen _Serato_ folder to write crates into. */
-const SERATO_FOLDER_KEY = 'serato_folder';
-
 /**
  * Turn the folder the user says they'll extract music.zip into, into the folder
  * the tracks will actually be in.
@@ -96,29 +92,6 @@ const musicRootFromExtractPath = (extractPath: string): string => {
     // a bare "C:" gets \ too, since a drive letter is only ever Windows.
     const separator = trimmed.includes('\\') || /^[a-z]:$/i.test(trimmed) ? '\\' : '/';
     return `${trimmed.replace(/[/\\]+$/, '')}${separator}${ZIP_MUSIC_DIR}`;
-};
-
-/**
- * What writing the Serato crates did, as the main process reports it.
- *
- * Mirrors SeratoExportResult in src/main/features/core/sync/serato.ts. The counts
- * that are *not* successes matter most here: a crate whose name had to change and
- * a track that wasn't on disk both change what the user finds in Serato, and both
- * are silent unless this screen says so.
- */
-type SeratoWriteResult = {
-    backupFolder: null | string;
-    cratesWritten: number;
-    cues: {
-        alreadyCued: number;
-        failed: Array<{ reason: string; trackName: string }>;
-        unsupported: number;
-        written: number;
-    };
-    missing: string[];
-    renamed: Array<{ from: string; to: string }>;
-    seratoFolder: string;
-    tracksWritten: number;
 };
 
 type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'select';
@@ -209,12 +182,17 @@ export const SyncDownload = () => {
     // both in one pass is a real capability and nothing here should lose it. A
     // checkbox for the exception, a radio for the decision.
     const [alsoWriteSeratoCrates, setAlsoWriteSeratoCrates] = useState(false);
-    // Shared with the Serato upload flow, which used to keep its own unpersisted copy.
-    // Download did already remember this, in electron's localSettings -- one store is
-    // enough, and the zustand one is the half that both screens can reach.
-    const seratoFolder = useSeratoFolder();
-    const setSeratoFolder = useSetSeratoFolder();
-    const [seratoResult, setSeratoResult] = useState<null | SeratoWriteResult>(null);
+    // The folder, the picker, the write and its result -- shared with External Drive,
+    // which ends the same way this does. The folder itself is one persisted setting,
+    // so the user browses for their _Serato_ library once rather than once per flow.
+    const {
+        reset: resetSeratoResult,
+        result: seratoResult,
+        selectFolder: handleSelectSeratoFolder,
+        seratoFolder,
+        showFolder: handleShowSeratoFolder,
+        writeCrates,
+    } = useSeratoCrates();
     // What the export contains, not which format it is in: the audio as well as the
     // playlist file, or the playlist file on its own. "I already have these tracks,
     // just give me the XML" is a common enough workflow to stay on the primary
@@ -245,25 +223,7 @@ export const SyncDownload = () => {
         ipc.invoke('sync:get-default-xml-directory').then((dir) => {
             if (typeof dir === 'string') setDefaultXmlDir(dir);
         });
-        // The user's override wins; otherwise offer ~/Music/_Serato_ if it exists.
-        // A null default is why the checkbox can't just assume a folder.
-        //
-        // Reading `localSettings` here is now only a one-time carry-over for users who
-        // set the folder before it moved into the store. Once anything is in the store
-        // that branch never runs again.
-        if (useAppStore.getState().seratoFolder) return;
-        localSettings.get(SERATO_FOLDER_KEY).then(async (dir) => {
-            if (typeof dir === 'string' && dir.length > 0) {
-                setSeratoFolder(dir);
-                return;
-            }
-            const found = await ipc!.invoke('sync:get-default-serato-folder');
-            if (typeof found === 'string') setSeratoFolder(found);
-        });
-        // Mount-only by design: a fallback for an empty setting, not a subscription to
-        // it. `setSeratoFolder` is a stable zustand action, so listing it changes
-        // nothing about when this runs.
-    }, [setSeratoFolder]);
+    }, []);
 
     // Load the persisted extraction path on mount (web only).
     useEffect(() => {
@@ -285,26 +245,6 @@ export const SyncDownload = () => {
             localSettings.set(XML_DIRECTORY_KEY, dir);
         }
     }, []);
-
-    const handleSelectSeratoFolder = useCallback(async () => {
-        if (!ipc || !localSettings) return;
-        try {
-            const dir = await ipc.invoke('sync:select-serato-folder');
-            if (dir) {
-                setSeratoFolder(dir);
-                // Still written to localSettings as well: it costs nothing and means a
-                // build without this change still finds the folder.
-                localSettings.set(SERATO_FOLDER_KEY, dir);
-            }
-        } catch (err: any) {
-            toast.error({ message: err?.message || 'Could not use that folder' });
-        }
-    }, [setSeratoFolder]);
-
-    const handleShowSeratoFolder = useCallback(() => {
-        if (!ipc || !seratoResult?.seratoFolder) return;
-        ipc.invoke('sync:open-folder', seratoResult.seratoFolder);
-    }, [seratoResult?.seratoFolder]);
 
     const handleResetXmlDirectory = useCallback(() => {
         if (!localSettings) return;
@@ -390,34 +330,16 @@ export const SyncDownload = () => {
         setPlan(null);
         setError(null);
         setDownloadResult(null);
-        setSeratoResult(null);
-    }, []);
+        resetSeratoResult();
+    }, [resetSeratoResult]);
 
-    /**
-     * Ask pymix for the crate structure and write it into the user's Serato
-     * library. Runs *after* the audio: a crate stores absolute paths, so writing
-     * one before the files are there produces a crate full of missing tracks.
-     * An empty musicRoot means "wherever the app keeps its music" — the main
-     * process is the side that knows.
-     */
+    /** This screen's crate write: its own "should I" rule, its own playlist ids. */
     const writeSeratoCrates = useCallback(
         async (musicRoot: string) => {
-            if (!includeSeratoCrates || !seratoFolder) return;
-            const structure = await PymixController.seratoExport({
-                baseUrl: urlConfig.pymix,
-                body: { playlistIds: Array.from(selectedPlaylists) },
-            });
-            if (!structure.success) {
-                throw new Error(structure.reason || 'Could not build the Serato export');
-            }
-            const written = (await window.api.ipc.invoke('sync:write-serato-crates', {
-                crates: structure.crates,
-                musicRoot,
-                seratoFolder,
-            })) as SeratoWriteResult;
-            setSeratoResult(written);
+            if (!includeSeratoCrates) return;
+            await writeCrates(Array.from(selectedPlaylists), musicRoot);
         },
-        [includeSeratoCrates, selectedPlaylists, seratoFolder],
+        [includeSeratoCrates, selectedPlaylists, writeCrates],
     );
 
     const handleDownload = useCallback(async () => {
@@ -737,60 +659,10 @@ export const SyncDownload = () => {
                     </Group>
                 )}
                 {seratoResult && (
-                    // Bounded and breakable: the backup folder is a full path with
-                    // no spaces in it, and unconstrained it ran off both edges of
-                    // the window rather than wrapping.
-                    <Stack
-                        align="center"
-                        gap={4}
-                        maw={620}
-                        style={{ overflowWrap: 'anywhere' }}
-                        ta="center"
-                    >
-                        <Text size="sm">
-                            {`${seratoResult.cratesWritten} Serato crate${seratoResult.cratesWritten === 1 ? '' : 's'} written with ${seratoResult.tracksWritten} track${seratoResult.tracksWritten === 1 ? '' : 's'}.`}
-                        </Text>
-                        {seratoResult.cues.written > 0 && (
-                            <Text c="dimmed" size="xs">
-                                {`Cues written into ${seratoResult.cues.written} track${seratoResult.cues.written === 1 ? '' : 's'}.`}
-                            </Text>
-                        )}
-                        {/* Not a failure, and worth saying out loud: subbox
-                            deliberately never overwrites cues you already have. */}
-                        {seratoResult.cues.alreadyCued > 0 && (
-                            <Text c="dimmed" size="xs">
-                                {`${seratoResult.cues.alreadyCued} track${seratoResult.cues.alreadyCued === 1 ? ' already had' : 's already had'} cues in Serato and ${seratoResult.cues.alreadyCued === 1 ? 'was' : 'were'} left untouched.`}
-                            </Text>
-                        )}
-                        {seratoResult.renamed.length > 0 && (
-                            <Text c="yellow" size="xs">
-                                {`Renamed to fit a filename: ${seratoResult.renamed
-                                    .map((r) => `${r.from} → ${r.to}`)
-                                    .join(', ')}`}
-                            </Text>
-                        )}
-                        {seratoResult.missing.length > 0 && (
-                            <Text c="yellow" size="xs">
-                                {`${seratoResult.missing.length} track${seratoResult.missing.length === 1 ? ' was' : 's were'} not on disk and left out of the crates.`}
-                            </Text>
-                        )}
-                        {seratoResult.backupFolder && (
-                            <Text c="dimmed" size="xs">
-                                {`Crates that were replaced were backed up to ${seratoResult.backupFolder}`}
-                            </Text>
-                        )}
-                        <Text c="dimmed" size="xs">
-                            Restart Serato to see them.
-                        </Text>
-                        <Button
-                            leftSection={<Icon icon="folder" />}
-                            onClick={handleShowSeratoFolder}
-                            size="xs"
-                            variant="default"
-                        >
-                            Show Serato Folder
-                        </Button>
-                    </Stack>
+                    <SeratoWriteSummary
+                        onShowFolder={handleShowSeratoFolder}
+                        result={seratoResult}
+                    />
                 )}
             </SyncResult>
         );

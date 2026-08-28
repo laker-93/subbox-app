@@ -9,8 +9,8 @@ import { nodeKey, readCrateTree } from '../src/main/features/core/sync/serato-cr
 // The top half of rung 5: the Electron window itself.
 //
 // `pnpm dev:serato-roundtrip` already drives the same main-process functions over
-// the same HTTP, so what this adds is only the wiring between them — the checkbox,
-// the folder picker, the IPC call, and the report on the done screen. That wiring
+// the same HTTP, so what this adds is only the wiring between them — the format
+// control, the folder picker, the IPC call, and the report on the done screen. That wiring
 // is exactly what a headless driver cannot reach, and exactly where a feature that
 // works in every unit test still arrives broken.
 //
@@ -154,15 +154,15 @@ async function main(): Promise<void> {
     await page.getByText(`${PLAYLISTS.length} selected`).waitFor({ timeout: 5000 });
     console.log(`  ${PLAYLISTS.length} playlists ticked`);
 
-    // The tick boxes live on the preview screen, not the selection one — the
-    // choice of what goes in the download is made once its size is known.
+    // The format lives on the preview screen, not the selection one — the choice of
+    // what goes in the download is made once its size is known.
     await openPreview(page);
 
+    // Serato as the format is what asks for crates now; the folder picker only
+    // appears once it is chosen, so this has to come first.
+    await selectSegment(page, 'Serato');
     await chooseSeratoFolder(page, seratoFolder);
-    const crateBox = page.getByRole('checkbox', { name: 'Write Serato crates' });
-    assert.ok(await crateBox.isEnabled(), 'the crates checkbox should enable once a folder is set');
-    await crateBox.check();
-    console.log('  Serato folder chosen and crates ticked');
+    console.log('  Serato format chosen and folder set');
 
     // ── pass 1: tracks + crates ─────────────────────────────────────────────
     console.log('\nPass 1 — download, then write crates against what landed');
@@ -182,12 +182,13 @@ async function main(): Promise<void> {
 
     // ── pass 2: crates only ─────────────────────────────────────────────────
     console.log('\nPass 2 — crates only, no download');
-    // Start Over keeps the playlist selection, so pass 2 differs only in the tick boxes.
+    // Start Over keeps the playlist selection, so pass 2 differs only in what the
+    // Include control asks for. Format is persisted, so Serato is still selected.
     await page.getByRole('button', { exact: true, name: 'Start Over' }).click();
     await page.getByRole('heading', { name: 'Download Playlists' }).waitFor({ timeout: 10_000 });
     await openPreview(page);
-    await page.getByRole('checkbox', { name: 'Include tracks' }).uncheck();
-    await page.getByRole('checkbox', { name: 'Include Rekordbox XML' }).uncheck();
+    await selectSegment(page, 'Serato');
+    await selectSegment(page, 'Crates only');
     const second = await runDownload(page, 'Write Serato Crates');
     console.log(`  done screen: ${second.text}`);
     assert.ok(
@@ -244,6 +245,30 @@ async function runDownload(page: Page, buttonLabel: string): Promise<SeratoRepor
         text: `${summary?.[0] ?? ''} ${counts[0]}`.trim(),
         tracks: Number(counts[2]),
     };
+}
+
+/**
+ * Pick an option in a Mantine `SegmentedControl`.
+ *
+ * The tick boxes this screen used to carry ("Include tracks", "Include Rekordbox
+ * XML", "Write Serato crates") became two segmented controls — Format and Include.
+ * Mantine builds those from real `<input type="radio">`, so they are radios to a
+ * locator, but the inputs are 0x0 with opacity 0, so `check()` can never satisfy
+ * Playwright's actionability rules. Clicking the associated label is what works.
+ */
+async function selectSegment(page: Page, name: string): Promise<void> {
+    const radio = page.getByRole('radio', { exact: true, name });
+    await radio.waitFor({ state: 'attached', timeout: 10_000 });
+    if (await radio.isChecked()) return;
+    const id = await radio.getAttribute('id');
+    assert.ok(id, `segmented option "${name}" should have an id to click its label by`);
+    await page.locator(`label[for="${id}"]`).click();
+    await page.waitForFunction(
+        (inputId) =>
+            (document.getElementById(inputId) as HTMLInputElement | null)?.checked === true,
+        id,
+        { timeout: 5000 },
+    );
 }
 
 main().catch(async (err) => {

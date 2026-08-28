@@ -26,6 +26,7 @@ import {
     readTrackCues,
     resolveSeratoFolder,
     SeratoCueWire,
+    volumeRootOf,
     writeCrates,
     WriteCratesResult,
     WriteCuesResult,
@@ -610,6 +611,26 @@ ipcMain.handle(
             throw new Error(
                 `${path.basename(seratoFolder)} has no SubCrates folder in it. Pick the ` +
                     `_Serato_ folder itself — it is normally in your Music folder.`,
+            );
+        }
+
+        // A crate's `ptrk` is stored relative to the volume the _Serato_ folder is
+        // on, so a library and its tracks have to live on the same volume to be
+        // expressible at all. Serato does not write such crates either.
+        //
+        // Refused rather than written, for the same reason as the check above: the
+        // fallback path would produce crates that open *empty* in Serato, after
+        // overwriting whatever was there before. A download that puts tracks in the
+        // app's music folder and crates on a DJ USB is exactly how a user reaches
+        // this, and nothing on screen would otherwise say why the crates are blank.
+        const libraryVolume = volumeRootOf(seratoFolder);
+        const musicVolume = volumeRootOf(musicRoot);
+        if (libraryVolume !== musicVolume) {
+            throw new Error(
+                `Your Serato library is on ${libraryVolume === '/' ? 'this Mac' : path.basename(libraryVolume)} ` +
+                    `but the tracks are on ${musicVolume === '/' ? 'this Mac' : path.basename(musicVolume)}. ` +
+                    `Serato can only read crates whose tracks are on the same drive as the ` +
+                    `_Serato_ folder, so pick a library on the same drive as your music.`,
             );
         }
 
