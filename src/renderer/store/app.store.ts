@@ -26,6 +26,7 @@ export interface AppSlice extends AppState {
         setGenreIdsMode: (mode: 'and' | 'or') => void;
         setGenreSelectMode: (mode: 'multi' | 'single') => void;
         setGlobalExpanded: (value: GlobalExpandedState | null) => void;
+        setLibraryFormat: (direction: SyncDirection, format: LibraryFormat) => void;
         setPageSidebar: (key: string, value: boolean) => void;
         setPrivateMode: (enabled: boolean) => void;
         setShowTimeRemaining: (enabled: boolean) => void;
@@ -57,6 +58,14 @@ export interface AppState {
     genreSelectMode: 'multi' | 'single';
     globalExpanded: GlobalExpandedState | null;
     isReorderingQueue: boolean;
+    /**
+     * Which DJ software the Sync screens default to, remembered per direction.
+     *
+     * Per direction rather than globally because migrating between the two --
+     * import Serato, export Rekordbox -- is a thing subbox is for, and one shared
+     * value would fight that user on every screen.
+     */
+    libraryFormat: Record<SyncDirection, LibraryFormat | null>;
     pageSidebar: Record<string, boolean>;
     platform: Platform;
     privateMode: boolean;
@@ -74,6 +83,12 @@ export interface GlobalExpandedState {
     item: ItemListStateItem;
     itemType: LibraryItem;
 }
+
+/** The DJ software a Sync screen is reading from or writing for. */
+export type LibraryFormat = 'rekordbox' | 'serato';
+
+/** Which way the library is moving. Format is remembered separately for each. */
+export type SyncDirection = 'download' | 'upload';
 
 export type WishlistSortBy = 'album' | 'artist' | 'createdAt' | 'status' | 'title';
 
@@ -182,6 +197,11 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                             state.globalExpanded = value;
                         });
                     },
+                    setLibraryFormat: (direction, format) => {
+                        set((state) => {
+                            state.libraryFormat[direction] = format;
+                        });
+                    },
                     setPageSidebar: (key, value) => {
                         set((state) => {
                             state.pageSidebar[key] = value;
@@ -255,6 +275,15 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                 genreSelectMode: 'multi',
                 globalExpanded: null,
                 isReorderingQueue: false,
+                // Download starts on Rekordbox; Upload starts on neither. Not an
+                // inconsistency: Download already worked without asking, and its
+                // control sits *after* the user has picked playlists and waited for
+                // a plan -- defaulting to nothing there means a dead button at the
+                // end of the work. Upload asks before anything is invested.
+                libraryFormat: {
+                    download: 'rekordbox',
+                    upload: null,
+                },
                 pageSidebar: {
                     album: true,
                     song: true,
@@ -297,6 +326,10 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                     state.sidebar.rightHeight = '320px';
                 }
 
+                if (version <= 5 && !state.libraryFormat) {
+                    state.libraryFormat = { download: 'rekordbox', upload: null };
+                }
+
                 return state;
             },
             name: 'store_app',
@@ -305,7 +338,7 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                 const { globalExpanded: _, ...rest } = state;
                 return rest;
             },
-            version: 5,
+            version: 6,
         },
     ),
 );
@@ -336,6 +369,11 @@ export const usePageSidebar = (key: string): [boolean, (value: boolean) => void]
 
     return [isOpen, setIsOpen];
 };
+
+export const useLibraryFormat = (direction: SyncDirection) =>
+    useAppStore((state) => state.libraryFormat[direction]);
+
+export const useSetLibraryFormat = () => useAppStore((state) => state.actions.setLibraryFormat);
 
 export const useGlobalExpanded = () => useAppStore((state) => state.globalExpanded);
 

@@ -1,5 +1,6 @@
 export { DestinationPath } from './destination-path';
 export { formatBytes, formatDuration } from './format';
+export { FormatSelect } from './format-select';
 export { PathText } from './path-text';
 export { RekordboxImportSteps } from './rekordbox-import-steps';
 export { type SelectableItem, SelectableList, SelectionToolbar } from './selectable-list';

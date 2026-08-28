@@ -10,6 +10,7 @@ import {
     DestinationPath,
     formatBytes,
     formatDuration,
+    FormatSelect,
     PathText,
     RekordboxImportSteps,
     SelectableList,
@@ -20,7 +21,13 @@ import {
     TrackRow,
     useSelection,
 } from '/@/renderer/features/sync/components/shared';
-import { useCurrentServerId, useCurrentServerWithCredential } from '/@/renderer/store';
+import {
+    type LibraryFormat,
+    useCurrentServerId,
+    useCurrentServerWithCredential,
+    useLibraryFormat,
+    useSetLibraryFormat,
+} from '/@/renderer/store';
 import { pymixType } from '/@/shared/api/pymix/pymix-types';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Badge } from '/@/shared/components/badge/badge';
@@ -30,6 +37,7 @@ import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Modal } from '/@/shared/components/modal/modal';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
+import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { TextTitle } from '/@/shared/components/text-title/text-title';
@@ -183,16 +191,34 @@ export const SyncDownload = () => {
         tracksExported: number;
         xmlPath?: string;
     }>(null);
-    const [includeRekordboxXml, setIncludeRekordboxXml] = useState(true);
-    // Serato crates are written on this machine, into the user's own library, so
-    // this is desktop-only and off unless asked for — unlike the Rekordbox XML,
-    // which is a new file in a folder of its own.
-    const [includeSeratoCrates, setIncludeSeratoCrates] = useState(false);
+    // Which format this export is for. Remembered across sessions, per direction,
+    // so a DJ is never asked twice for something that is close to an identity
+    // property. Falls back to Rekordbox only if the store somehow holds nothing.
+    const storedFormat = useLibraryFormat('download');
+    const setLibraryFormat = useSetLibraryFormat();
+    // Web can never write crates, so it is pinned to Rekordbox regardless of what
+    // is stored. Not belt-and-braces: the control disables the Serato segment, but
+    // the *stored* value outlives the build it was chosen in, and a web session
+    // that inherited 'serato' would send pymix a download with neither tracks nor
+    // XML in it and be refused for a reason no screen could explain.
+    const format: LibraryFormat = isElectron() ? (storedFormat ?? 'rekordbox') : 'rekordbox';
+    // The §2.4 exception: the radio makes XML and crates exclusive, but writing
+    // both in one pass is a real capability and nothing here should lose it. A
+    // checkbox for the exception, a radio for the decision.
+    const [alsoWriteSeratoCrates, setAlsoWriteSeratoCrates] = useState(false);
     const [seratoFolder, setSeratoFolder] = useState<null | string>(null);
     const [seratoResult, setSeratoResult] = useState<null | SeratoWriteResult>(null);
-    // Untick to take the Rekordbox XML on its own — for playlists whose audio the
-    // user already has, where all they need is the metadata to import.
+    // What the export contains, not which format it is in: the audio as well as the
+    // playlist file, or the playlist file on its own. "I already have these tracks,
+    // just give me the XML" is a common enough workflow to stay on the primary
+    // column rather than move into an options disclosure.
     const [includeTracks, setIncludeTracks] = useState(true);
+
+    // The two flags the rest of this component still works in. Derived rather than
+    // stored: they are two views of one question now, and keeping them as separate
+    // state is how they drifted into being askable independently in the first place.
+    const includeRekordboxXml = format === 'rekordbox';
+    const includeSeratoCrates = format === 'serato' || alsoWriteSeratoCrates;
     const [xmlHelpOpened, xmlHelpHandlers] = useDisclosure(false);
     const [rekordboxHelpOpened, rekordboxHelpHandlers] = useDisclosure(false);
     // The folder the Rekordbox XML is saved to. `xmlDir` is the user's override
@@ -463,10 +489,17 @@ export const SyncDownload = () => {
 
                 // A server that predates this ignores what we asked for and just
                 // zips tracks, so say so rather than handing over a zip that's
-                // missing the XML the user ticked (which is the bug this fixes).
+                // missing the XML the user asked for (which is the bug this fixes).
+                //
+                // This used to add "or untick Include Rekordbox XML to download the
+                // tracks alone". There is no such tick box now: on web the format is
+                // pinned to Rekordbox, so every web download carries the XML. That
+                // costs the tracks-without-XML case, which is a real if narrow loss
+                // -- see the note in the commit. Updating pymix is the actual fix
+                // either way; the untick was only ever a way round a stale server.
                 if (includeRekordboxXml && !result.xmlIncluded) {
                     throw new Error(
-                        'This server is too old to include the Rekordbox XML in the download. Update pymix, or untick Include Rekordbox XML to download the tracks alone.',
+                        'This server is too old to include the Rekordbox XML in the download. Update pymix and try again.',
                     );
                 }
 
@@ -553,8 +586,8 @@ export const SyncDownload = () => {
                                 <TextTitle order={5}>2. Download with the Rekordbox XML</TextTitle>
                                 <Text size="sm">
                                     {isElectron()
-                                        ? 'On the preview screen, make sure "Include Rekordbox XML" is ticked and click Download. This saves the tracks to your music folder and the .xml describing the playlists to your chosen XML folder.'
-                                        : `On the preview screen, make sure "Include Rekordbox XML" is ticked, enter the folder you'll extract into, and click Download. You get one zip containing a single music folder, with subbox_rb_export.xml inside it. If you already have these tracks, untick "Include tracks" to download just the .xml.`}
+                                        ? 'On the preview screen, set Format to Rekordbox and click Download. This saves the tracks to your music folder and the .xml describing the playlists to your chosen XML folder. If you already have these tracks, switch Include to "XML only" to take just the .xml.'
+                                        : `On the preview screen, set Format to Rekordbox, enter the folder you'll extract into, and click Download. You get one zip containing a single music folder, with subbox_rb_export.xml inside it. If you already have these tracks, switch Include to "XML only" to download just the .xml.`}
                                 </Text>
                             </Stack>
                             <RekordboxImportSteps startAt={3} />
@@ -766,7 +799,9 @@ export const SyncDownload = () => {
 
     const writingSeratoCrates = includeSeratoCrates && Boolean(seratoFolder);
 
-    // One button, whose wording follows what the tick boxes below put in the file.
+    // One button, whose wording follows the two controls at the top of the screen.
+    // Deliberately still says what it *does* rather than what was chosen -- the
+    // radios are the record of the choice; this is the confirmation of the action.
     const downloadButtonLabel = !includeTracks
         ? includeRekordboxXml
             ? 'Download Rekordbox XML'
@@ -779,8 +814,10 @@ export const SyncDownload = () => {
             ? 'Download just the Rekordbox XML for these playlists, with no audio files.'
             : 'Write these playlists into your Serato library, pointing at tracks you already have.'
         : isElectron()
-          ? 'Save the missing tracks into your local music folder, plus a Rekordbox XML if ticked above.'
-          : 'Download the selected tracks as one zip, with a Rekordbox XML inside if ticked above.';
+          ? includeRekordboxXml
+              ? `Save the missing tracks into your local music folder, with a Rekordbox XML${writingSeratoCrates ? ' and Serato crates' : ''}.`
+              : 'Save the missing tracks into your local music folder, then write these playlists into your Serato library as crates.'
+          : 'Download the selected tracks as one zip, with the Rekordbox XML inside it.';
 
     const tabs = [
         { count: tracks.missing.length, key: 'missing' as const, label: 'Missing' },
@@ -831,9 +868,10 @@ export const SyncDownload = () => {
             footer={
                 <Button
                     disabled={
-                        // Nothing ticked, so there'd be nothing to do. Serato crates
-                        // count: they can be written for tracks that are already here,
-                        // which is how you refresh a crate without re-downloading.
+                        // Both remaining clauses are now Serato-only: under Rekordbox
+                        // there is always an XML to write, so there is always
+                        // something to do. Serato with no folder chosen is the one
+                        // way to reach this screen with nothing to produce.
                         (!includeTracks && !includeRekordboxXml && !writingSeratoCrates) ||
                         // Tracks asked for, but there are none to fetch and nothing else either.
                         (includeTracks &&
@@ -870,6 +908,51 @@ export const SyncDownload = () => {
             onBack={handleBack}
             title="Download Preview"
         >
+            {/* The format question, asked once and up front. It used to live in two
+                checkboxes below the track list, which is why nothing on the first
+                screen taught anyone where the second one kept it. */}
+            <Group align="flex-start" gap="xl" wrap="wrap">
+                <Stack gap={4}>
+                    <Text fw={500} size="sm">
+                        Format
+                    </Text>
+                    <FormatSelect
+                        description={
+                            format === 'rekordbox'
+                                ? 'A Rekordbox XML you import into your collection.'
+                                : 'Crates written straight into your Serato library.'
+                        }
+                        onChange={(next) => setLibraryFormat('download', next)}
+                        value={format}
+                    />
+                </Stack>
+                <Stack gap={4}>
+                    <Text fw={500} size="sm">
+                        Include
+                    </Text>
+                    <SegmentedControl
+                        data={[
+                            {
+                                label: format === 'rekordbox' ? 'Tracks + XML' : 'Tracks + crates',
+                                value: 'tracks',
+                            },
+                            {
+                                label: format === 'rekordbox' ? 'XML only' : 'Crates only',
+                                value: 'file-only',
+                            },
+                        ]}
+                        onChange={(next) => setIncludeTracks(next === 'tracks')}
+                        value={includeTracks ? 'tracks' : 'file-only'}
+                        w="fit-content"
+                    />
+                    <Text c="dimmed" size="xs">
+                        {includeTracks
+                            ? 'Download the audio as well.'
+                            : 'For playlists whose tracks you already have.'}
+                    </Text>
+                </Stack>
+            </Group>
+
             {/* Summary badges. The already-present / to-download / metadata-updates
                 counts are a diff against the local library, which only exists on
                 desktop — on web they are fixed at 0 / everything / a copy of the
@@ -1001,69 +1084,17 @@ export const SyncDownload = () => {
                 )}
             </ScrollArea>
 
-            {/* What goes in the download. Both ticked is one file containing both —
-                these choose its contents, not how many downloads there are. */}
-            <Group gap="xs" style={{ width: 'fit-content' }}>
-                <Tooltip
-                    label="Download the audio files. Untick to take only the Rekordbox XML, for when you already have these tracks."
-                    multiline
-                    openDelay={300}
-                    position="top-start"
-                    w={300}
-                >
-                    {/* The Checkbox owns its own change. A readOnly box inside a
-                        clickable wrapper looks equivalent but isn't: clicking the label
-                        text fired the wrapper's handler twice — once for the label, once
-                        for the click a label forwards to its input — so the tick never
-                        moved for anyone who aimed at the words. */}
-                    <Group gap="md" style={{ width: 'fit-content' }}>
-                        <Checkbox
-                            checked={includeTracks}
-                            label="Include tracks"
-                            onChange={(event) => setIncludeTracks(event.currentTarget.checked)}
-                            size="sm"
-                        />
-                    </Group>
-                </Tooltip>
-            </Group>
-
-            <Group gap="xs" style={{ width: 'fit-content' }}>
-                <Tooltip
-                    label="Include a Rekordbox XML in the same download, to recreate these playlists in Rekordbox. Click the info icon for the steps."
-                    multiline
-                    openDelay={300}
-                    position="top-start"
-                    w={300}
-                >
-                    <Group gap="md" style={{ width: 'fit-content' }}>
-                        <Checkbox
-                            checked={includeRekordboxXml}
-                            label="Include Rekordbox XML"
-                            onChange={(event) =>
-                                setIncludeRekordboxXml(event.currentTarget.checked)
-                            }
-                            size="sm"
-                        />
-                    </Group>
-                </Tooltip>
-                <ActionIcon
-                    icon="info"
-                    iconProps={{ size: 'md' }}
-                    onClick={xmlHelpHandlers.open}
-                    size="sm"
-                    tooltip={{ label: 'How to import the XML into Rekordbox' }}
-                    variant="subtle"
-                />
-            </Group>
-
-            {/* Serato crates. Desktop only: they are written straight into the
-                user's own _Serato_ folder, against the paths the download just
-                landed on, which a browser can neither know nor reach. */}
-            {isElectron() && (
+            {/* The one combination the radio can't express. Rekordbox-only: under
+                Serato the crates are already the output, so "also write crates"
+                would be asking for what is already happening. Desktop only --
+                crates are written into the user's own _Serato_ folder against the
+                paths the download just landed on, which a browser can neither know
+                nor reach. */}
+            {isElectron() && format === 'rekordbox' && (
                 <Stack gap={4}>
                     <Group gap="xs" style={{ width: 'fit-content' }}>
                         <Tooltip
-                            label="Write these playlists into your Serato library as crates, pointing at the tracks downloaded here. Anything replaced is backed up first."
+                            label="Write these playlists into your Serato library as crates as well as the XML, pointing at the tracks downloaded here. Anything replaced is backed up first."
                             multiline
                             openDelay={300}
                             position="top-start"
@@ -1071,11 +1102,11 @@ export const SyncDownload = () => {
                         >
                             <Group gap="md" style={{ width: 'fit-content' }}>
                                 <Checkbox
-                                    checked={includeSeratoCrates}
+                                    checked={alsoWriteSeratoCrates}
                                     disabled={!seratoFolder}
-                                    label="Write Serato crates"
+                                    label="Also write Serato crates"
                                     onChange={(event) =>
-                                        setIncludeSeratoCrates(event.currentTarget.checked)
+                                        setAlsoWriteSeratoCrates(event.currentTarget.checked)
                                     }
                                     size="sm"
                                 />
@@ -1085,11 +1116,27 @@ export const SyncDownload = () => {
                             {seratoFolder ? 'Change Serato Folder' : 'Choose Serato Folder'}
                         </Button>
                     </Group>
-                    <PathText
-                        placeholder="No _Serato_ folder found — choose one to enable this"
-                        value={seratoFolder}
-                    />
+                    {alsoWriteSeratoCrates && (
+                        <PathText
+                            placeholder="No _Serato_ folder found — choose one to enable this"
+                            value={seratoFolder}
+                        />
+                    )}
                 </Stack>
+            )}
+
+            {/* Where the crates go, when Serato is the format. Not optional here:
+                without a folder there is nothing to write and the button below is
+                disabled, so this is the one thing standing between the user and a
+                finished export. */}
+            {isElectron() && format === 'serato' && (
+                <DestinationPath
+                    emptyLabel="No _Serato_ folder found — choose one to write crates"
+                    label="Serato Folder"
+                    onChoose={handleSelectSeratoFolder}
+                    path={seratoFolder}
+                    tooltip="The _Serato_ folder your crates are written into. Normally inside your Music folder; on an external drive it is at the top level."
+                />
             )}
 
             {/* Where the Rekordbox XML is saved (desktop only) */}
