@@ -23,10 +23,13 @@ import {
 } from '/@/renderer/features/sync/components/shared';
 import {
     type LibraryFormat,
+    useAppStore,
     useCurrentServerId,
     useCurrentServerWithCredential,
     useLibraryFormat,
+    useSeratoFolder,
     useSetLibraryFormat,
+    useSetSeratoFolder,
 } from '/@/renderer/store';
 import { pymixType } from '/@/shared/api/pymix/pymix-types';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
@@ -206,7 +209,11 @@ export const SyncDownload = () => {
     // both in one pass is a real capability and nothing here should lose it. A
     // checkbox for the exception, a radio for the decision.
     const [alsoWriteSeratoCrates, setAlsoWriteSeratoCrates] = useState(false);
-    const [seratoFolder, setSeratoFolder] = useState<null | string>(null);
+    // Shared with the Serato upload flow, which used to keep its own unpersisted copy.
+    // Download did already remember this, in electron's localSettings -- one store is
+    // enough, and the zustand one is the half that both screens can reach.
+    const seratoFolder = useSeratoFolder();
+    const setSeratoFolder = useSetSeratoFolder();
     const [seratoResult, setSeratoResult] = useState<null | SeratoWriteResult>(null);
     // What the export contains, not which format it is in: the audio as well as the
     // playlist file, or the playlist file on its own. "I already have these tracks,
@@ -240,6 +247,11 @@ export const SyncDownload = () => {
         });
         // The user's override wins; otherwise offer ~/Music/_Serato_ if it exists.
         // A null default is why the checkbox can't just assume a folder.
+        //
+        // Reading `localSettings` here is now only a one-time carry-over for users who
+        // set the folder before it moved into the store. Once anything is in the store
+        // that branch never runs again.
+        if (useAppStore.getState().seratoFolder) return;
         localSettings.get(SERATO_FOLDER_KEY).then(async (dir) => {
             if (typeof dir === 'string' && dir.length > 0) {
                 setSeratoFolder(dir);
@@ -248,7 +260,10 @@ export const SyncDownload = () => {
             const found = await ipc!.invoke('sync:get-default-serato-folder');
             if (typeof found === 'string') setSeratoFolder(found);
         });
-    }, []);
+        // Mount-only by design: a fallback for an empty setting, not a subscription to
+        // it. `setSeratoFolder` is a stable zustand action, so listing it changes
+        // nothing about when this runs.
+    }, [setSeratoFolder]);
 
     // Load the persisted extraction path on mount (web only).
     useEffect(() => {
@@ -277,12 +292,14 @@ export const SyncDownload = () => {
             const dir = await ipc.invoke('sync:select-serato-folder');
             if (dir) {
                 setSeratoFolder(dir);
+                // Still written to localSettings as well: it costs nothing and means a
+                // build without this change still finds the folder.
                 localSettings.set(SERATO_FOLDER_KEY, dir);
             }
         } catch (err: any) {
             toast.error({ message: err?.message || 'Could not use that folder' });
         }
-    }, []);
+    }, [setSeratoFolder]);
 
     const handleShowSeratoFolder = useCallback(() => {
         if (!ipc || !seratoResult?.seratoFolder) return;

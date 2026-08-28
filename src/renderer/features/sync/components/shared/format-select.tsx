@@ -9,7 +9,8 @@ interface FormatSelectProps {
     /** A line under the control saying what this choice means on this screen. */
     description?: string;
     onChange: (format: LibraryFormat) => void;
-    value: LibraryFormat;
+    /** `null` leaves both options unselected -- the first-run state on Upload. */
+    value: LibraryFormat | null;
 }
 
 /**
@@ -40,7 +41,9 @@ export const FormatSelect = ({ description, onChange, value }: FormatSelectProps
                     { disabled: seratoUnavailable, label: 'Serato', value: 'serato' },
                 ]}
                 onChange={(next) => onChange(next as LibraryFormat)}
-                value={value}
+                // A value matching no option renders as nothing selected, which is
+                // what an unanswered question should look like.
+                value={value ?? ''}
                 w="fit-content"
             />
             {seratoUnavailable ? (

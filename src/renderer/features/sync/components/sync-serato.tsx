@@ -1,5 +1,5 @@
 import isElectron from 'is-electron';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { isUploadForbidden, PymixController } from '/@/renderer/api/pymix/pymix-controller';
@@ -16,7 +16,11 @@ import {
     SyncSummary,
     useSelection,
 } from '/@/renderer/features/sync/components/shared';
-import { useCurrentServerWithCredential } from '/@/renderer/store';
+import {
+    useCurrentServerWithCredential,
+    useSeratoFolder,
+    useSetSeratoFolder,
+} from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { CopyButton } from '/@/shared/components/copy-button/copy-button';
@@ -91,16 +95,28 @@ type SyncStep =
  *  "Sync Another Library" button off a narrow column. */
 const MAX_LISTED_DROPPED = 5;
 
+interface SyncSeratoProps {
+    /**
+     * The Rekordbox/Serato control, rendered on the first screen. Supplied by
+     * `SyncUpload` rather than built here so both flows show the identical control in
+     * the identical slot, and so switching it swaps this whole component out.
+     */
+    formatControl?: ReactNode;
+}
+
 function crateKey(crate: CratePreview): string {
     return [...crate.path, crate.name].join(' / ');
 }
 
-export const SyncSerato = () => {
+export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
     const { t } = useTranslation();
     const currentServer = useCurrentServerWithCredential();
 
     const [step, setStep] = useState<SyncStep>('idle');
-    const [seratoFolder, setSeratoFolder] = useState<null | string>(null);
+    // Persisted, so the folder found once is still there next session -- and is the
+    // same value Download's crate writer uses.
+    const seratoFolder = useSeratoFolder();
+    const setSeratoFolder = useSetSeratoFolder();
     const [crates, setCrates] = useState<CratePreview[]>([]);
     const {
         selectAll,
@@ -153,14 +169,16 @@ export const SyncSerato = () => {
                 setStep('idle');
             }
         },
-        [selectAll],
+        [selectAll, setSeratoFolder],
     );
 
     // Offer the standard location straight away. Nearly every Serato user has their
     // library exactly there, and a preloaded folder turns the first screen from "go
-    // find a hidden folder" into one button.
+    // find a hidden folder" into one button. Only when nothing is remembered: a user
+    // who has already pointed us somewhere else must not be dragged back to the
+    // default every time the screen mounts.
     useEffect(() => {
-        if (!ipc) return;
+        if (!ipc || seratoFolder) return;
         ipc.invoke('sync:get-default-serato-folder')
             .then((folder: null | string) => {
                 if (folder) setSeratoFolder(folder);
@@ -168,6 +186,9 @@ export const SyncSerato = () => {
             .catch(() => {
                 // No default is not a problem — the user can still pick one.
             });
+        // Mount-only: this is a fallback for an empty setting, not a reaction to it
+        // changing. Re-running when the user picks a folder would be a no-op at best.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleSelectFolder = useCallback(async () => {
@@ -363,6 +384,7 @@ export const SyncSerato = () => {
                             'Sub-box reads your crates straight out of your Serato library and turns them into playlists, with your hot cues and loops. Quit Serato first — it rewrites its crate files when it closes.',
                     })}
                 </Text>
+                {formatControl}
                 {error && (
                     <Text c="red" size="sm" ta="center">
                         {error}

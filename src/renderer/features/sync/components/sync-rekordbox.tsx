@@ -1,5 +1,5 @@
 import isElectron from 'is-electron';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { isUploadForbidden, PymixController } from '/@/renderer/api/pymix/pymix-controller';
@@ -90,11 +90,20 @@ interface UploadProgress {
  *  main-process log rather than pushing the "Sync Another Library" button off-screen. */
 const MAX_LISTED_DROPPED = 5;
 
+interface SyncRekordboxProps {
+    /**
+     * The Rekordbox/Serato control, rendered on the first screen. Supplied by
+     * `SyncUpload` rather than built here so both flows show the identical control in
+     * the identical slot, and so switching it swaps this whole component out.
+     */
+    formatControl?: ReactNode;
+}
+
 function playlistKey(pl: PlaylistPreview): string {
     return [...pl.path, pl.name].join('/');
 }
 
-export const SyncRekordbox = () => {
+export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
     const { t } = useTranslation();
     const currentServer = useCurrentServerWithCredential();
 
@@ -395,6 +404,7 @@ export const SyncRekordbox = () => {
                             'Select your Rekordbox XML export file to preview and upload playlists to your Sub-box cloud library.',
                     })}
                 </Text>
+                {formatControl}
                 {error && (
                     <Text c="red" size="sm">
                         {error}

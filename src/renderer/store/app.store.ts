@@ -29,6 +29,7 @@ export interface AppSlice extends AppState {
         setLibraryFormat: (direction: SyncDirection, format: LibraryFormat) => void;
         setPageSidebar: (key: string, value: boolean) => void;
         setPrivateMode: (enabled: boolean) => void;
+        setSeratoFolder: (folder: null | string) => void;
         setShowTimeRemaining: (enabled: boolean) => void;
         setSideBar: (options: Partial<SidebarProps>) => void;
         setTitleBar: (options: Partial<TitlebarProps>) => void;
@@ -69,6 +70,18 @@ export interface AppState {
     pageSidebar: Record<string, boolean>;
     platform: Platform;
     privateMode: boolean;
+    /**
+     * The user's `_Serato_` library folder, remembered across sessions.
+     *
+     * It used to be two independent `useState`s -- one in the Serato upload flow, one
+     * in Download's crate writer -- so the same folder was browsed for twice and
+     * forgotten every session. Persisted here beside `libraryFormat` because it is
+     * the same fact about the user: where their library lives.
+     *
+     * Desktop-only in practice (a browser cannot reach it), but harmless on web,
+     * where nothing reads it.
+     */
+    seratoFolder: null | string;
     showTimeRemaining: boolean;
     sidebar: SidebarProps;
     titlebar: TitlebarProps;
@@ -212,6 +225,11 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                             state.privateMode = privateMode;
                         });
                     },
+                    setSeratoFolder: (folder) => {
+                        set((state) => {
+                            state.seratoFolder = folder;
+                        });
+                    },
                     setShowTimeRemaining: (showTimeRemaining) => {
                         set((state) => {
                             state.showTimeRemaining = showTimeRemaining;
@@ -290,6 +308,9 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                 },
                 platform: Platform.WINDOWS,
                 privateMode: false,
+                // No migrate branch: `merge(currentState, persistedState)` fills a key
+                // the persisted state has never heard of from the initial state.
+                seratoFolder: null,
                 showTimeRemaining: false,
                 sidebar: {
                     collapsed: false,
@@ -374,6 +395,10 @@ export const useLibraryFormat = (direction: SyncDirection) =>
     useAppStore((state) => state.libraryFormat[direction]);
 
 export const useSetLibraryFormat = () => useAppStore((state) => state.actions.setLibraryFormat);
+
+export const useSeratoFolder = () => useAppStore((state) => state.seratoFolder);
+
+export const useSetSeratoFolder = () => useAppStore((state) => state.actions.setSeratoFolder);
 
 export const useGlobalExpanded = () => useAppStore((state) => state.globalExpanded);
 
