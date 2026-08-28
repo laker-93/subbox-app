@@ -88,6 +88,23 @@ Verified 2026-07-09 against subbox-app `claude/continuous-ux` (rebased onto
 > locator/API change made alongside the client change, not a fresh verification.
 > `external-drive-rekordbox-xml.mjs` is untouched: External Drive keeps its
 > checkbox until step 4 of the design.
+>
+> **The same branch also merged the two Upload tabs** (design step 3). "Upload
+> (Rekordbox)" and "Upload (Serato)" are one **Upload** tab; the format is a
+> `FormatSelect` on its first screen, persisted as `libraryFormat.upload`, and on a
+> profile that has never chosen one *neither* option is preselected. Ten drivers
+> located a tab by its old name and were updated on 2026-08-28 to click `Upload`
+> and then select the format: `serato-roundtrip`, `rekordbox-full-upload`,
+> `rekordbox-metadata-import`, `rekordbox-metaonly-progress`,
+> `rekordbox-import-phase-progress`, `rekordbox-preview-dedup-check`,
+> `mobile-sync-breakpoint` (locator only — it asserts the tab is *absent* at mobile
+> width), plus three gitignored `_*.mjs` scratch drivers. **Also not re-run live.**
+>
+> One more thing moved while it was open: the Serato folder is now a single
+> persisted `seratoFolder` in the app store, shared by the Serato upload flow and
+> Download's crate writer. Download already remembered it (in electron
+> `localSettings`, still written for backward compatibility); the upload flow never
+> did. A driver that points one screen at a `_Serato_` folder now points both.
 
 Driven live (Electron, `electron-vite build --mode development`) against
 `test060826`'s "Downtempo" playlist (9 tracks — smallest real playlist on this

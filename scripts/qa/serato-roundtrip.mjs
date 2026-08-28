@@ -25,12 +25,12 @@ import {
 //
 //   reset             wipe the account, clear the local download mirror, and
 //                     generate a fresh synthetic Serato library to import
-//   serato-upload     Sync -> Upload (Serato): read the crates, upload the tracks,
-//                     assert the crate tree came back as playlists
+//   serato-upload     Sync -> Upload, Serato format: read the crates, upload the
+//                     tracks, assert the crate tree came back as playlists
 //   rekordbox-export  Sync -> Download in the Rekordbox format: assert the XML
 //                     carries the same playlists and that every Location resolves
 //                     to a file that is actually there
-//   rekordbox-import  wipe again, then Sync -> Upload (Rekordbox) with that XML:
+//   rekordbox-import  wipe again, then Sync -> Upload, Rekordbox format, with that XML:
 //                     the same library, rebuilt from the other format
 //   serato-export     Sync -> Download in the Rekordbox format with "Also write
 //                     Serato crates": assert the crates written read back with the
@@ -280,7 +280,11 @@ async function phaseReset() {
 async function phaseSeratoUpload(fixtureSnap) {
     const { electronApp, mainLogs, page } = await launchApp(SOURCE_SERATO);
     try {
-        await page.getByRole('button', { name: /^upload \(serato\)$/i }).first().click();
+        await page.getByRole('button', { name: /^upload$/i }).first().click();
+        await page.waitForTimeout(500);
+        // One Upload tab now: the format is a control on its first screen, and it is
+        // persisted, so the previous phase's choice carries into this one.
+        await selectSegment(page, /^serato$/i);
         await page.waitForTimeout(500);
 
         // "Select Serato Folder" / "Choose a Different Folder" — the label depends on
@@ -443,7 +447,9 @@ async function phaseRekordboxImport(xmlPath, fixtureSnap) {
 
     const { electronApp, mainLogs, page } = await launchApp(xmlPath);
     try {
-        await page.getByRole('button', { name: /^upload \(rekordbox\)$/i }).first().click();
+        await page.getByRole('button', { name: /^upload$/i }).first().click();
+        await page.waitForTimeout(500);
+        await selectSegment(page, /^rekordbox$/i);
         await page.waitForTimeout(500);
         await page.getByRole('button', { name: /select xml file/i }).first().click();
         await page.getByText(/preview changes/i).first().waitFor({ timeout: 30_000 });

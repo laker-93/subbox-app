@@ -63,7 +63,7 @@ async function main() {
     const backButtonVisible = await backButton.isVisible().catch(() => false);
     // The real Sync UI (Upload/Download/Watch tabs) must NOT be reachable here.
     const uploadTabLeaked = await page
-        .getByRole('button', { name: /^upload \(rekordbox\)$/i })
+        .getByRole('button', { name: /^upload$/i })
         .isVisible()
         .catch(() => false);
     console.log('MobileSyncPlaceholder text visible:', placeholderText);

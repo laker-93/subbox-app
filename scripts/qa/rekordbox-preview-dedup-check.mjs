@@ -5,6 +5,7 @@ import {
     isLoggedOut,
     performLogin,
     resolveAppEntry,
+    selectSegment,
     SNAPSHOT_DIR,
 } from '../ui-snapshot-shared.mjs';
 import fs from 'fs';
@@ -61,8 +62,14 @@ async function main() {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000);
 
-    const uploadTab = page.getByRole('button', { name: /^upload \(rekordbox\)$/i }).first();
+    const uploadTab = page.getByRole('button', { name: /^upload$/i }).first();
     await uploadTab.click();
+    await page.waitForTimeout(500);
+
+    // The two Upload tabs are one tab now, so the format is a control on the first
+    // screen rather than part of the tab name. It is persisted, so it also carries over
+    // between runs -- select it explicitly instead of trusting what is stored.
+    await selectSegment(page, /^rekordbox$/i);
     await page.waitForTimeout(500);
 
     const selectBtn = page.getByRole('button', { name: /select xml file/i }).first();

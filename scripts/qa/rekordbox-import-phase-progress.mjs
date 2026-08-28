@@ -21,6 +21,7 @@ import {
     isLoggedOut,
     performLogin,
     resolveAppEntry,
+    selectSegment,
     SNAPSHOT_DIR,
 } from '../ui-snapshot-shared.mjs';
 
@@ -85,7 +86,7 @@ async function main() {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000);
 
-    const uploadTab = page.getByRole('button', { name: /^upload \(rekordbox\)$/i }).first();
+    const uploadTab = page.getByRole('button', { name: /^upload$/i }).first();
     // Flipping appMode in localStorage + reload doesn't always land on Sync on a
     // warm profile — retry the switch rather than failing the run.
     for (let i = 0; i < 4; i += 1) {
@@ -117,6 +118,12 @@ async function main() {
         throw e;
     }
     await uploadTab.click();
+    await page.waitForTimeout(500);
+
+    // The two Upload tabs are one tab now, so the format is a control on the first
+    // screen rather than part of the tab name. It is persisted, so it also carries over
+    // between runs -- select it explicitly instead of trusting what is stored.
+    await selectSegment(page, /^rekordbox$/i);
     await page.waitForTimeout(500);
     await page.getByRole('button', { name: /select xml file/i }).first().click();
     await page.getByText(/preview changes/i).first().waitFor({ timeout: 20_000 });
