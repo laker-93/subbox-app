@@ -2,8 +2,10 @@
 
 > **UI moved (2026-08-28, `serato/sync-ui-substrate`, unmerged).** The two Upload
 > tabs are one **Upload** tab with a Rekordbox/Serato control on its first screen,
-> persisted per direction. The drivers referenced here were updated to match but
-> **have not been re-run live**. Details and the full driver list: `features/sync.md`.
+> persisted per direction. The drivers referenced here were updated to match and
+> **re-run live on 2026-08-28** against `test280826` — all green, except that
+> `rekordbox-import-phase-progress` got a 5-track import and so did not re-observe
+> phase-by-phase progress. Details and the full driver list: `features/sync.md`.
 
 Full coverage of the `[subbox]` "Rekordbox/Serato import-export UI" README row.
 Both the **metadata-only** import sub-path and the **full track-upload** sub-path

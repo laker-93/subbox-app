@@ -2,8 +2,10 @@
 
 > **UI moved (2026-08-28, `serato/sync-ui-substrate`, unmerged).** The two Upload
 > tabs are one **Upload** tab with a Rekordbox/Serato control on its first screen,
-> persisted per direction. The drivers referenced here were updated to match but
-> **have not been re-run live**. Details and the full driver list: `features/sync.md`.
+> persisted per direction. The drivers referenced here were updated to match and
+> **re-run live on 2026-08-28** against `test280826`: 19 assertions pass, 1 fails,
+> that one being the already-filed parent-crate clobber (#117). Details and the
+> full driver list: `features/sync.md`.
 
 Verified 2026-08-27 against the local dev stack, account `test060826`, driving
 this worktree's Electron build. Driver: `scripts/qa/serato-roundtrip.mjs`, wrapped

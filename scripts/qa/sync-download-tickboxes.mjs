@@ -269,7 +269,8 @@ async function main() {
             {
                 desktopDiffTabsPresent: diffTabsPresent,
                 formatControlsPresent: controlsPresent,
-                includeDefault,
+                // A RegExp serialises to `{}`, and this summary is what the QA journal quotes.
+                includeDefault: String(includeDefault),
                 tracksAndXmlOutcome,
                 xmlOnlyOutcome,
             },
