@@ -4,25 +4,33 @@ import path from 'path';
 import { _electron as electron } from 'playwright';
 
 import {
+    checkedSegment,
     getCredentials,
     isLoggedOut,
     performLogin,
     resolveAppEntry,
+    selectSegment,
     SNAPSHOT_DIR,
 } from '../ui-snapshot-shared.mjs';
 
 // Verifies the External Drive Comparison flow after clarifying its intended design
 // (see subbox-app GH issue #27): the drive folder is compare-only, downloads always
 // land in the app's Subbox library (like a normal playlist download), and a new
-// "Include Rekordbox XML" option lets the user import the compared playlist(s)
-// straight into Rekordbox instead of hunting through the library folder.
+// format control lets the user import the compared playlist(s) straight into
+// Rekordbox instead of hunting through the library folder.
+//
+// The "Include Rekordbox XML" tick box this used to drive is gone: design step 4
+// replaced it with the same Rekordbox/Serato segmented control the Download screen
+// uses, sharing the stored `download` format. The format is selected explicitly
+// here rather than assumed -- it persists across runs of the app, so a previous
+// run leaving it on Serato would otherwise silently change what this asserts.
 //
 // Asserts, against a real local dev stack:
 //   1. The scratch "drive" folder stays empty after download (compare-only, not a
 //      copy target) — the opposite of what an earlier, now-superseded driver
 //      (external-drive-download.mjs) asserted.
 //   2. Real audio files land in the app's music folder.
-//   3. A Rekordbox XML is written next to them when the checkbox is ticked.
+//   3. A Rekordbox XML is written next to them when Rekordbox is the chosen format.
 //   4. The "Show Music" / "Show Rekordbox XML" reveal buttons appear on the done screen.
 //
 // Usage: QA_APP_ENTRY=../feishin/out/main/index.js node scripts/qa/external-drive-rekordbox-xml.mjs
@@ -129,15 +137,24 @@ async function main() {
     await previewTitle.waitFor({ state: 'visible', timeout: 30_000 });
     console.log('reached comparison preview');
 
-    const xmlCheckbox = page.getByLabel('Include Rekordbox XML');
-    const xmlCheckboxVisible = await xmlCheckbox.isVisible().catch(() => false);
-    const xmlCheckboxChecked = xmlCheckboxVisible && (await xmlCheckbox.isChecked().catch(() => false));
-    console.log('Include Rekordbox XML checkbox visible:', xmlCheckboxVisible, 'checked by default:', xmlCheckboxChecked);
-    if (!xmlCheckboxVisible) throw new Error('Include Rekordbox XML checkbox not found');
+    // Both formats must be offered here. Serato having no path on this screen was
+    // the gap design step 4 closed, so its absence is a regression, not a detail.
+    const formatOnArrival = await checkedSegment(page, ['Rekordbox', 'Serato']);
+    console.log('format selected on arrival:', formatOnArrival ?? '(none)');
+    let seratoOffered = true;
+    try {
+        await selectSegment(page, 'Serato');
+    } catch (err) {
+        seratoOffered = false;
+        console.log('Serato format not selectable:', err.message);
+    }
+    await selectSegment(page, 'Rekordbox');
+    const rekordboxSelected = (await checkedSegment(page, ['Rekordbox', 'Serato'])) === 'Rekordbox';
+    console.log('Serato offered:', seratoOffered, '| Rekordbox selected for this run:', rekordboxSelected);
 
-    const downloadButton = page.getByRole('button', { name: /^download missing tracks$/i });
+    const downloadButton = page.getByRole('button', { name: /^download missing tracks \+ xml$/i });
     if (!(await downloadButton.isEnabled().catch(() => false))) {
-        throw new Error('Download Missing Tracks disabled — expected an empty scratch dir to show missing tracks');
+        throw new Error('Download Missing Tracks + XML disabled — expected an empty scratch dir to show missing tracks');
     }
     await downloadButton.click();
 
@@ -185,7 +202,8 @@ async function main() {
     if (driveAudioCount !== 0) failures.push('drive folder should stay empty (compare-only) but has audio files');
     if (musicAudioCount === 0) failures.push('no audio files landed in the app music folder');
     if (!xmlExists) failures.push('Rekordbox XML was not created');
-    if (!xmlCheckboxChecked) failures.push('Include Rekordbox XML checkbox was not checked by default');
+    if (!seratoOffered) failures.push('Serato was not selectable in the format control (design step 4 gap)');
+    if (!rekordboxSelected) failures.push('could not select Rekordbox in the format control');
     if (!showMusicVisible) failures.push('Show Music button missing on done screen');
     if (!showXmlVisible) failures.push('Show Rekordbox XML button missing on done screen');
     if (!clarifiedCopyVisible) failures.push('clarified "downloads go to Subbox library" copy not found on select screen');
