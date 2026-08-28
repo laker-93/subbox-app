@@ -28,6 +28,9 @@ export const SyncUpload = () => {
 
     const formatControl = (
         <FormatSelect
+            // Every screen this lands on is a centred column, so the control centres
+            // with it rather than sitting left of the line the title and prose hold.
+            align="center"
             description={
                 // No description while nothing is chosen -- describing Rekordbox under
                 // an unselected control reads as though it were already the answer.
