@@ -7,6 +7,7 @@ import { urlConfig } from '/@/renderer/config/url-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import {
     SelectableList,
+    SYNC_INTRO_MIH,
     SyncCenteredState,
     SyncFlow,
     SyncLoading,
@@ -390,7 +391,10 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
     // ── Idle: source selection ─────────────────────────────────────────────
     if (step === 'idle') {
         return (
-            <SyncCenteredState gap="lg">
+            // Anchored to the top, and the same width as the Serato screen, so the
+            // icon, title, intro and control sit on identical lines in both: toggling
+            // the format changes the words, never their position.
+            <SyncCenteredState anchor="top" gap="lg" maw={420}>
                 <Icon icon="disc" size="3rem" />
                 <TextTitle order={3}>
                     {t('page.sync.rekordbox.title', {
@@ -398,10 +402,14 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         postProcess: 'titleCase',
                     })}
                 </TextTitle>
-                <Text c="dimmed" size="sm" ta="center">
+                <Text c="dimmed" mih={SYNC_INTRO_MIH} size="sm" ta="center">
+                    {/* One line saying what this reads, written to the same length as
+                        Serato's so the two wrap to the same two lines. The how-to —
+                        File → Export Collection — is on the button's tooltip, where it
+                        is wanted at the moment of clicking rather than before it. */}
                     {t('page.sync.rekordbox.description', {
                         defaultValue:
-                            'Select your Rekordbox XML export file to preview and upload playlists to your Sub-box cloud library.',
+                            'Sub-box reads a collection XML exported from Rekordbox — your playlists and tracks, cue points and all.',
                     })}
                 </Text>
                 {formatControl}

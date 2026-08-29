@@ -7,6 +7,7 @@ import { urlConfig } from '/@/renderer/config/url-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import {
     SelectableList,
+    SYNC_INTRO_MIH,
     SyncCenteredState,
     SyncFlow,
     SyncLoading,
@@ -370,7 +371,9 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
     // ── Idle: pick the library ─────────────────────────────────────────────
     if (step === 'idle') {
         return (
-            <SyncCenteredState gap="lg" maw={420}>
+            // Anchored to the top, matching the Rekordbox screen line for line, so the
+            // format toggle changes the words under the title and nothing's position.
+            <SyncCenteredState anchor="top" gap="lg" maw={420}>
                 <Icon icon="disc" size="3rem" />
                 <TextTitle order={3}>
                     {t('page.sync.serato.title', {
@@ -378,10 +381,13 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                         postProcess: 'titleCase',
                     })}
                 </TextTitle>
-                <Text c="dimmed" size="sm" ta="center">
+                <Text c="dimmed" mih={SYNC_INTRO_MIH} size="sm" ta="center">
+                    {/* Written to the same length as Rekordbox's so the two wrap alike.
+                        The "quit Serato first" caveat used to be a third sentence here;
+                        it is now its own line, next to the button it applies to. */}
                     {t('page.sync.serato.description', {
                         defaultValue:
-                            'Sub-box reads your crates straight out of your Serato library and turns them into playlists, with your hot cues and loops. Quit Serato first — it rewrites its crate files when it closes.',
+                            'Sub-box reads the crates in your Serato library — your playlists and tracks, hot cues and all.',
                     })}
                 </Text>
                 {formatControl}
@@ -390,6 +396,15 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                         {error}
                     </Text>
                 )}
+                {/* Below the control, above the buttons: it is a condition on reading
+                    the library, so it wants to be read just before the click, not
+                    buried in the paragraph that explains what the screen is for. */}
+                <Text c="dimmed" size="xs" ta="center">
+                    {t('page.sync.serato.quitFirst', {
+                        defaultValue:
+                            'Quit Serato first — it rewrites its crate files when it closes.',
+                    })}
+                </Text>
                 {seratoFolder && (
                     <Stack align="center" gap="xs" w="100%">
                         <Text c="dimmed" size="xs" ta="center">

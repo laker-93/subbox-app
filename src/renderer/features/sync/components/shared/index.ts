@@ -6,7 +6,7 @@ export { RekordboxImportSteps } from './rekordbox-import-steps';
 export { type SelectableItem, SelectableList, SelectionToolbar } from './selectable-list';
 export { SeratoWriteSummary } from './serato-write-summary';
 export { SyncDesktopOnly, SyncStorageExceeded } from './sync-blocked';
-export { SyncCenteredState } from './sync-centered-state';
+export { SYNC_INTRO_MIH, SyncCenteredState } from './sync-centered-state';
 export { SyncFlow } from './sync-flow';
 export { SyncLoading, SyncProgress } from './sync-progress';
 export { SyncResult } from './sync-result';
