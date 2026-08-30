@@ -16,6 +16,8 @@ import {
     SyncFlow,
     SyncLoading,
     SyncResult,
+    SyncSettingsButton,
+    SyncSettingsModal,
     SyncSummary,
     TrackRow,
     useSelection,
@@ -92,6 +94,9 @@ export const SyncExternalDrive = () => {
         writeCrates,
     } = useSeratoCrates();
     const [xmlHelpOpened, xmlHelpHandlers] = useDisclosure(false);
+    // Where this screen's folders live now — same cog, same modal, same place as
+    // on Download, which is the screen this one is a variation of.
+    const [settingsOpened, settingsHandlers] = useDisclosure(false);
     // The folder the Rekordbox XML is saved to. `xmlDir` is the user's override
     // (persisted in localSettings); `defaultXmlDir` is where it lands otherwise.
     const [xmlDir, setXmlDir] = useState<null | string>(null);
@@ -330,11 +335,9 @@ export const SyncExternalDrive = () => {
                 <Stack gap="xs">
                     <TextTitle order={3}>External Drive Comparison</TextTitle>
                     <Text c="dimmed" size="sm">
-                        Select a folder on an external drive, then choose playlists to compare
-                        against. You get a preview of the tracks in those playlists that aren&apos;t
-                        on the drive. The drive folder is only read for this comparison: downloads
-                        are saved to your Sub-box music folder, ready to add to Rekordbox and export
-                        back to the drive from there.
+                        See which tracks from your playlists aren&apos;t on the drive yet. The drive
+                        is only read — anything missing is downloaded to your Sub-box music folder,
+                        and your DJ software exports it to the drive from there.
                     </Text>
                 </Stack>
 
@@ -560,10 +563,27 @@ export const SyncExternalDrive = () => {
                     }}
                     variant="filled"
                 >
-                    {format === 'rekordbox'
-                        ? 'Download Missing Tracks + XML'
-                        : 'Download Missing Tracks + Crates'}
+                    Download
                 </Button>
+            }
+            headerAction={
+                <>
+                    <ActionIcon
+                        aria-label="Help"
+                        icon="info"
+                        iconProps={{ size: 'md' }}
+                        onClick={xmlHelpHandlers.open}
+                        size="sm"
+                        tooltip={{
+                            label:
+                                format === 'rekordbox'
+                                    ? 'How to import the XML into Rekordbox'
+                                    : 'How these crates reach your drive',
+                        }}
+                        variant="subtle"
+                    />
+                    <SyncSettingsButton onClick={settingsHandlers.open} />
+                </>
             }
             onBack={handleBack}
             subtitle={
@@ -573,40 +593,15 @@ export const SyncExternalDrive = () => {
             }
             title="Comparison Preview"
         >
-            {/* The format question, in the same slot it occupies on Download. It used
-                to be a lone "Include Rekordbox XML" tick box below the track list --
-                the only format control on this screen, with no Serato equivalent and
-                nothing saying so. */}
-            <Group align="flex-end" gap="sm" wrap="wrap">
-                <Stack gap={4}>
-                    <Text fw={500} size="sm">
-                        Format
-                    </Text>
-                    <FormatSelect
-                        description={
-                            format === 'rekordbox'
-                                ? 'A Rekordbox XML you import, then export to the drive from Rekordbox.'
-                                : 'Crates written into your Serato library, ready to sync to the drive.'
-                        }
-                        onChange={(next) => setLibraryFormat('download', next)}
-                        value={format}
-                    />
-                </Stack>
-                <ActionIcon
-                    icon="info"
-                    iconProps={{ size: 'md' }}
-                    mb={4}
-                    onClick={xmlHelpHandlers.open}
-                    size="sm"
-                    tooltip={{
-                        label:
-                            format === 'rekordbox'
-                                ? 'How to import the XML into Rekordbox'
-                                : 'How these crates reach your drive',
-                    }}
-                    variant="subtle"
-                />
-            </Group>
+            {/* The format question, in the same slot it occupies on Download: alone,
+                unlabelled, with the folders it implies behind the cog. */}
+            <FormatSelect onChange={(next) => setLibraryFormat('download', next)} value={format} />
+
+            {format === 'serato' && !seratoFolder && (
+                <Text c="yellow" size="xs">
+                    Choose your _Serato_ folder under the cog to write crates.
+                </Text>
+            )}
 
             <SyncSummary
                 items={[
@@ -733,34 +728,45 @@ export const SyncExternalDrive = () => {
                 )}
             </ScrollArea>
 
-            {includeRekordboxXml && (
-                <DestinationPath
-                    emptyLabel="Default download folder"
-                    extra={
-                        xmlDir ? (
-                            <Button onClick={handleResetXmlDirectory} size="xs" variant="subtle">
-                                Reset to default
-                            </Button>
-                        ) : undefined
-                    }
-                    label="XML Folder"
-                    onChoose={handleSelectXmlDirectory}
-                    path={xmlDir ?? defaultXmlDir}
-                    tooltip="Where the Rekordbox XML is saved. By default it goes alongside your downloaded tracks."
-                />
-            )}
+            <SyncSettingsModal
+                handlers={settingsHandlers}
+                opened={settingsOpened}
+                title="Download Settings"
+            >
+                {includeRekordboxXml && (
+                    <DestinationPath
+                        emptyLabel="Default download folder"
+                        extra={
+                            xmlDir ? (
+                                <Button
+                                    onClick={handleResetXmlDirectory}
+                                    size="xs"
+                                    variant="subtle"
+                                >
+                                    Reset to default
+                                </Button>
+                            ) : undefined
+                        }
+                        label="XML Folder"
+                        onChoose={handleSelectXmlDirectory}
+                        path={xmlDir ?? defaultXmlDir}
+                        tooltip="Where the Rekordbox XML is saved. By default it goes alongside your downloaded tracks."
+                    />
+                )}
 
-            {/* Where the crates go. Not optional when Serato is the format: without a
-                folder there is nothing to write, and the button below says so. */}
-            {format === 'serato' && (
-                <DestinationPath
-                    emptyLabel="No _Serato_ folder found — choose one to write crates"
-                    label="Serato Folder"
-                    onChoose={handleSelectSeratoFolder}
-                    path={seratoFolder}
-                    tooltip="The _Serato_ folder your crates are written into. It has to be on the same drive as your music, so this is normally the one in your Music folder — not one on the USB."
-                />
-            )}
+                {/* Where the crates go. Not optional when Serato is the format: without
+                    a folder there is nothing to write, and the screen behind this says
+                    so rather than leaving the dead button unexplained. */}
+                {format === 'serato' && (
+                    <DestinationPath
+                        emptyLabel="No _Serato_ folder found — choose one to write crates"
+                        label="Serato Folder"
+                        onChoose={handleSelectSeratoFolder}
+                        path={seratoFolder}
+                        tooltip="The _Serato_ folder your crates are written into. It has to be on the same drive as your music, so this is normally the one in your Music folder — not one on the USB."
+                    />
+                )}
+            </SyncSettingsModal>
 
             {/* Both routes end the same way: the tracks land in the local library and
                 the DJ software does the export to the drive. Subbox tops up what the

@@ -7,9 +7,8 @@ import { urlConfig } from '/@/renderer/config/url-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import {
     SelectableList,
-    SYNC_INTRO_MIH,
-    SyncCenteredState,
     SyncFlow,
+    SyncFlowFill,
     SyncLoading,
     SyncProgress,
     SyncResult,
@@ -23,7 +22,6 @@ import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { CopyButton } from '/@/shared/components/copy-button/copy-button';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
-import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
@@ -391,53 +389,56 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
     // ── Idle: source selection ─────────────────────────────────────────────
     if (step === 'idle') {
         return (
-            // Anchored to the top, and the same width as the Serato screen, so the
-            // icon, title, intro and control sit on identical lines in both: toggling
-            // the format changes the words, never their position.
-            <SyncCenteredState anchor="top" gap="lg" maw={420}>
-                <Icon icon="disc" size="3rem" />
-                <TextTitle order={3}>
-                    {t('page.sync.rekordbox.title', {
-                        defaultValue: 'Sync from Rekordbox',
-                        postProcess: 'titleCase',
-                    })}
-                </TextTitle>
-                <Text c="dimmed" mih={SYNC_INTRO_MIH} size="sm" ta="center">
-                    {/* One line saying what this reads, written to the same length as
-                        Serato's so the two wrap to the same two lines. The how-to —
-                        File → Export Collection — is on the button's tooltip, where it
-                        is wanted at the moment of clicking rather than before it. */}
-                    {t('page.sync.rekordbox.description', {
-                        defaultValue:
-                            'Sub-box reads a collection XML exported from Rekordbox — your playlists and tracks, cue points and all.',
-                    })}
-                </Text>
-                {formatControl}
-                {error && (
-                    <Text c="red" size="sm">
-                        {error}
-                    </Text>
-                )}
-                <Button
-                    fullWidth
-                    onClick={handleSelectXml}
-                    tooltip={{
-                        label: t('page.sync.rekordbox.selectXmlTooltip', {
+            // The same shape as every other Sync screen: title top-left, the line
+            // that says what this reads under it, the format control in the body,
+            // and the primary button full-width at the bottom of the pane. It used
+            // to be a 420px column floating in the middle of the page, which is why
+            // Upload and Download read as two different products.
+            <SyncFlow
+                error={error}
+                footer={
+                    <Button
+                        fullWidth
+                        onClick={handleSelectXml}
+                        size="md"
+                        tooltip={{
+                            label: t('page.sync.rekordbox.selectXmlTooltip', {
+                                defaultValue:
+                                    'In Rekordbox, go to File → Export Collection in xml format, then choose that .xml file here. Sub-box reads your playlists and tracks from it.',
+                            }),
+                            multiline: true,
+                            openDelay: 300,
+                            w: 300,
+                        }}
+                        variant="filled"
+                    >
+                        {/* No titleCase: it lowercases the acronym, and "Select Xml
+                            File" across a full-width button is now the most
+                            prominent thing on the screen. */}
+                        {t('page.sync.rekordbox.selectXml', {
+                            defaultValue: 'Select XML File',
+                        })}
+                    </Button>
+                }
+                subtitle={
+                    <Text c="dimmed" size="sm">
+                        {/* The how-to — File → Export Collection — is on the button's
+                            tooltip, where it is wanted at the moment of clicking
+                            rather than before it. */}
+                        {t('page.sync.rekordbox.description', {
                             defaultValue:
-                                'In Rekordbox, go to File → Export Collection in xml format, then choose that .xml file here. Sub-box reads your playlists and tracks from it.',
-                        }),
-                        multiline: true,
-                        openDelay: 300,
-                        w: 300,
-                    }}
-                    variant="filled"
-                >
-                    {t('page.sync.rekordbox.selectXml', {
-                        defaultValue: 'Select XML File',
-                        postProcess: 'titleCase',
-                    })}
-                </Button>
-            </SyncCenteredState>
+                                'Sub-box reads a collection XML exported from Rekordbox — your playlists and tracks, cue points and all.',
+                        })}
+                    </Text>
+                }
+                title={t('page.sync.rekordbox.title', {
+                    defaultValue: 'Sync from Rekordbox',
+                    postProcess: 'titleCase',
+                })}
+            >
+                {formatControl}
+                <SyncFlowFill />
+            </SyncFlow>
         );
     }
 
@@ -474,15 +475,14 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         }}
                         variant="filled"
                     >
-                        {metadataOnly
-                            ? t('page.sync.rekordbox.importMetadata', {
-                                  defaultValue: 'Import Metadata Only',
-                                  postProcess: 'titleCase',
-                              })
-                            : t('page.sync.rekordbox.uploadSelected', {
-                                  defaultValue: 'Upload Selected Playlists',
-                                  postProcess: 'titleCase',
-                              })}
+                        {/* One word in both modes. The tick box above is the record
+                            of which mode this is; the button only has to be the way
+                            out of the screen, and it used to restate the choice in
+                            three more words that moved under the cursor. */}
+                        {t('page.sync.rekordbox.upload', {
+                            defaultValue: 'Upload',
+                            postProcess: 'titleCase',
+                        })}
                     </Button>
                 }
                 onBack={handleReset}
@@ -518,7 +518,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                     onToggle={handleTogglePlaylist}
                     options={
                         <Tooltip
-                            label="Only update track info (cue points, ratings, tags) for music already in your library. Nothing is uploaded. Untick to upload the tracks themselves."
+                            label="Only update track info (cue points, ratings, tags) for music already in your library — no audio is uploaded."
                             multiline
                             openDelay={300}
                             position="right"

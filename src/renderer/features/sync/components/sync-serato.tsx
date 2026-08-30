@@ -6,13 +6,16 @@ import { isUploadForbidden, PymixController } from '/@/renderer/api/pymix/pymix-
 import { urlConfig } from '/@/renderer/config/url-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import {
+    DestinationPath,
+    PathText,
     SelectableList,
-    SYNC_INTRO_MIH,
-    SyncCenteredState,
     SyncFlow,
+    SyncFlowFill,
     SyncLoading,
     SyncProgress,
     SyncResult,
+    SyncSettingsButton,
+    SyncSettingsModal,
     SyncStorageExceeded,
     SyncSummary,
     useSelection,
@@ -27,10 +30,10 @@ import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { CopyButton } from '/@/shared/components/copy-button/copy-button';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
-import { TextTitle } from '/@/shared/components/text-title/text-title';
 import { Text } from '/@/shared/components/text/text';
 import { toast } from '/@/shared/components/toast/toast';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
+import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 
 const ipc = isElectron() ? window.api.ipc : null;
 
@@ -136,6 +139,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
         currentUsageBytes: number;
         maxStorageBytes: number;
     }>(null);
+    const [settingsOpened, settingsHandlers] = useDisclosure(false);
 
     useEffect(() => {
         if (!ipc) return;
@@ -192,19 +196,23 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const handleSelectFolder = useCallback(async () => {
+    // Choosing a folder and reading it are two things now, because the chooser
+    // lives behind the cog and the read is the screen's one button. Picking a
+    // folder in a settings modal and having the app immediately walk off into a
+    // parse would be a modal that does something.
+    const handleChooseFolder = useCallback(async () => {
         if (!ipc) return;
         try {
             const folder: null | string = await ipc.invoke('sync:select-serato-folder');
             if (!folder) return;
-            await parseFolder(folder);
+            setSeratoFolder(folder);
+            setError(null);
         } catch (err: any) {
             setError(err?.message || 'Failed to open that folder');
-            setStep('idle');
         }
-    }, [parseFolder]);
+    }, [setSeratoFolder]);
 
-    const handleUseDefaultFolder = useCallback(async () => {
+    const handleReadLibrary = useCallback(async () => {
         if (seratoFolder) await parseFolder(seratoFolder);
     }, [parseFolder, seratoFolder]);
 
@@ -371,72 +379,85 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
     // ── Idle: pick the library ─────────────────────────────────────────────
     if (step === 'idle') {
         return (
-            // Anchored to the top, matching the Rekordbox screen line for line, so the
-            // format toggle changes the words under the title and nothing's position.
-            <SyncCenteredState anchor="top" gap="lg" maw={420}>
-                <Icon icon="disc" size="3rem" />
-                <TextTitle order={3}>
-                    {t('page.sync.serato.title', {
-                        defaultValue: 'Sync from Serato',
-                        postProcess: 'titleCase',
-                    })}
-                </TextTitle>
-                <Text c="dimmed" mih={SYNC_INTRO_MIH} size="sm" ta="center">
-                    {/* Written to the same length as Rekordbox's so the two wrap alike.
-                        The "quit Serato first" caveat used to be a third sentence here;
-                        it is now its own line, next to the button it applies to. */}
-                    {t('page.sync.serato.description', {
-                        defaultValue:
-                            'Sub-box reads the crates in your Serato library — your playlists and tracks, hot cues and all.',
-                    })}
-                </Text>
-                {formatControl}
-                {error && (
-                    <Text c="red" size="sm" ta="center">
-                        {error}
+            // Titled, top-left, one full-width button at the bottom — the same page
+            // as the Rekordbox screen beside it and the Download screens it leads to.
+            // The folder chooser is behind the cog: it is set once and then right
+            // forever, and as a second full-width button under the first it read as
+            // half the screen's purpose.
+            <SyncFlow
+                error={error}
+                footer={
+                    <Button
+                        disabled={!seratoFolder}
+                        fullWidth
+                        onClick={handleReadLibrary}
+                        size="md"
+                        tooltip={{
+                            label: seratoFolder
+                                ? 'Read the crates in this Serato library. Nothing is uploaded until you choose what to send on the next screen.'
+                                : 'Choose your _Serato_ folder under the cog first.',
+                            multiline: true,
+                            openDelay: 300,
+                            w: 300,
+                        }}
+                        variant="filled"
+                    >
+                        {t('page.sync.serato.readLibrary', {
+                            defaultValue: 'Read Library',
+                            postProcess: 'titleCase',
+                        })}
+                    </Button>
+                }
+                headerAction={<SyncSettingsButton onClick={settingsHandlers.open} />}
+                subtitle={
+                    <Text c="dimmed" size="sm">
+                        {t('page.sync.serato.description', {
+                            defaultValue:
+                                'Sub-box reads the crates in your Serato library — your playlists and tracks, hot cues and all.',
+                        })}
                     </Text>
-                )}
-                {/* Below the control, above the buttons: it is a condition on reading
-                    the library, so it wants to be read just before the click, not
-                    buried in the paragraph that explains what the screen is for. */}
-                <Text c="dimmed" size="xs" ta="center">
+                }
+                title={t('page.sync.serato.title', {
+                    defaultValue: 'Sync from Serato',
+                    postProcess: 'titleCase',
+                })}
+            >
+                {formatControl}
+
+                {/* The path stays on the screen even though its chooser doesn't.
+                    Which library is about to be read is the one thing the user has
+                    to be able to check before clicking, and the default is found for
+                    them — so it is an answer to confirm, not a setting to go open. */}
+                <PathText
+                    placeholder="No Serato library found — choose your _Serato_ folder under the cog"
+                    value={seratoFolder}
+                />
+
+                {/* A condition on reading the library, so it sits by the button it
+                    applies to rather than in the line that explains the screen. */}
+                <Text c="dimmed" size="xs">
                     {t('page.sync.serato.quitFirst', {
                         defaultValue:
                             'Quit Serato first — it rewrites its crate files when it closes.',
                     })}
                 </Text>
-                {seratoFolder && (
-                    <Stack align="center" gap="xs" w="100%">
-                        <Text c="dimmed" size="xs" ta="center">
-                            {seratoFolder}
-                        </Text>
-                        <Button fullWidth onClick={handleUseDefaultFolder} variant="filled">
-                            {t('page.sync.serato.useDefault', {
-                                defaultValue: 'Read This Serato Library',
-                                postProcess: 'titleCase',
-                            })}
-                        </Button>
-                    </Stack>
-                )}
-                <Button
-                    fullWidth
-                    onClick={handleSelectFolder}
-                    tooltip={{
-                        label: 'Pick your _Serato_ folder. It is normally inside your Music folder; if your library lives on an external drive, it is at the top level of that drive.',
-                        multiline: true,
-                        openDelay: 300,
-                        w: 300,
-                    }}
-                    variant={seratoFolder ? 'subtle' : 'filled'}
+
+                <SyncFlowFill />
+
+                <SyncSettingsModal
+                    handlers={settingsHandlers}
+                    opened={settingsOpened}
+                    title="Upload Settings"
                 >
-                    {t('page.sync.serato.selectFolder', {
-                        defaultValue: seratoFolder
-                            ? 'Choose a Different Folder'
-                            : 'Select Serato Folder',
-                        postProcess: 'titleCase',
-                    })}
-                </Button>
-            </SyncCenteredState>
+                    <DestinationPath
+                        emptyLabel="No _Serato_ folder found — choose one to read your crates"
+                        label="Serato Folder"
+                        onChoose={handleChooseFolder}
+                        path={seratoFolder}
+                        tooltip="The _Serato_ folder your crates are read from. Normally inside your Music folder; if your library lives on an external drive, it is at the top level of that drive."
+                    />
+                </SyncSettingsModal>
+            </SyncFlow>
         );
     }
 
@@ -471,15 +492,11 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                         }}
                         variant="filled"
                     >
-                        {cratesOnly
-                            ? t('page.sync.serato.importCratesOnly', {
-                                  defaultValue: 'Import Playlists Only',
-                                  postProcess: 'titleCase',
-                              })
-                            : t('page.sync.serato.uploadSelected', {
-                                  defaultValue: 'Upload Selected Crates',
-                                  postProcess: 'titleCase',
-                              })}
+                        {/* One word in both modes, like the Rekordbox flow beside it. */}
+                        {t('page.sync.serato.upload', {
+                            defaultValue: 'Upload',
+                            postProcess: 'titleCase',
+                        })}
                     </Button>
                 }
                 onBack={handleReset}
@@ -513,7 +530,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                     onToggle={handleToggleCrate}
                     options={
                         <Tooltip
-                            label="Rebuild the playlists from your crates without uploading any audio. Tracks already in your library keep their place; anything else is left out."
+                            label="Rebuild the playlists from your crates without uploading any audio. Tracks you don't already have are left out."
                             multiline
                             openDelay={300}
                             position="right"

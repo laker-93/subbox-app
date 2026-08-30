@@ -11,13 +11,14 @@ import {
     formatBytes,
     formatDuration,
     FormatSelect,
-    PathText,
     RekordboxImportSteps,
     SelectableList,
     SeratoWriteSummary,
     SyncFlow,
     SyncLoading,
     SyncResult,
+    SyncSettingsButton,
+    SyncSettingsModal,
     SyncSummary,
     TrackRow,
     useSelection,
@@ -206,6 +207,10 @@ export const SyncDownload = () => {
     const includeSeratoCrates = format === 'serato' || alsoWriteSeratoCrates;
     const [xmlHelpOpened, xmlHelpHandlers] = useDisclosure(false);
     const [rekordboxHelpOpened, rekordboxHelpHandlers] = useDisclosure(false);
+    // Everything that changes what Download does, behind the cog. On screen they
+    // were four labelled controls and four lines of prose above a track list that
+    // is the actual reason anyone opens this screen.
+    const [settingsOpened, settingsHandlers] = useDisclosure(false);
     // The folder the Rekordbox XML is saved to. `xmlDir` is the user's override
     // (persisted in localSettings); `defaultXmlDir` is where it lands otherwise.
     const [xmlDir, setXmlDir] = useState<null | string>(null);
@@ -475,24 +480,18 @@ export const SyncDownload = () => {
 
         return (
             <Stack gap="md" p="xl" style={{ height: '100%', overflow: 'auto' }}>
-                <Stack gap="xs">
+                <Group gap="xs">
                     <TextTitle order={3}>Download Playlists</TextTitle>
-                    <Text c="dimmed" size="sm">
-                        Select playlists from your cloud library to preview a download plan.
-                        Download the tracks with a Rekordbox XML, or write them straight into your
-                        Serato library as crates.
-                    </Text>
-                    <Group gap="xs">
-                        <Button
-                            leftSection={<Icon icon="info" />}
-                            onClick={rekordboxHelpHandlers.open}
-                            size="xs"
-                            variant="default"
-                        >
-                            Sync to Rekordbox
-                        </Button>
-                    </Group>
-                </Stack>
+                    <ActionIcon
+                        aria-label="Help"
+                        icon="info"
+                        iconProps={{ size: 'md' }}
+                        onClick={rekordboxHelpHandlers.open}
+                        size="sm"
+                        tooltip={{ label: 'How to sync from Sub-box to Rekordbox' }}
+                        variant="subtle"
+                    />
+                </Group>
 
                 {error && (
                     <Text c="red" size="sm">
@@ -525,8 +524,8 @@ export const SyncDownload = () => {
                                 <TextTitle order={5}>2. Download with the Rekordbox XML</TextTitle>
                                 <Text size="sm">
                                     {isElectron()
-                                        ? 'On the preview screen, set Format to Rekordbox and click Download. This saves the tracks to your music folder and the .xml describing the playlists to your chosen XML folder. If you already have these tracks, switch Include to "XML only" to take just the .xml.'
-                                        : `On the preview screen, set Format to Rekordbox, enter the folder you'll extract into, and click Download. You get one zip containing a single music folder, with subbox_rb_export.xml inside it. If you already have these tracks, switch Include to "XML only" to download just the .xml.`}
+                                        ? 'On the preview screen, set Format to Rekordbox and click Download. The tracks go to your music folder and the .xml to your XML folder. Already have the tracks? Set Include to "XML only" under the cog.'
+                                        : `On the preview screen, set Format to Rekordbox, put the folder you'll extract into under the cog, and click Download. You get one zip with a single music folder in it, holding subbox_rb_export.xml. Already have the tracks? Set Include to "XML only".`}
                                 </Text>
                             </Stack>
                             <RekordboxImportSteps startAt={3} />
@@ -688,16 +687,11 @@ export const SyncDownload = () => {
 
     const writingSeratoCrates = includeSeratoCrates && Boolean(seratoFolder);
 
-    // One button, whose wording follows the two controls at the top of the screen.
-    // Deliberately still says what it *does* rather than what was chosen -- the
-    // radios are the record of the choice; this is the confirmation of the action.
-    const downloadButtonLabel = !includeTracks
-        ? includeRekordboxXml
-            ? 'Download Rekordbox XML'
-            : 'Write Serato Crates'
-        : isElectron()
-          ? 'Download & Extract'
-          : 'Download Zip';
+    // One button, one word, whatever the settings say. It used to rename itself
+    // four ways -- "Download & Extract", "Write Serato Crates" -- which made the
+    // button a second, worse copy of the controls above it: the same choice stated
+    // twice, and the button moving under the cursor every time one of them changed.
+    // What it does in detail is on its tooltip, and on the screen it lands on.
     const downloadButtonTooltip = !includeTracks
         ? includeRekordboxXml
             ? 'Download just the Rekordbox XML for these playlists, with no audio files.'
@@ -707,6 +701,16 @@ export const SyncDownload = () => {
               ? `Save the missing tracks into your local music folder, with a Rekordbox XML${writingSeratoCrates ? ' and Serato crates' : ''}.`
               : 'Save the missing tracks into your local music folder, then write these playlists into your Serato library as crates.'
           : 'Download the selected tracks as one zip, with the Rekordbox XML inside it.';
+
+    // The one thing the settings modal must not be allowed to hide: a setting that
+    // isn't set yet, with the button dead because of it. Shown on the screen, next
+    // to the control it sends you to.
+    const blockedReason =
+        !isElectron() && includeRekordboxXml && webExtractPath.trim().length === 0
+            ? "Set the folder you'll extract into, under the cog."
+            : isElectron() && includeSeratoCrates && !seratoFolder
+              ? 'Choose your _Serato_ folder under the cog to write crates.'
+              : null;
 
     const tabs = [
         { count: tracks.missing.length, key: 'missing' as const, label: 'Missing' },
@@ -781,66 +785,49 @@ export const SyncDownload = () => {
                     }}
                     variant="filled"
                 >
-                    {downloadButtonLabel}
+                    Download
                 </Button>
             }
             headerAction={
-                <ActionIcon
-                    icon="info"
-                    iconProps={{ size: 'md' }}
-                    onClick={xmlHelpHandlers.open}
-                    size="sm"
-                    tooltip={{ label: 'How to import the XML into Rekordbox' }}
-                    variant="subtle"
-                />
+                <>
+                    <ActionIcon
+                        aria-label="Help"
+                        icon="info"
+                        iconProps={{ size: 'md' }}
+                        onClick={xmlHelpHandlers.open}
+                        size="sm"
+                        tooltip={{ label: 'How to import the XML into Rekordbox' }}
+                        variant="subtle"
+                    />
+                    <SyncSettingsButton onClick={settingsHandlers.open} />
+                </>
             }
             onBack={handleBack}
             title="Download Preview"
         >
-            {/* The format question, asked once and up front. It used to live in two
-                checkboxes below the track list, which is why nothing on the first
-                screen taught anyone where the second one kept it. */}
-            <Group align="flex-start" gap="xl" wrap="wrap">
-                <Stack gap={4}>
-                    <Text fw={500} size="sm">
-                        Format
-                    </Text>
-                    <FormatSelect
-                        description={
-                            format === 'rekordbox'
-                                ? 'A Rekordbox XML you import into your collection.'
-                                : 'Crates written straight into your Serato library.'
-                        }
-                        onChange={(next) => setLibraryFormat('download', next)}
-                        value={format}
-                    />
-                </Stack>
-                <Stack gap={4}>
-                    <Text fw={500} size="sm">
-                        Include
-                    </Text>
-                    <SegmentedControl
-                        data={[
-                            {
-                                label: format === 'rekordbox' ? 'Tracks + XML' : 'Tracks + crates',
-                                value: 'tracks',
-                            },
-                            {
-                                label: format === 'rekordbox' ? 'XML only' : 'Crates only',
-                                value: 'file-only',
-                            },
-                        ]}
-                        onChange={(next) => setIncludeTracks(next === 'tracks')}
-                        value={includeTracks ? 'tracks' : 'file-only'}
-                        w="fit-content"
-                    />
-                    <Text c="dimmed" size="xs">
-                        {includeTracks
-                            ? 'Download the audio as well.'
-                            : 'For playlists whose tracks you already have.'}
-                    </Text>
-                </Stack>
+            {/* The only control left on the screen. Format is the one question a DJ
+                answers with their own software's name, so it stays in the open;
+                everything else -- what to include, where it lands -- is behind the
+                cog, because it is either already right or set once and forgotten. */}
+            <Group align="center" gap="sm" wrap="wrap">
+                <FormatSelect
+                    onChange={(next) => setLibraryFormat('download', next)}
+                    value={format}
+                />
+                {/* Only when it isn't the default, so the screen stays quiet in the
+                    case that needs no explaining. */}
+                {!includeTracks && (
+                    <Badge color="gray" size="sm" variant="light">
+                        {includeRekordboxXml ? 'XML only' : 'Crates only'}
+                    </Badge>
+                )}
             </Group>
+
+            {blockedReason && (
+                <Text c="yellow" size="xs">
+                    {blockedReason}
+                </Text>
+            )}
 
             {/* Summary badges. The already-present / to-download / metadata-updates
                 counts are a diff against the local library, which only exists on
@@ -973,15 +960,43 @@ export const SyncDownload = () => {
                 )}
             </ScrollArea>
 
-            {/* The one combination the radio can't express. Rekordbox-only: under
-                Serato the crates are already the output, so "also write crates"
-                would be asking for what is already happening. Desktop only --
-                crates are written into the user's own _Serato_ folder against the
-                paths the download just landed on, which a browser can neither know
-                nor reach. */}
-            {isElectron() && format === 'rekordbox' && (
-                <Stack gap={4}>
-                    <Group gap="xs" style={{ width: 'fit-content' }}>
+            <SyncSettingsModal
+                handlers={settingsHandlers}
+                opened={settingsOpened}
+                title="Download Settings"
+            >
+                {/* What comes out, rather than what format it is in. "I already have
+                    these tracks, just give me the XML" is a real workflow, but it is
+                    not the one anybody is in by default. */}
+                <Stack gap="xs">
+                    <Text fw={500} size="sm">
+                        Include
+                    </Text>
+                    <SegmentedControl
+                        data={[
+                            {
+                                label: format === 'rekordbox' ? 'Tracks + XML' : 'Tracks + crates',
+                                value: 'tracks',
+                            },
+                            {
+                                label: format === 'rekordbox' ? 'XML only' : 'Crates only',
+                                value: 'file-only',
+                            },
+                        ]}
+                        onChange={(next) => setIncludeTracks(next === 'tracks')}
+                        value={includeTracks ? 'tracks' : 'file-only'}
+                        w="fit-content"
+                    />
+                </Stack>
+
+                {/* The one combination the format control can't express. Rekordbox-only:
+                    under Serato the crates are already the output, so "also write
+                    crates" would be asking for what is already happening. Desktop only
+                    -- crates are written into the user's own _Serato_ folder against
+                    the paths the download just landed on, which a browser can neither
+                    know nor reach. */}
+                {isElectron() && format === 'rekordbox' && (
+                    <Stack gap="xs">
                         <Tooltip
                             label="Write these playlists into your Serato library as crates as well as the XML, pointing at the tracks downloaded here. Anything replaced is backed up first."
                             multiline
@@ -989,7 +1004,7 @@ export const SyncDownload = () => {
                             position="top-start"
                             w={300}
                         >
-                            <Group gap="md" style={{ width: 'fit-content' }}>
+                            <span style={{ width: 'fit-content' }}>
                                 <Checkbox
                                     checked={alsoWriteSeratoCrates}
                                     disabled={!seratoFolder}
@@ -999,94 +1014,99 @@ export const SyncDownload = () => {
                                     }
                                     size="sm"
                                 />
-                            </Group>
+                            </span>
                         </Tooltip>
-                        <Button onClick={handleSelectSeratoFolder} size="xs" variant="subtle">
-                            {seratoFolder ? 'Change Serato Folder' : 'Choose Serato Folder'}
-                        </Button>
-                    </Group>
-                    {alsoWriteSeratoCrates && (
-                        <PathText
-                            placeholder="No _Serato_ folder found — choose one to enable this"
-                            value={seratoFolder}
+                        <DestinationPath
+                            emptyLabel="No _Serato_ folder found — choose one to enable this"
+                            label="Serato Folder"
+                            onChoose={handleSelectSeratoFolder}
+                            path={seratoFolder}
+                            tooltip="The _Serato_ folder your crates are written into. Normally inside your Music folder; on an external drive it is at the top level."
                         />
-                    )}
-                </Stack>
-            )}
+                    </Stack>
+                )}
 
-            {/* Where the crates go, when Serato is the format. Not optional here:
-                without a folder there is nothing to write and the button below is
-                disabled, so this is the one thing standing between the user and a
-                finished export. */}
-            {isElectron() && format === 'serato' && (
-                <DestinationPath
-                    emptyLabel="No _Serato_ folder found — choose one to write crates"
-                    label="Serato Folder"
-                    onChoose={handleSelectSeratoFolder}
-                    path={seratoFolder}
-                    tooltip="The _Serato_ folder your crates are written into. Normally inside your Music folder; on an external drive it is at the top level."
-                />
-            )}
-
-            {/* Where the Rekordbox XML is saved (desktop only) */}
-            {isElectron() && includeRekordboxXml && (
-                <DestinationPath
-                    emptyLabel="Default download folder"
-                    extra={
-                        xmlDir ? (
-                            <Button onClick={handleResetXmlDirectory} size="xs" variant="subtle">
-                                Reset to default
-                            </Button>
-                        ) : undefined
-                    }
-                    label="XML Folder"
-                    onChoose={handleSelectXmlDirectory}
-                    path={xmlDir ?? defaultXmlDir}
-                    tooltip="Where the Rekordbox XML is saved. By default it goes alongside your downloaded tracks."
-                />
-            )}
-
-            {/* Where the tracks will end up (web only) — the browser can't tell us
-                this, so the Rekordbox XML's track locations depend on the user
-                telling us where the audio is (or will be). */}
-            {!isElectron() && includeRekordboxXml && (
-                <Stack gap="xs">
-                    <TextInput
-                        description={
-                            includeTracks
-                                ? 'Rekordbox needs this to find the tracks. The zip contains a single music folder; extract it here so that folder sits directly inside.'
-                                : 'Rekordbox needs this to find the tracks, so it must match where the audio actually is.'
-                        }
-                        label={
-                            includeTracks
-                                ? "Folder you'll extract music.zip into"
-                                : 'Folder your tracks are in'
-                        }
-                        onChange={(e) => handleWebExtractPathChange(e.currentTarget.value)}
-                        placeholder={
-                            includeTracks
-                                ? 'e.g. /Users/you/Desktop or C:\\Users\\you\\Desktop'
-                                : 'e.g. /Users/you/Music or C:\\Users\\you\\Music'
-                        }
-                        value={webExtractPath}
+                {/* Where the crates go, when Serato is the format. Not optional here:
+                    without a folder there is nothing to write, and the Download button
+                    says so on the screen behind this. */}
+                {isElectron() && format === 'serato' && (
+                    <DestinationPath
+                        emptyLabel="No _Serato_ folder found — choose one to write crates"
+                        label="Serato Folder"
+                        onChoose={handleSelectSeratoFolder}
+                        path={seratoFolder}
+                        tooltip="The _Serato_ folder your crates are written into. Normally inside your Music folder; on an external drive it is at the top level."
                     />
-                    {/* The `music` segment is added for the user, so show the result:
-                        it's the only way to catch an unzipper that added a wrapper
-                        folder of its own (macOS Archive Utility does this for a
-                        multi-entry zip; Windows' Extract All always does) before the
-                        XML is built against a path that doesn't exist. */}
-                    {includeTracks && webExtractPath.trim().length > 0 && (
-                        <Text c="dimmed" size="xs">
-                            Tracks must end up in{' '}
-                            <Text component="span" size="xs" style={{ fontFamily: 'monospace' }}>
-                                {musicRootFromExtractPath(webExtractPath)}
+                )}
+
+                {/* Where the Rekordbox XML is saved (desktop only) */}
+                {isElectron() && includeRekordboxXml && (
+                    <DestinationPath
+                        emptyLabel="Default download folder"
+                        extra={
+                            xmlDir ? (
+                                <Button
+                                    onClick={handleResetXmlDirectory}
+                                    size="xs"
+                                    variant="subtle"
+                                >
+                                    Reset to default
+                                </Button>
+                            ) : undefined
+                        }
+                        label="XML Folder"
+                        onChoose={handleSelectXmlDirectory}
+                        path={xmlDir ?? defaultXmlDir}
+                        tooltip="Where the Rekordbox XML is saved. By default it goes alongside your downloaded tracks."
+                    />
+                )}
+
+                {/* Where the tracks will end up (web only) — the browser can't tell us
+                    this, so the Rekordbox XML's track locations depend on the user
+                    telling us where the audio is (or will be). */}
+                {!isElectron() && includeRekordboxXml && (
+                    <Stack gap="xs">
+                        <TextInput
+                            description={
+                                includeTracks
+                                    ? 'The zip holds a single music folder; extract it here so that folder sits directly inside.'
+                                    : 'Must match where the audio actually is, or Rekordbox won’t find it.'
+                            }
+                            label={
+                                includeTracks
+                                    ? "Folder you'll extract music.zip into"
+                                    : 'Folder your tracks are in'
+                            }
+                            onChange={(e) => handleWebExtractPathChange(e.currentTarget.value)}
+                            placeholder={
+                                includeTracks
+                                    ? 'e.g. /Users/you/Desktop or C:\\Users\\you\\Desktop'
+                                    : 'e.g. /Users/you/Music or C:\\Users\\you\\Music'
+                            }
+                            value={webExtractPath}
+                        />
+                        {/* The `music` segment is added for the user, so show the result:
+                            it's the only way to catch an unzipper that added a wrapper
+                            folder of its own (macOS Archive Utility does this for a
+                            multi-entry zip; Windows' Extract All always does) before the
+                            XML is built against a path that doesn't exist. */}
+                        {includeTracks && webExtractPath.trim().length > 0 && (
+                            <Text c="dimmed" size="xs">
+                                Tracks must end up in{' '}
+                                <Text
+                                    component="span"
+                                    size="xs"
+                                    style={{ fontFamily: 'monospace' }}
+                                >
+                                    {musicRootFromExtractPath(webExtractPath)}
+                                </Text>
+                                . If your unzipper added an extra folder, move the music folder
+                                here.
                             </Text>
-                            . Check this after extracting. If your unzipper added an extra folder,
-                            move the music folder here or the XML won&apos;t find the tracks.
-                        </Text>
-                    )}
-                </Stack>
-            )}
+                        )}
+                    </Stack>
+                )}
+            </SyncSettingsModal>
 
             <Modal
                 handlers={xmlHelpHandlers}

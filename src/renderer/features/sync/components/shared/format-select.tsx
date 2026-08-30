@@ -7,14 +7,11 @@ import { Text } from '/@/shared/components/text/text';
 
 interface FormatSelectProps {
     /**
-     * How the control and its description sit in the column around them. The flow
-     * screens are a left-aligned column, so `start`. The screens that open a flow are
-     * a centred one, and there `start` leaves the control hanging off the left of a
-     * description wider than itself, out of line with every other thing on the screen.
+     * How the control sits in the column around it. The flow screens are a
+     * left-aligned column, so `start`; the screens that open a flow are a centred
+     * one, and there the control centres with everything else on the screen.
      */
     align?: 'center' | 'start';
-    /** A line under the control saying what this choice means on this screen. */
-    description?: string;
     onChange: (format: LibraryFormat) => void;
     /** `null` leaves both options unselected -- the first-run state on Upload. */
     value: LibraryFormat | null;
@@ -27,18 +24,17 @@ interface FormatSelectProps {
  * never has to know that. What they get is one control, always in the same
  * place, holding whatever they chose last.
  *
+ * Nothing under it says what the choice means. Both words name a piece of
+ * software the user already runs, and a line of prose glossing "Rekordbox" was
+ * one of the two things making this screen read as busy.
+ *
  * A `SegmentedControl` rather than a stack of radios: Mantine renders it from
  * real `<input type="radio">`s, so it is a radio group to a screen reader and to
  * a test, and a two-option mode switch to everyone else. It is also the shared
  * component that already exists, which is worth more than matching the design
  * sketch's dot-and-label drawing.
  */
-export const FormatSelect = ({
-    align = 'start',
-    description,
-    onChange,
-    value,
-}: FormatSelectProps) => {
+export const FormatSelect = ({ align = 'start', onChange, value }: FormatSelectProps) => {
     // Serato means reading and writing crate files on this machine, which a
     // browser can neither reach nor be told about. Disabled with the reason
     // attached, rather than absent: a Serato DJ on the web player should find out
@@ -58,16 +54,10 @@ export const FormatSelect = ({
                 value={value ?? ''}
                 w="fit-content"
             />
-            {seratoUnavailable ? (
+            {seratoUnavailable && (
                 <Text c="dimmed" size="xs" ta={align}>
-                    Serato crates are written to this computer, so they need the desktop app.
+                    Serato crates need the desktop app.
                 </Text>
-            ) : (
-                description && (
-                    <Text c="dimmed" size="xs" ta={align}>
-                        {description}
-                    </Text>
-                )
             )}
         </Stack>
     );

@@ -30,6 +30,16 @@ interface SyncFlowProps {
     title: string;
 }
 
+/**
+ * Eats the space between a short screen's content and its footer.
+ *
+ * A list-shaped step fills the pane on its own, so the footer button lands at the
+ * bottom. The screens that open a flow are two lines and a control, and without
+ * this their button floats halfway up the page — the one thing that made them read
+ * as a different kind of screen from the ones they lead to.
+ */
+export const SyncFlowFill = () => <div style={{ flex: 1 }} />;
+
 /** The framing every list-shaped Sync step shares: header, Back, error slot, footer. */
 export const SyncFlow = ({
     children,
