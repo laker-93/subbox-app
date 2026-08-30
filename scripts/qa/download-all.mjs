@@ -78,7 +78,12 @@ async function main() {
         .getByText(/^Sync$/)
         .first()
         .click();
-    await page.getByRole('button', { name: /^Download$/ }).click();
+    // .first(): the Sync tab strip's "Download" tab. The preview screen's primary
+    // action carries the same name now.
+    await page
+        .getByRole('button', { name: /^Download$/ })
+        .first()
+        .click();
 
     // Select step: grab the playlist count, select all, preview.
     await page
@@ -102,11 +107,13 @@ async function main() {
     }
     await previewBtn.click();
 
-    // Preview step: wait for the plan, then trigger the actual download.
-    const downloadBtn = page.getByRole('button', { name: /^Download & Extract$/ });
+    // Preview step: wait for the plan, then trigger the actual download. The
+    // primary button is a plain "Download" in every mode now, and the Sync tab strip
+    // has a "Download" tab above the panel — the action is the later of the two.
+    const downloadBtn = page.getByRole('button', { name: /^Download$/ }).last();
     await downloadBtn.waitFor({ state: 'visible', timeout: 60_000 });
     await page.screenshot({ path: shot('02-preview') });
-    console.log('[driver] preview rendered; clicking Download & Extract');
+    console.log('[driver] preview rendered; clicking Download');
     await downloadBtn.click();
 
     // The critical wait: either the done screen or a surfaced error must appear.

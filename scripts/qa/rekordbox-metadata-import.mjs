@@ -18,7 +18,7 @@ import {
 //   2. "Select XML File" — native file picker is stubbed in the MAIN process to
 //      resolve to QA_XML_PATH (Playwright can't drive a real OS file dialog)
 //   3. Preview step — tick "Import metadata only (no track uploads)"
-//   4. "Import Metadata Only" -> ipc sync:upload-xml (uploads the XML to
+//   4. "Upload", with "Import metadata only" ticked -> ipc sync:upload-xml (uploads the XML to
 //      filebrowser) -> PymixController.rbImport -> polls importProgress until done
 //
 // QA_XML_PATH should be a real Rekordbox XML whose tracks already exist in the
@@ -115,9 +115,9 @@ async function main() {
     await metaCheckbox.click();
     await page.waitForTimeout(300);
 
-    const submitBtn = page.getByRole('button', { name: /import metadata only/i }).last();
+    const submitBtn = page.getByRole('button', { name: /^upload$/i }).last();
     await submitBtn.click();
-    console.log('clicked Import Metadata Only — uploading XML + triggering /rekordbox/import');
+    console.log('clicked Upload with metadata-only ticked — uploading XML + triggering /rekordbox/import');
 
     // --- Wait for terminal state: "Upload Complete" (done) or an error string ---
     const deadline = Date.now() + IMPORT_TIMEOUT_MS;

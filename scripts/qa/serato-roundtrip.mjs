@@ -6,9 +6,11 @@ import { _electron as electron } from 'playwright';
 import { devRequest, pymixLogin, subsonic } from './dev-http.mjs';
 import { resetLibrary } from './reset-library.mjs';
 import {
+    closeSyncSettings,
     forceFreshLogin,
     getCredentials,
     isLoggedOut,
+    openSyncSettings,
     performLogin,
     resolveAppEntry,
     ROOT,
@@ -287,12 +289,17 @@ async function phaseSeratoUpload(fixtureSnap) {
         await selectSegment(page, /^serato$/i);
         await page.waitForTimeout(500);
 
-        // "Select Serato Folder" / "Choose a Different Folder" — the label depends on
-        // whether the app found a default library, which this machine has.
+        // The folder picker moved behind the settings cog when the Upload entry
+        // screen was rebuilt to match Download's: choosing a folder no longer walks
+        // straight into the parse, so the read is its own click afterwards.
+        await openSyncSettings(page);
         await page
-            .getByRole('button', { name: /select serato folder|choose a different folder/i })
+            .getByRole('button', { name: /choose serato folder|change serato folder/i })
             .first()
             .click();
+        await page.waitForTimeout(500);
+        await closeSyncSettings(page);
+        await page.getByRole('button', { name: /^read library$/i }).first().click();
         await page.getByText(/preview changes/i).first().waitFor({ timeout: 30_000 });
 
         // innerText applies CSS text-transform, and Mantine badges are uppercase —
@@ -314,7 +321,7 @@ async function phaseSeratoUpload(fixtureSnap) {
         );
         await shot(page, 'serato-preview');
 
-        await page.getByRole('button', { name: /upload selected crates/i }).first().click();
+        await page.getByRole('button', { name: /^upload$/i }).last().click();
         log('uploading crates…');
         const { body, state } = await waitForOutcome(
             page,
@@ -369,15 +376,18 @@ async function phaseRekordboxExport(fixtureSnap) {
 
         // "Format" persists in the app store, so it carries over between phases and
         // between runs — select it rather than trusting whatever the last one left.
+        // Format is still on the screen; Include moved behind the settings cog in
+        // the de-clutter pass, so it has to be opened to be asserted on.
         await selectSegment(page, /^rekordbox$/i);
+        await openSyncSettings(page);
         await selectSegment(page, /^tracks \+ xml$/i);
+        await closeSyncSettings(page);
         await page.waitForTimeout(300);
         await shot(page, 'download-preview');
 
-        await page
-            .getByRole('button', { name: /download & extract|download zip|download rekordbox xml/i })
-            .first()
-            .click();
+        // Plain "Download" in every mode now. `.last()` because the Sync tab strip
+        // above the panel has a "Download" tab of its own.
+        await page.getByRole('button', { name: /^download$/i }).last().click();
         log('downloading tracks + XML…');
         const { body, state } = await waitForOutcome(
             page,
@@ -455,7 +465,7 @@ async function phaseRekordboxImport(xmlPath, fixtureSnap) {
         await page.getByText(/preview changes/i).first().waitFor({ timeout: 30_000 });
         await shot(page, 'rekordbox-preview');
 
-        await page.getByRole('button', { name: /upload selected playlists/i }).last().click();
+        await page.getByRole('button', { name: /^upload$/i }).last().click();
         log('uploading the exported XML back in…');
         const { body, state } = await waitForOutcome(
             page,
@@ -513,7 +523,10 @@ async function phaseSeratoExport(fixtureSnap) {
         // is asserting. Select Rekordbox first, then point the crate writer at the
         // throwaway _Serato_ (the stubbed dialog resolves to it), then tick the box the
         // folder enables.
+        // Format stays on the screen; Include, the crate tick box and the folder
+        // pickers all live behind the settings cog since the de-clutter pass.
         await selectSegment(page, /^rekordbox$/i);
+        await openSyncSettings(page);
         await selectSegment(page, /^tracks \+ xml$/i);
         await page
             .getByRole('button', { name: /choose serato folder|change serato folder/i })
@@ -523,12 +536,13 @@ async function phaseSeratoExport(fixtureSnap) {
         const crateBox = page.getByRole('checkbox', { name: /also write serato crates/i });
         await crateBox.check();
         await page.waitForTimeout(300);
+        await shot(page, 'serato-export-settings');
+        await closeSyncSettings(page);
         await shot(page, 'serato-export-preview');
 
-        await page
-            .getByRole('button', { name: /download & extract|download zip|download rekordbox xml/i })
-            .first()
-            .click();
+        // Plain "Download" in every mode now. `.last()` because the Sync tab strip
+        // above the panel has a "Download" tab of its own.
+        await page.getByRole('button', { name: /^download$/i }).last().click();
         log('writing Serato crates…');
         const { body, state } = await waitForOutcome(
             page,

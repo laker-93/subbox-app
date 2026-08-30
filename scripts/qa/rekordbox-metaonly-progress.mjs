@@ -91,7 +91,7 @@ async function main() {
     // fires on every single run of this path, not just an edge case.
     await page.getByText(/import metadata only/i).first().click();
     await page.waitForTimeout(300);
-    await page.getByRole('button', { name: /import metadata only/i }).last().click();
+    await page.getByRole('button', { name: /^upload$/i }).last().click();
     console.log('submitted metadata-only import (n_tracks_for_import will be 0)');
 
     const t0 = Date.now();

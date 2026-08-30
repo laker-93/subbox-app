@@ -127,7 +127,7 @@ async function main() {
     await page.waitForTimeout(500);
     await page.getByRole('button', { name: /select xml file/i }).first().click();
     await page.getByText(/preview changes/i).first().waitFor({ timeout: 20_000 });
-    await page.getByRole('button', { name: /upload selected playlists/i }).last().click();
+    await page.getByRole('button', { name: /^upload$/i }).last().click();
     console.log('upload started');
 
     // Sample the progress screen until the job reaches a terminal state.

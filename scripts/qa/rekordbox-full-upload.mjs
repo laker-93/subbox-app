@@ -23,7 +23,7 @@ import {
 //   2. "Select XML File" — native file picker is stubbed in the MAIN process to
 //      resolve to QA_XML_PATH (Playwright can't drive a real OS file dialog)
 //   3. Preview step — leave "Import metadata only" UNCHECKED, all playlists
-//      pre-selected -> "Upload Selected Playlists"
+//      pre-selected -> "Upload"
 //   4. ipc sync:upload-from-xml (uploads XML + each track's audio via TUS to
 //      filebrowser) -> PymixController.rbImport -> polls importProgress until done
 //
@@ -115,9 +115,9 @@ async function main() {
     const badges = await page.locator('.mantine-Badge-root, [class*="Badge"]').allTextContents();
     console.log('preview badges:', badges.filter(Boolean));
 
-    const submitBtn = page.getByRole('button', { name: /upload selected playlists/i }).last();
+    const submitBtn = page.getByRole('button', { name: /^upload$/i }).last();
     await submitBtn.click();
-    console.log('clicked Upload Selected Playlists — uploading XML + audio via TUS + triggering /rekordbox/import');
+    console.log('clicked Upload — uploading XML + audio via TUS + triggering /rekordbox/import');
 
     // --- Wait for terminal state: "Upload Complete" (done) or an error string ---
     const deadline = Date.now() + IMPORT_TIMEOUT_MS;

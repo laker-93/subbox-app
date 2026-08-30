@@ -53,7 +53,9 @@ async function main() {
         .getByText(/^Sync$/)
         .first()
         .click();
-    await page.getByRole('button', { name: /^Download$/ }).click();
+    // .first(): the Sync tab strip's "Download" tab. The preview screen's primary
+    // action carries the same name now.
+    await page.getByRole('button', { name: /^Download$/ }).first().click();
 
     await page
         .getByText(/playlists?$/)
@@ -72,7 +74,9 @@ async function main() {
     }
     await previewBtn.click();
 
-    const downloadBtn = page.getByRole('button', { name: /^Download Zip$/ });
+    // Plain "Download" in every mode now; the Sync tab strip's own "Download" tab
+    // sits above the panel, so the action is the later of the two.
+    const downloadBtn = page.getByRole('button', { name: /^Download$/ }).last();
     await downloadBtn.waitFor({ state: 'visible', timeout: 30_000 });
     await page.screenshot({ path: shot('02-preview') });
 

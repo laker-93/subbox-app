@@ -3,12 +3,19 @@ import { chromium } from 'playwright';
 
 import {
     checkedSegment,
+    closeSyncSettings,
     getCredentials,
+    openSyncSettings,
     performLogin,
     segment,
     selectSegment,
     SNAPSHOT_DIR,
 } from '../ui-snapshot-shared.mjs';
+
+// The Sync tab strip has a "Download" button too, and the primary action on the
+// preview screen is now called plain "Download" in every mode. The tab strip is
+// rendered above the panel, so the action is always the later of the two.
+const primaryDownload = (page) => page.getByRole('button', { name: /^Download$/ }).last();
 
 // Regression driver for the rebuilt Sync -> Download screen's WEB branch
 // (subbox-app #101/#102/#103), against `pnpm dev:web` (port 4343) — the only
@@ -57,7 +64,7 @@ async function main() {
 
     await page.getByText('Sync', { exact: true }).first().click();
     await page.waitForTimeout(500);
-    await page.getByRole('button', { name: /^Download$/ }).click();
+    await page.getByRole('button', { name: /^Download$/ }).first().click();
 
     await page.getByText(targetPlaylist, { exact: true }).first().waitFor({ timeout: 15_000 });
     await page.getByText(targetPlaylist, { exact: true }).first().click();
@@ -72,15 +79,19 @@ async function main() {
     await previewBtn.click();
 
     // ── Manifest checks (web has no diff, just what's in the file) ─────────
+    // "Include" moved behind the settings cog in the de-clutter pass; "Format" is
+    // still the one control on the screen itself.
     const includeOptions = [/^tracks \+ xml$/i, /^xml only$/i];
-    const includeTracksSeg = segment(page, includeOptions[0]);
-    await includeTracksSeg.waitFor({ state: 'attached', timeout: 20_000 });
+    await segment(page, /^rekordbox$/i).waitFor({ state: 'attached', timeout: 20_000 });
 
+    await openSyncSettings(page);
+    const includeTracksSeg = segment(page, includeOptions[0]);
     const controlsPresent =
         (await segment(page, /^rekordbox$/i).count()) > 0 &&
         (await includeTracksSeg.count()) > 0;
-    console.log('format + include controls present:', controlsPresent);
+    console.log('format control on screen + include control under the cog:', controlsPresent);
     console.log('include on arrival:', await checkedSegment(page, includeOptions));
+    await closeSyncSettings(page);
 
     // The web pin: Serato offered but disabled, Rekordbox selected and unchangeable.
     const seratoDisabled = await segment(page, /^serato$/i).isDisabled().catch(() => null);
@@ -109,10 +120,12 @@ async function main() {
     );
     await page.screenshot({ path: shot('02-manifest') });
 
-    // ── Web-only extraction-path field, required when XML is ticked ────────
+    // ── Web-only extraction-path field (in the settings modal), required when
+    //    the XML is being produced. Set it and switch Include in the same visit.
+    await openSyncSettings(page);
     const extractPathInput = page.getByPlaceholder(/Users\/you\/(Desktop|Music)/i);
     const extractPathVisible = await extractPathInput.isVisible().catch(() => false);
-    console.log('web extraction-path field present:', extractPathVisible);
+    console.log('web extraction-path field present in settings:', extractPathVisible);
     if (extractPathVisible) {
         await extractPathInput.fill('/tmp/qa-web-sync-manifest');
         await page.waitForTimeout(300);
@@ -120,12 +133,13 @@ async function main() {
 
     // ── XML-only download (switch "Include" to XML only) ────────────────────
     await selectSegment(page, /^xml only$/i);
-    await page.waitForTimeout(300);
-    const downloadButton = page.getByRole('button', {
-        name: /download rekordbox xml|download zip/i,
-    });
-    const xmlOnlyLabel = await downloadButton.textContent().catch(() => null);
-    console.log('download button label with tracks unticked:', xmlOnlyLabel);
+    await closeSyncSettings(page);
+
+    // The button is a plain "Download" in every mode now; the screen carries the
+    // mode in a badge instead.
+    const bodyAfterXmlOnly = await page.locator('body').innerText().catch(() => '');
+    console.log('screen shows an "XML only" badge:', /xml only/i.test(bodyAfterXmlOnly));
+    const downloadButton = primaryDownload(page);
     const xmlOnlyEnabled = await downloadButton.isEnabled().catch(() => false);
     console.log('XML-only download button enabled:', xmlOnlyEnabled);
 
@@ -165,22 +179,23 @@ async function main() {
         }
         console.log('preview button enabled after retry loop:', await previewBtn.isEnabled().catch(() => false));
         await previewBtn.click();
-        await includeTracksSeg.waitFor({ state: 'attached', timeout: 20_000 });
+        await segment(page, /^rekordbox$/i).waitFor({ state: 'attached', timeout: 20_000 });
 
+        await openSyncSettings(page);
         // "Include" is plain component state, not reset by "Start Over" (confirmed on
         // desktop 2026-08-14) — expect it's still on "XML only" here.
         const persistedXmlOnly = await segment(page, /^xml only$/i).isChecked().catch(() => false);
         console.log('include persisted on "XML only" from the previous run:', persistedXmlOnly);
         await selectSegment(page, /^tracks \+ xml$/i);
-        await page.waitForTimeout(300);
         const extractPathInput2 = page.getByPlaceholder(/Users\/you\/(Desktop|Music)/i);
         if (await extractPathInput2.isVisible().catch(() => false)) {
             const currentVal = await extractPathInput2.inputValue().catch(() => '');
             if (!currentVal) await extractPathInput2.fill('/tmp/qa-web-sync-manifest');
             await page.waitForTimeout(300);
         }
+        await closeSyncSettings(page);
 
-        const downloadButton2 = page.getByRole('button', { name: /download zip/i });
+        const downloadButton2 = primaryDownload(page);
         if (await downloadButton2.isEnabled().catch(() => false)) {
             const downloadEventPromise2 = page
                 .waitForEvent('download', { timeout: 60_000 })

@@ -92,7 +92,9 @@ async function main() {
 
     // The app's music folder, per its own default-XML-directory IPC handler
     // (getAppPath()) — this is where downloads and the default XML should land.
-    const appPath = await page.evaluate(() => window.api.ipc.invoke('sync:get-default-xml-directory'));
+    const appPath = await page.evaluate(() =>
+        window.api.ipc.invoke('sync:get-default-xml-directory'),
+    );
     const musicPath = path.join(appPath, 'music');
     console.log('app music folder:', musicPath);
 
@@ -150,11 +152,18 @@ async function main() {
     }
     await selectSegment(page, 'Rekordbox');
     const rekordboxSelected = (await checkedSegment(page, ['Rekordbox', 'Serato'])) === 'Rekordbox';
-    console.log('Serato offered:', seratoOffered, '| Rekordbox selected for this run:', rekordboxSelected);
+    console.log(
+        'Serato offered:',
+        seratoOffered,
+        '| Rekordbox selected for this run:',
+        rekordboxSelected,
+    );
 
-    const downloadButton = page.getByRole('button', { name: /^download missing tracks \+ xml$/i });
+    // Plain "Download" in every format now (it used to name the output). The Sync
+    // tab strip's own "Download" tab is above the panel, so take the later one.
+    const downloadButton = page.getByRole('button', { name: /^download$/i }).last();
     if (!(await downloadButton.isEnabled().catch(() => false))) {
-        throw new Error('Download Missing Tracks + XML disabled — expected an empty scratch dir to show missing tracks');
+        throw new Error('Download disabled — expected an empty scratch dir to show missing tracks');
     }
     await downloadButton.click();
 
@@ -172,7 +181,10 @@ async function main() {
     console.log('screenshot:', shotPath);
 
     if (result !== 'done') {
-        const bodyText = await page.locator('body').innerText().catch(() => '(unreadable)');
+        const bodyText = await page
+            .locator('body')
+            .innerText()
+            .catch(() => '(unreadable)');
         console.log('--- visible text on non-done result ---');
         console.log(bodyText.slice(0, 1500));
         console.log('--- console/page errors ---');
@@ -181,8 +193,14 @@ async function main() {
         throw new Error(`download did not complete: ${result}`);
     }
 
-    const showMusicVisible = await page.getByRole('button', { name: /^show music$/i }).isVisible().catch(() => false);
-    const showXmlVisible = await page.getByRole('button', { name: /^show rekordbox xml$/i }).isVisible().catch(() => false);
+    const showMusicVisible = await page
+        .getByRole('button', { name: /^show music$/i })
+        .isVisible()
+        .catch(() => false);
+    const showXmlVisible = await page
+        .getByRole('button', { name: /^show rekordbox xml$/i })
+        .isVisible()
+        .catch(() => false);
     console.log('Show Music button visible:', showMusicVisible);
     console.log('Show Rekordbox XML button visible:', showXmlVisible);
 
@@ -199,19 +217,24 @@ async function main() {
     fs.rmSync(destDir, { recursive: true, force: true });
 
     const failures = [];
-    if (driveAudioCount !== 0) failures.push('drive folder should stay empty (compare-only) but has audio files');
+    if (driveAudioCount !== 0)
+        failures.push('drive folder should stay empty (compare-only) but has audio files');
     if (musicAudioCount === 0) failures.push('no audio files landed in the app music folder');
     if (!xmlExists) failures.push('Rekordbox XML was not created');
-    if (!seratoOffered) failures.push('Serato was not selectable in the format control (design step 4 gap)');
+    if (!seratoOffered)
+        failures.push('Serato was not selectable in the format control (design step 4 gap)');
     if (!rekordboxSelected) failures.push('could not select Rekordbox in the format control');
     if (!showMusicVisible) failures.push('Show Music button missing on done screen');
     if (!showXmlVisible) failures.push('Show Rekordbox XML button missing on done screen');
-    if (!clarifiedCopyVisible) failures.push('clarified "downloads go to Subbox library" copy not found on select screen');
+    if (!clarifiedCopyVisible)
+        failures.push('clarified "downloads go to Subbox library" copy not found on select screen');
 
     if (failures.length > 0) {
         throw new Error(`FAIL:\n - ${failures.join('\n - ')}`);
     }
-    console.log(`PASS: ${musicAudioCount} audio file(s) in the library, XML exported, drive left untouched.`);
+    console.log(
+        `PASS: ${musicAudioCount} audio file(s) in the library, XML exported, drive left untouched.`,
+    );
 }
 
 main().catch((err) => {

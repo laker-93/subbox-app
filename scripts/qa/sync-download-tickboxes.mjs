@@ -4,9 +4,11 @@ import { _electron as electron } from 'playwright';
 
 import {
     checkedSegment,
+    closeSyncSettings,
     forceFreshLogin,
     getCredentials,
     isLoggedOut,
+    openSyncSettings,
     performLogin,
     resolveAppEntry,
     segment,
@@ -17,8 +19,11 @@ import {
 // Regression driver for the rebuilt Sync -> Download screen (subbox-app #101/#102/#103),
 // updated for the sync-ui substrate work: the three tick-boxes ("Include tracks",
 // "Include Rekordbox XML", "Write Serato crates") are now two segmented controls —
-// "Format" (Rekordbox | Serato) and "Include" (Tracks + XML | XML only). The file keeps
-// its old name so the QA journal's references to it still resolve. Desktop (Electron)
+// "Format" (Rekordbox | Serato) on the screen, and "Include" (Tracks + XML | XML only)
+// behind the settings cog, where the de-clutter pass moved it along with every folder
+// picker. The primary button is a plain "Download" in every mode now, so this no longer
+// reads the choice back off it. The file keeps its old name so the QA journal's
+// references to it still resolve. Desktop (Electron)
 // only — the web build takes a structurally different branch (manifest, no diff,
 // `user_root` gets a `music` segment) and has its own driver, web-sync-manifest.mjs.
 //
@@ -99,24 +104,34 @@ async function main() {
     // whether they are attached rather than isVisible(), which is false by design.
     const formatOptions = [/^rekordbox$/i, /^serato$/i];
     const includeOptions = [/^tracks \+ xml$/i, /^xml only$/i];
-    const controlsPresent =
-        (await segment(page, formatOptions[0]).count()) > 0 &&
-        (await segment(page, includeOptions[0]).count()) > 0;
-    console.log('format + include controls present:', controlsPresent);
-    if (!controlsPresent) {
+    const formatPresent = (await segment(page, formatOptions[0]).count()) > 0;
+    console.log('format control present on the screen:', formatPresent);
+    if (!formatPresent) {
         await shot('format-controls-missing');
-        throw new Error('Format/Include segmented controls not found on the preview screen');
+        throw new Error('Format segmented control not found on the preview screen');
     }
     console.log('format on arrival:', await checkedSegment(page, formatOptions));
+
+    // Include moved behind the cog. Confirm it is reachable and read its state there.
+    await openSyncSettings(page);
+    const includePresent = (await segment(page, includeOptions[0]).count()) > 0;
+    console.log('include control present in the settings modal:', includePresent);
+    if (!includePresent) {
+        await shot('include-control-missing');
+        throw new Error('Include segmented control not found in the settings modal');
+    }
     console.log('include on arrival:', await checkedSegment(page, includeOptions));
+    await closeSyncSettings(page);
 
     // Pin the format, since it persists across runs (see the header note). Serato must
     // be offered on desktop — it is the half of the control the web build cannot have.
     console.log('Serato selectable on desktop:', !(await segment(page, /^serato$/i).isDisabled()));
     await selectSegment(page, /^rekordbox$/i);
     await page.waitForTimeout(300);
+    await openSyncSettings(page);
     const includeDefault = await checkedSegment(page, includeOptions);
     console.log('include default under Rekordbox:', includeDefault);
+    await closeSyncSettings(page);
 
     // Desktop keeps the full diff: 3 tabs + already-present/to-download/metadata badges.
     const missingTab = page.getByRole('button', { name: /^missing \(\d+\)$/i });
@@ -139,18 +154,21 @@ async function main() {
     );
     await shot('preview');
 
-    // ── XML-only download (switch "Include" to XML only) ───────────────────
+    // ── XML-only download (switch "Include" to XML only, under the cog) ────
+    await openSyncSettings(page);
     await selectSegment(page, /^xml only$/i);
-    await page.waitForTimeout(300);
-    const downloadBtnLabel1 = await page
-        .getByRole('button', { name: /download rekordbox xml|download & extract|download zip/i })
-        .textContent()
-        .catch(() => null);
-    console.log('download button label with tracks unticked:', downloadBtnLabel1);
+    await closeSyncSettings(page);
 
-    const downloadButton = page.getByRole('button', {
-        name: /download rekordbox xml|download & extract|download zip/i,
-    });
+    // The button no longer renames itself per mode — one "Download" in all of them,
+    // which is the point of the change. What the screen still has to show is *that*
+    // it is XML-only, and it does that in a badge beside the format control.
+    const bodyAfterXmlOnly = await page
+        .locator('body')
+        .innerText()
+        .catch(() => '');
+    console.log('screen shows an "XML only" badge:', /xml only/i.test(bodyAfterXmlOnly));
+
+    const downloadButton = page.getByRole('button', { name: /^download$/i });
     const xmlOnlyEnabled = await downloadButton.isEnabled().catch(() => false);
     console.log('XML-only download button enabled:', xmlOnlyEnabled);
     let xmlOnlyOutcome = 'skipped (button disabled)';
@@ -210,16 +228,15 @@ async function main() {
         // have left it on "XML only" here. (The real, verified behavior, not a driver
         // bug — see the log/doc note. "Format" persists for a different reason: it is
         // in the app store.) Switch back explicitly to test the tracks+XML combo.
+        await openSyncSettings(page);
         const persistedXmlOnly = await segment(page, /^xml only$/i)
             .isChecked()
             .catch(() => false);
         console.log('include persisted on "XML only" from the previous run:', persistedXmlOnly);
         await selectSegment(page, /^tracks \+ xml$/i);
-        await page.waitForTimeout(300);
+        await closeSyncSettings(page);
 
-        const downloadButton2 = page.getByRole('button', {
-            name: /download & extract|download zip/i,
-        });
+        const downloadButton2 = page.getByRole('button', { name: /^download$/i });
         if (await downloadButton2.isEnabled().catch(() => false)) {
             await downloadButton2.click();
             tracksAndXmlOutcome = await Promise.race([

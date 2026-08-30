@@ -98,9 +98,11 @@ async function main() {
     }
 
     if (process.env.QA_DOWNLOAD === '1') {
-        const downloadButton = page.getByRole('button', { name: /^download & extract$/i });
+        // Plain "Download" in every mode since the de-clutter pass. `.last()`
+        // because the Sync tab strip above the panel has a "Download" tab too.
+        const downloadButton = page.getByRole('button', { name: /^download$/i }).last();
         const downloadEnabled = await downloadButton.isEnabled().catch(() => false);
-        console.log('download & extract button enabled:', downloadEnabled);
+        console.log('download button enabled:', downloadEnabled);
         if (downloadEnabled) {
             await downloadButton.click();
             // Real network transfer (zip download from filebrowser + unzip) — poll

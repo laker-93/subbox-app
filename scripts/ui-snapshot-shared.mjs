@@ -177,6 +177,31 @@ export async function selectSegment(page, name, { timeout = 15_000 } = {}) {
     throw new Error(`clicked the label for ${name} but the option never became selected`);
 }
 
+/**
+ * Open the Sync settings modal — the cog beside a preview screen's title.
+ *
+ * Download's "Include" control and every folder picker moved behind this in the
+ * de-clutter pass, so a driver that used to click them on the screen has to open
+ * the cog first. The button carries an explicit `aria-label` for exactly this.
+ */
+export async function openSyncSettings(page, { timeout = 15_000 } = {}) {
+    const cog = page.getByRole('button', { name: /^settings$/i });
+    await cog.waitFor({ state: 'visible', timeout });
+    await cog.click();
+    // The modal is a portal, so wait on the dialog rather than the button state.
+    await page
+        .getByRole('dialog')
+        .waitFor({ state: 'visible', timeout })
+        .catch(() => {});
+    await page.waitForTimeout(300);
+}
+
+/** Close it again. Escape rather than the X, whose close button has no name. */
+export async function closeSyncSettings(page) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+}
+
 /** Which option of a segmented control is selected, as its visible label. */
 export async function checkedSegment(page, names) {
     for (const name of names) {
