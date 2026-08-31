@@ -105,8 +105,8 @@ export const SyncModePlaceholder = () => {
                         <SyncUpload />
                     ) : (
                         <SyncDesktopOnly>
-                            Uploading is only available in the desktop app — it reads your XML
-                            export or crate files off this computer.
+                            Uploading is only available in the desktop app. It reads your XML export
+                            or crate files off this computer.
                         </SyncDesktopOnly>
                     ))}
                 {tab === 'download' && (

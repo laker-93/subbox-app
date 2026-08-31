@@ -94,7 +94,7 @@ export const SyncExternalDrive = () => {
         writeCrates,
     } = useSeratoCrates();
     const [xmlHelpOpened, xmlHelpHandlers] = useDisclosure(false);
-    // Where this screen's folders live now — same cog, same modal, same place as
+    // Where this screen's folders live now: same cog, same modal, same place as
     // on Download, which is the screen this one is a variation of.
     const [settingsOpened, settingsHandlers] = useDisclosure(false);
     // The folder the Rekordbox XML is saved to. `xmlDir` is the user's override
@@ -336,7 +336,7 @@ export const SyncExternalDrive = () => {
                     <TextTitle order={3}>External Drive Comparison</TextTitle>
                     <Text c="dimmed" size="sm">
                         See which tracks from your playlists aren&apos;t on the drive yet. The drive
-                        is only read — anything missing is downloaded to your Sub-box music folder,
+                        is only read. Anything missing is downloaded to your Sub-box music folder,
                         and your DJ software exports it to the drive from there.
                     </Text>
                 </Stack>
@@ -759,11 +759,11 @@ export const SyncExternalDrive = () => {
                     so rather than leaving the dead button unexplained. */}
                 {format === 'serato' && (
                     <DestinationPath
-                        emptyLabel="No _Serato_ folder found — choose one to write crates"
+                        emptyLabel="No _Serato_ folder found. Choose one to write crates"
                         label="Serato Folder"
                         onChoose={handleSelectSeratoFolder}
                         path={seratoFolder}
-                        tooltip="The _Serato_ folder your crates are written into. It has to be on the same drive as your music, so this is normally the one in your Music folder — not one on the USB."
+                        tooltip="The _Serato_ folder your crates are written into. It has to be on the same drive as your music, so this is normally the one in your Music folder, not one on the USB."
                     />
                 )}
             </SyncSettingsModal>
@@ -804,7 +804,7 @@ export const SyncExternalDrive = () => {
                         <>
                             <Text size="sm">
                                 The missing tracks are downloaded into your Sub-box library and the
-                                crates are written into your Serato library on this computer —
+                                crates are written into your Serato library on this computer,
                                 pointing at those tracks, with their cues.
                             </Text>
                             <Stack gap="md">
@@ -820,8 +820,8 @@ export const SyncExternalDrive = () => {
                                     <Text size="sm">
                                         Drag the crates onto your USB in Serato, as you normally
                                         would. Serato copies the audio across and writes a library
-                                        on the drive itself — which is why the crates are written
-                                        here rather than straight onto the USB: a crate&apos;s track
+                                        on the drive itself. That is why the crates are written here
+                                        rather than straight onto the USB: a crate&apos;s track
                                         paths are stored relative to the drive it lives on.
                                     </Text>
                                 </Stack>

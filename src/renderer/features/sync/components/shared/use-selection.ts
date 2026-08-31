@@ -5,7 +5,7 @@ import { useCallback, useState } from 'react';
  * three ways they change.
  *
  * Written out identically in four flows before this, which is how `selectAll`
- * came to mean "all the ids I was rendering when this callback was made" — a
+ * came to mean "all the ids I was rendering when this callback was made": a
  * stale-closure bug waiting on any list that can refresh under the user. Taking
  * the ids as an argument instead of closing over them is the point of the hook.
  */

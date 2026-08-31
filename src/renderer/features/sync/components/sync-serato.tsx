@@ -379,7 +379,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
     // ── Idle: pick the library ─────────────────────────────────────────────
     if (step === 'idle') {
         return (
-            // Titled, top-left, one full-width button at the bottom — the same page
+            // Titled, top-left, one full-width button at the bottom: the same page
             // as the Rekordbox screen beside it and the Download screens it leads to.
             // The folder chooser is behind the cog: it is set once and then right
             // forever, and as a second full-width button under the first it read as
@@ -413,7 +413,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                     <Text c="dimmed" size="sm">
                         {t('page.sync.serato.description', {
                             defaultValue:
-                                'Sub-box reads the crates in your Serato library — your playlists and tracks, hot cues and all.',
+                                'Sub-box reads the crates in your Serato library: your playlists and tracks, hot cues and all.',
                         })}
                     </Text>
                 }
@@ -427,9 +427,9 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                 {/* The path stays on the screen even though its chooser doesn't.
                     Which library is about to be read is the one thing the user has
                     to be able to check before clicking, and the default is found for
-                    them — so it is an answer to confirm, not a setting to go open. */}
+                    them. So it is an answer to confirm, not a setting to go open. */}
                 <PathText
-                    placeholder="No Serato library found — choose your _Serato_ folder under the cog"
+                    placeholder="No Serato library found. Choose your _Serato_ folder under the cog"
                     value={seratoFolder}
                 />
 
@@ -438,7 +438,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                 <Text c="dimmed" size="xs">
                     {t('page.sync.serato.quitFirst', {
                         defaultValue:
-                            'Quit Serato first — it rewrites its crate files when it closes.',
+                            'Quit Serato first. It rewrites its crate files when it closes.',
                     })}
                 </Text>
 
@@ -450,7 +450,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                     title="Upload Settings"
                 >
                     <DestinationPath
-                        emptyLabel="No _Serato_ folder found — choose one to read your crates"
+                        emptyLabel="No _Serato_ folder found. Choose one to read your crates"
                         label="Serato Folder"
                         onChoose={handleChooseFolder}
                         path={seratoFolder}
@@ -745,7 +745,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                     )}
                     {/* The server's own account of what it left out. A crate can
                         name a track that is in no state to be placed in a playlist,
-                        and the job still succeeds — so this is the only place the
+                        and the job still succeeds. So this is the only place the
                         shortfall is ever explained. */}
                     {importProgress?.warnings && (
                         <Text c="dimmed" size="sm" ta="center">

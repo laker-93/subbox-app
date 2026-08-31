@@ -11,8 +11,8 @@ interface RekordboxImportStepsProps {
  * The three steps that turn a downloaded XML into playlists in Rekordbox.
  *
  * These are a fact about Rekordbox, not about any one Sync screen, and they were
- * written out three times across two files — twice in sync-download.tsx alone,
- * behind two different info icons on the same screen. Each caller keeps its own
+ * written out three times across two files (twice in sync-download.tsx alone,
+ * behind two different info icons on the same screen). Each caller keeps its own
  * intro and any steps either side; this is the part that is always the same.
  */
 export const RekordboxImportSteps = ({ startAt = 1 }: RekordboxImportStepsProps) => (

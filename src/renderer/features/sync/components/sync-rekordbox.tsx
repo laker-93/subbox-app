@@ -422,12 +422,12 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                 }
                 subtitle={
                     <Text c="dimmed" size="sm">
-                        {/* The how-to — File → Export Collection — is on the button's
+                        {/* The how-to (File → Export Collection) is on the button's
                             tooltip, where it is wanted at the moment of clicking
                             rather than before it. */}
                         {t('page.sync.rekordbox.description', {
                             defaultValue:
-                                'Sub-box reads a collection XML exported from Rekordbox — your playlists and tracks, cue points and all.',
+                                'Sub-box reads a collection XML exported from Rekordbox: your playlists and tracks, cue points and all.',
                         })}
                     </Text>
                 }
@@ -518,7 +518,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                     onToggle={handleTogglePlaylist}
                     options={
                         <Tooltip
-                            label="Only update track info (cue points, ratings, tags) for music already in your library — no audio is uploaded."
+                            label="Only update track info (cue points, ratings, tags) for music already in your library. No audio is uploaded."
                             multiline
                             openDelay={300}
                             position="right"
@@ -739,7 +739,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                     {/* Nothing uploaded and nothing landed in the library. This used
                         to key off `!importProgress`, which stopped meaning "nothing
                         was imported" once we started polling the metadata-only path
-                        through to the end (#55) — that path always has progress now. */}
+                        through to the end (#55); that path always has progress now. */}
                     {uploadResult.uploaded === 0 &&
                     (importProgress?.n_tracks_processed ?? 0) === 0 ? (
                         <Text c="dimmed" size="sm">

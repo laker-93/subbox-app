@@ -19,7 +19,7 @@ interface SyncStorageExceededProps {
     /** The server's own explanation, if it gave one. */
     error?: null | string;
     /**
-     * The way out that is specific to this flow — Serato's "Playlists only"
+     * The way out that is specific to this flow: Serato's "Playlists only"
      * escape hatch, Rekordbox's Discord paragraph.
      */
     note?: ReactNode;

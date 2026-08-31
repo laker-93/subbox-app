@@ -20,7 +20,7 @@ interface FormatSelectProps {
 /**
  * Rekordbox or Serato, in the same slot on every screen that has a format.
  *
- * Going in it picks the source, coming out it picks the output — but the user
+ * Going in it picks the source, coming out it picks the output. But the user
  * never has to know that. What they get is one control, always in the same
  * place, holding whatever they chose last.
  *

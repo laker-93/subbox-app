@@ -2,7 +2,7 @@
  * Byte and duration formatting for the Sync screens.
  *
  * Written out twice before this, identically, in sync-download.tsx and
- * sync-external-drive.tsx — and they have to agree: the same plan's size is
+ * sync-external-drive.tsx. And they have to agree: the same plan's size is
  * quoted on both screens.
  */
 

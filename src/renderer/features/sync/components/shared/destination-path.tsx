@@ -8,7 +8,7 @@ import { Stack } from '/@/shared/components/stack/stack';
 interface DestinationPathProps {
     /** Shown in place of the path when nothing is chosen and there is no default. */
     emptyLabel?: string;
-    /** Extra controls beside the chooser — the Reset to default button. */
+    /** Extra controls beside the chooser (the Reset to default button). */
     extra?: ReactNode;
     /** What is being chosen, as it reads inside the button: "XML Folder". */
     label: string;

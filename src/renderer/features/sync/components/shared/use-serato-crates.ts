@@ -39,7 +39,7 @@ export type SeratoWriteResult = {
  *
  * Both Download and External Drive end the same way: tracks land on disk, then the
  * crates are written against the paths the download actually produced. That
- * ordering is the whole reason the crate writing lives on the client — a crate
+ * ordering is the whole reason the crate writing lives on the client: a crate
  * stores paths, and pymix could only ever guess at them.
  *
  * The folder itself is one persisted setting shared by every screen that reads it,

@@ -8,7 +8,7 @@ import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 
 export interface SelectableItem {
-    /** Trailing right-aligned text — a track count, a size. */
+    /** Trailing right-aligned text: a track count, a size. */
     detail?: ReactNode;
     id: string;
     label: string;
@@ -23,12 +23,12 @@ interface SelectableListProps {
     onToggle: (id: string) => void;
     /**
      * Controls that apply to the whole selection, between the toolbar and the rows.
-     * They sit here rather than in a row because a row's checkbox is `readOnly` —
+     * They sit here rather than in a row because a row's checkbox is `readOnly`:
      * anything with a label of its own has to stay out of the click target.
      */
     options?: ReactNode;
     /**
-     * A control above the list has claimed the whole set — External Drive's "All
+     * A control above the list has claimed the whole set: External Drive's "All
      * server tracks". Every row reads as ticked and stops responding, because the
      * per-row selection no longer decides anything.
      */
@@ -66,8 +66,8 @@ export const SelectionToolbar = ({ onSelectAll, onSelectNone }: SelectionToolbar
  *
  * The whole row is the hit target, so the Checkbox inside it is `readOnly` and the
  * row owns the change. That is only safe because there is no `<label>` here: a
- * labelled checkbox inside a clickable wrapper fires twice — once for the label,
- * once for the click the label forwards to its input — and the tick never moves.
+ * labelled checkbox inside a clickable wrapper fires twice (once for the label,
+ * once for the click the label forwards to its input) and the tick never moves.
  * Anything with a label of its own belongs outside this list, not in a row.
  */
 export const SelectableList = ({

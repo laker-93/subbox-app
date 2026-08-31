@@ -15,7 +15,7 @@ interface TrackRowProps {
 /**
  * One track in a review list.
  *
- * Every list in Sync — missing, already present, metadata updates, conflicts —
+ * Every list in Sync (missing, already present, metadata updates, conflicts)
  * is this row with something different on the right. Six handwritten copies had
  * already drifted on whether the album is shown at all.
  */

@@ -7,7 +7,7 @@ import { Text } from '/@/shared/components/text/text';
 /**
  * One Upload tab for both DJ formats.
  *
- * There were two tabs — "Upload (Rekordbox)" and "Upload (Serato)" — only because the
+ * There were two tabs, "Upload (Rekordbox)" and "Upload (Serato)", only because the
  * format question had nowhere else to live. Given a control of its own it collapses to
  * one tab, and the choice is remembered.
  *
@@ -32,7 +32,7 @@ export const SyncUpload = () => {
     );
 
     // Nothing stored yet, so nothing is preselected. Being first in the list is not a
-    // reason to inherit Rekordbox — which software a DJ uses is close to an identity
+    // reason to inherit Rekordbox. Which software a DJ uses is close to an identity
     // property, and guessing it wrong is worse than asking once.
     if (!format) {
         return (

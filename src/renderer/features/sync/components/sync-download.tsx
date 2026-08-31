@@ -607,7 +607,7 @@ export const SyncDownload = () => {
                     </Button>
                 }
                 /* Nothing was fetched in the crates-only case, so don't call it a
-                   download — the sentence underneath would contradict it. */
+                   download; the sentence underneath would contradict it. */
                 title={
                     !includeTracks && !includeRekordboxXml ? 'Crates Written' : 'Download Complete'
                 }
@@ -932,7 +932,7 @@ export const SyncDownload = () => {
                                 <TrackRow
                                     artist={update.artist}
                                     /* pymix doesn't populate `fields` today, so this
-                                       renders nothing — it used to throw on
+                                       renders nothing; it used to throw on
                                        undefined.map and take the whole preview screen
                                        down the moment this tab was opened. */
                                     detail={
@@ -1017,7 +1017,7 @@ export const SyncDownload = () => {
                             </span>
                         </Tooltip>
                         <DestinationPath
-                            emptyLabel="No _Serato_ folder found — choose one to enable this"
+                            emptyLabel="No _Serato_ folder found. Choose one to enable this"
                             label="Serato Folder"
                             onChoose={handleSelectSeratoFolder}
                             path={seratoFolder}
@@ -1031,7 +1031,7 @@ export const SyncDownload = () => {
                     says so on the screen behind this. */}
                 {isElectron() && format === 'serato' && (
                     <DestinationPath
-                        emptyLabel="No _Serato_ folder found — choose one to write crates"
+                        emptyLabel="No _Serato_ folder found. Choose one to write crates"
                         label="Serato Folder"
                         onChoose={handleSelectSeratoFolder}
                         path={seratoFolder}
@@ -1061,7 +1061,7 @@ export const SyncDownload = () => {
                     />
                 )}
 
-                {/* Where the tracks will end up (web only) — the browser can't tell us
+                {/* Where the tracks will end up (web only): the browser can't tell us
                     this, so the Rekordbox XML's track locations depend on the user
                     telling us where the audio is (or will be). */}
                 {!isElectron() && includeRekordboxXml && (

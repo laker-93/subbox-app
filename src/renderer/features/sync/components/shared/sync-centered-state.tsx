@@ -17,7 +17,7 @@ interface SyncCenteredStateProps {
  * had lost the height, so they sat at the top of an empty page rather than in the
  * middle of it. One place to get it right.
  *
- * Only the status screens now — spinner, done, blocked. The screens that *open* a
+ * Only the status screens now: spinner, done, blocked. The screens that *open* a
  * flow used to centre here too, and that was the thing that made Upload look
  * nothing like Download: a floating 420px column where every other Sync screen is
  * a titled page anchored top-left. Those are `SyncFlow`s now.

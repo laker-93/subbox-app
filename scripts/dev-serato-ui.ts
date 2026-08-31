@@ -9,7 +9,7 @@ import { nodeKey, readCrateTree } from '../src/main/features/core/sync/serato-cr
 // The top half of rung 5: the Electron window itself.
 //
 // `pnpm dev:serato-roundtrip` already drives the same main-process functions over
-// the same HTTP, so what this adds is only the wiring between them — the format
+// the same HTTP, so what this adds is only the wiring between them: the format
 // control, the folder picker, the IPC call, and the report on the done screen. That wiring
 // is exactly what a headless driver cannot reach, and exactly where a feature that
 // works in every unit test still arrives broken.
@@ -164,7 +164,7 @@ async function main(): Promise<void> {
     await page.getByText(`${PLAYLISTS.length} selected`).waitFor({ timeout: 5000 });
     console.log(`  ${PLAYLISTS.length} playlists ticked`);
 
-    // The format lives on the preview screen, not the selection one — the choice of
+    // The format lives on the preview screen, not the selection one. The choice of
     // what goes in the download is made once its size is known.
     await openPreview(page);
 
@@ -235,7 +235,7 @@ async function openPreview(page: Page): Promise<void> {
     await page.getByRole('heading', { name: 'Download Preview' }).waitFor({ timeout: 120_000 });
 }
 
-/** Open the settings modal — where Include and both folder pickers now live. */
+/** Open the settings modal (where Include and both folder pickers now live). */
 async function openSettings(page: Page): Promise<void> {
     if (
         await page
@@ -251,7 +251,7 @@ async function openSettings(page: Page): Promise<void> {
 /**
  * Run the download and read the done screen's Serato report back.
  *
- * The button is a plain "Download" in every mode now — `.last()` because the Sync
+ * The button is a plain "Download" in every mode now; `.last()` because the Sync
  * tab strip above the panel has a "Download" tab of its own.
  */
 async function runDownload(page: Page): Promise<SeratoReport> {
@@ -283,7 +283,7 @@ async function runDownload(page: Page): Promise<SeratoReport> {
  * Pick an option in a Mantine `SegmentedControl`.
  *
  * The tick boxes this screen used to carry ("Include tracks", "Include Rekordbox
- * XML", "Write Serato crates") became two segmented controls — Format on the screen
+ * XML", "Write Serato crates") became two segmented controls: Format on the screen
  * and Include behind the settings cog. Mantine builds both from real
  * `<input type="radio">`, so they are radios to a locator, but the inputs are 0x0 with opacity 0, so `check()` can never satisfy
  * Playwright's actionability rules. Clicking the associated label is what works.

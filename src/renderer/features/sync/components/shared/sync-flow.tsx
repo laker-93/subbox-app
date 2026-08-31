@@ -15,7 +15,7 @@ interface SyncFlowProps {
     error?: null | string;
     /** The full-width primary button at the bottom, outside the scrolling area. */
     footer?: ReactNode;
-    /** Extra controls in the header, left of Back — the info button on Download. */
+    /** Extra controls in the header, left of Back (the info button on Download). */
     headerAction?: ReactNode;
     /** Back, or whatever this step's way out is. Omitted on the first step. */
     onBack?: () => void;
@@ -25,7 +25,7 @@ interface SyncFlowProps {
      * with no scroll container of its own pushes it off the bottom.
      */
     overflow?: 'auto' | 'hidden';
-    /** A line under the title — the folder being read, or what this step is for. */
+    /** A line under the title: the folder being read, or what this step is for. */
     subtitle?: ReactNode;
     title: string;
 }
@@ -35,7 +35,7 @@ interface SyncFlowProps {
  *
  * A list-shaped step fills the pane on its own, so the footer button lands at the
  * bottom. The screens that open a flow are two lines and a control, and without
- * this their button floats halfway up the page — the one thing that made them read
+ * this their button floats halfway up the page: the one thing that made them read
  * as a different kind of screen from the ones they lead to.
  */
 export const SyncFlowFill = () => <div style={{ flex: 1 }} />;

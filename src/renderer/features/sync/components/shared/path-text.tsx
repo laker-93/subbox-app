@@ -1,7 +1,7 @@
 import { Text } from '/@/shared/components/text/text';
 
 interface PathTextProps {
-    /** Shown when there is no path yet — say what choosing one would do, not "none". */
+    /** Shown when there is no path yet: say what choosing one would do, not "none". */
     placeholder?: string;
     value: null | string | undefined;
 }

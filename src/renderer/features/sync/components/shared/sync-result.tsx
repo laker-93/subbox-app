@@ -7,7 +7,7 @@ import { TextTitle } from '/@/shared/components/text-title/text-title';
 
 interface SyncResultProps {
     /**
-     * The primary button, when the flow needs one this component can't spell —
+     * The primary button, when the flow needs one this component can't spell:
      * a different size, an anchor, two of them. Overrides `actionLabel`.
      */
     action?: ReactNode;
@@ -17,12 +17,12 @@ interface SyncResultProps {
     children?: ReactNode;
     maw?: number;
     onAction?: () => void;
-    /** Rendered above the primary button — the Copy details button on a failure. */
+    /** Rendered above the primary button (the Copy details button on a failure). */
     secondaryAction?: ReactNode;
     /**
      * `success` and `warn` get the glyph; `none` omits it.
      *
-     * A finished job that left tracks out is `warn`, not `success` — the counts
+     * A finished job that left tracks out is `warn`, not `success`; the counts
      * underneath are the only place that shortfall is ever explained, and a green
      * tick above them tells the user not to read.
      */

@@ -20,7 +20,7 @@ interface SyncSettingsButtonProps {
  * Everything a screen can be told to do differently lives behind this, so the
  * screen itself is the plan and one button. The controls were on the screen
  * before, each with a label and a line of prose under it, and between them they
- * pushed the thing the user came for — the track list — off the fold.
+ * pushed the thing the user came for (the track list) off the fold.
  */
 export const SyncSettingsButton = ({ onClick }: SyncSettingsButtonProps) => (
     <ActionIcon
@@ -45,7 +45,7 @@ interface SyncSettingsModalProps {
 }
 
 /**
- * Where those controls went. A plain modal with a column inside it — the room the
+ * Where those controls went. A plain modal with a column inside it: the room the
  * screen didn't have, so a folder chooser can show its path and an option can say
  * what it means without either of them costing the main screen a line.
  */

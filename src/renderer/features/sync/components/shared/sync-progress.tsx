@@ -13,7 +13,7 @@ interface SyncLoadingProps {
 interface SyncProgressProps {
     /**
      * The tracks in flight right now. Uploads run several at a time, so this is a
-     * list rather than one line — showing only the newest made a parallel upload
+     * list rather than one line; showing only the newest made a parallel upload
      * look like it kept restarting.
      */
     activeTracks?: string[];
@@ -23,7 +23,7 @@ interface SyncProgressProps {
      * track twice.
      */
     currentTrack?: string;
-    /** Lines under the tracks — counts, percentages, the long-library warning. */
+    /** Lines under the tracks: counts, percentages, the long-library warning. */
     detail?: ReactNode;
     /** What phase the job is in, as a heading. */
     phaseLabel: string;
@@ -32,7 +32,7 @@ interface SyncProgressProps {
 /**
  * A step that is only waiting: spinner, one line, no numbers.
  *
- * Use `SyncProgress` instead as soon as there is something to count — a bare
+ * Use `SyncProgress` instead as soon as there is something to count; a bare
  * spinner over a long job is the shape of the blind-until-idle bug (laker-93 #83).
  */
 export const SyncLoading = ({ label }: SyncLoadingProps) => (
