@@ -3,19 +3,18 @@ import { Suspense, useState } from 'react';
 
 import { useIsDemoSession } from '/@/renderer/config/demo-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
+import { SyncDesktopOnly } from '/@/renderer/features/sync/components/shared';
 import { SyncDownload } from '/@/renderer/features/sync/components/sync-download';
 import { SyncExternalDrive } from '/@/renderer/features/sync/components/sync-external-drive';
-import { SyncRekordbox } from '/@/renderer/features/sync/components/sync-rekordbox';
-import { SyncSerato } from '/@/renderer/features/sync/components/sync-serato';
+import { SyncUpload } from '/@/renderer/features/sync/components/sync-upload';
 import { SyncWatch } from '/@/renderer/features/sync/components/sync-watch';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
-import { Text } from '/@/shared/components/text/text';
 
-type SyncTab = 'download' | 'external-drive' | 'serato' | 'upload' | 'watch';
+type SyncTab = 'download' | 'external-drive' | 'upload' | 'watch';
 
 export const SyncModePlaceholder = () => {
     const electron = isElectron();
@@ -38,30 +37,14 @@ export const SyncModePlaceholder = () => {
                     tooltip={{
                         label: isDemo
                             ? lockedTooltip
-                            : 'Add music to Sub-box from a Rekordbox XML export. Pick the playlists you want and upload their tracks.',
+                            : 'Add music to Sub-box from Rekordbox or Serato. Pick the playlists or crates you want and upload their tracks, cue points and all.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
                     }}
                     variant={tab === 'upload' ? 'filled' : 'subtle'}
                 >
-                    Upload (Rekordbox)
-                </Button>
-                <Button
-                    leftSection={isDemo ? <Icon icon="lock" size="sm" /> : undefined}
-                    onClick={() => setTab('serato')}
-                    size="sm"
-                    tooltip={{
-                        label: isDemo
-                            ? lockedTooltip
-                            : 'Add music to Sub-box from your Serato library. Pick the crates you want; they come across as playlists, with their hot cues.',
-                        multiline: true,
-                        openDelay: 300,
-                        w: 280,
-                    }}
-                    variant={tab === 'serato' ? 'filled' : 'subtle'}
-                >
-                    Upload (Serato)
+                    Upload
                 </Button>
                 <Button
                     onClick={() => setTab('download')}
@@ -115,33 +98,16 @@ export const SyncModePlaceholder = () => {
                 {tab === 'upload' &&
                     (isDemo ? (
                         <InviteLockedPanel
-                            description="The demo library is shared and read-only. Your own Sub-box library imports your playlists, cue points and all."
-                            title="Rekordbox upload needs your own library"
+                            description="The demo library is shared and read-only. Your own Sub-box library imports your playlists and crates, cue points and all."
+                            title="Upload needs your own library"
                         />
                     ) : electron ? (
-                        <SyncRekordbox />
+                        <SyncUpload />
                     ) : (
-                        <Center style={{ height: '100%' }}>
-                            <Text c="dimmed">
-                                Rekordbox XML upload is only available in the desktop app.
-                            </Text>
-                        </Center>
-                    ))}
-                {tab === 'serato' &&
-                    (isDemo ? (
-                        <InviteLockedPanel
-                            description="The demo library is shared and read-only. Your own Sub-box library imports your crates, hot cues and all."
-                            title="Serato import needs your own library"
-                        />
-                    ) : electron ? (
-                        <SyncSerato />
-                    ) : (
-                        <Center style={{ height: '100%' }}>
-                            <Text c="dimmed">
-                                Serato import is only available in the desktop app — it reads your
-                                crate files off this computer.
-                            </Text>
-                        </Center>
+                        <SyncDesktopOnly>
+                            Uploading is only available in the desktop app. It reads your XML export
+                            or crate files off this computer.
+                        </SyncDesktopOnly>
                     ))}
                 {tab === 'download' && (
                     <Suspense
@@ -163,11 +129,9 @@ export const SyncModePlaceholder = () => {
                     ) : electron ? (
                         <SyncWatch />
                     ) : (
-                        <Center style={{ height: '100%' }}>
-                            <Text c="dimmed">
-                                Watch directory is only available in the desktop app.
-                            </Text>
-                        </Center>
+                        <SyncDesktopOnly>
+                            Watch directory is only available in the desktop app.
+                        </SyncDesktopOnly>
                     ))}
                 {tab === 'external-drive' && (
                     <Suspense

@@ -9,8 +9,8 @@ import { nodeKey, readCrateTree } from '../src/main/features/core/sync/serato-cr
 // The top half of rung 5: the Electron window itself.
 //
 // `pnpm dev:serato-roundtrip` already drives the same main-process functions over
-// the same HTTP, so what this adds is only the wiring between them — the checkbox,
-// the folder picker, the IPC call, and the report on the done screen. That wiring
+// the same HTTP, so what this adds is only the wiring between them: the format
+// control, the folder picker, the IPC call, and the report on the done screen. That wiring
 // is exactly what a headless driver cannot reach, and exactly where a feature that
 // works in every unit test still arrives broken.
 //
@@ -61,8 +61,16 @@ type SeratoReport = {
 async function chooseSeratoFolder(page: Page, folder: string): Promise<void> {
     // The dialog is stubbed in the main process, so this exercises the real
     // handler — resolveSeratoFolder, the SubCrates check, the localSettings write.
+    // The folder picker moved behind the settings cog in the de-clutter pass.
+    await openSettings(page);
     await page.getByRole('button', { name: /Serato Folder/ }).click();
     await page.getByText(folder, { exact: true }).waitFor({ timeout: 10_000 });
+}
+
+/** Close it again. Escape, because the modal's X carries no accessible name. */
+async function closeSettings(page: Page): Promise<void> {
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 10_000 });
 }
 
 /** Everything the crates in a folder point at, as the import would read it back. */
@@ -144,7 +152,9 @@ async function main(): Promise<void> {
         .filter({ hasText: /^Sync$/ })
         .first()
         .click();
-    await page.getByRole('button', { exact: true, name: 'Download' }).click();
+    // .first(): the Sync tab strip's Download tab. The preview screen's primary
+    // action carries the same name now, in every mode.
+    await page.getByRole('button', { exact: true, name: 'Download' }).first().click();
     await page.getByRole('heading', { name: 'Download Playlists' }).waitFor({ timeout: 20_000 });
     console.log('  Sync -> Download open');
 
@@ -154,19 +164,20 @@ async function main(): Promise<void> {
     await page.getByText(`${PLAYLISTS.length} selected`).waitFor({ timeout: 5000 });
     console.log(`  ${PLAYLISTS.length} playlists ticked`);
 
-    // The tick boxes live on the preview screen, not the selection one — the
-    // choice of what goes in the download is made once its size is known.
+    // The format lives on the preview screen, not the selection one. The choice of
+    // what goes in the download is made once its size is known.
     await openPreview(page);
 
+    // Serato as the format is what asks for crates now; the folder picker only
+    // appears once it is chosen, so this has to come first.
+    await selectSegment(page, 'Serato');
     await chooseSeratoFolder(page, seratoFolder);
-    const crateBox = page.getByRole('checkbox', { name: 'Write Serato crates' });
-    assert.ok(await crateBox.isEnabled(), 'the crates checkbox should enable once a folder is set');
-    await crateBox.check();
-    console.log('  Serato folder chosen and crates ticked');
+    await closeSettings(page);
+    console.log('  Serato format chosen and folder set');
 
     // ── pass 1: tracks + crates ─────────────────────────────────────────────
     console.log('\nPass 1 — download, then write crates against what landed');
-    const first = await runDownload(page, 'Download & Extract');
+    const first = await runDownload(page);
     assert.ok(first.tracks > 0, 'pass 1 should have written crates with tracks in them');
     console.log(`  done screen: ${first.text}`);
 
@@ -182,13 +193,17 @@ async function main(): Promise<void> {
 
     // ── pass 2: crates only ─────────────────────────────────────────────────
     console.log('\nPass 2 — crates only, no download');
-    // Start Over keeps the playlist selection, so pass 2 differs only in the tick boxes.
+    // Start Over keeps the playlist selection, so pass 2 differs only in what the
+    // Include control asks for. Format is persisted, so Serato is still selected.
     await page.getByRole('button', { exact: true, name: 'Start Over' }).click();
     await page.getByRole('heading', { name: 'Download Playlists' }).waitFor({ timeout: 10_000 });
     await openPreview(page);
-    await page.getByRole('checkbox', { name: 'Include tracks' }).uncheck();
-    await page.getByRole('checkbox', { name: 'Include Rekordbox XML' }).uncheck();
-    const second = await runDownload(page, 'Write Serato Crates');
+    await selectSegment(page, 'Serato');
+    // Include lives in the settings modal now; Format is still on the screen.
+    await openSettings(page);
+    await selectSegment(page, 'Crates only');
+    await closeSettings(page);
+    const second = await runDownload(page);
     console.log(`  done screen: ${second.text}`);
     assert.ok(
         second.body.includes('Nothing was downloaded'),
@@ -214,17 +229,35 @@ async function main(): Promise<void> {
     console.log('\nElectron round trip passed.');
 }
 
-/** Ask pymix for the plan and wait for the screen that carries the tick boxes. */
+/** Ask pymix for the plan and wait for the screen the settings cog sits on. */
 async function openPreview(page: Page): Promise<void> {
     await page.getByRole('button', { name: 'Preview Download' }).click();
     await page.getByRole('heading', { name: 'Download Preview' }).waitFor({ timeout: 120_000 });
 }
 
-/** Run the download and read the done screen's Serato report back. */
-async function runDownload(page: Page, buttonLabel: string): Promise<SeratoReport> {
-    const button = page.getByRole('button', { exact: true, name: buttonLabel });
+/** Open the settings modal (where Include and both folder pickers now live). */
+async function openSettings(page: Page): Promise<void> {
+    if (
+        await page
+            .getByRole('dialog')
+            .isVisible()
+            .catch(() => false)
+    )
+        return;
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('dialog').waitFor({ state: 'visible', timeout: 10_000 });
+}
+
+/**
+ * Run the download and read the done screen's Serato report back.
+ *
+ * The button is a plain "Download" in every mode now; `.last()` because the Sync
+ * tab strip above the panel has a "Download" tab of its own.
+ */
+async function runDownload(page: Page): Promise<SeratoReport> {
+    const button = page.getByRole('button', { exact: true, name: 'Download' }).last();
     await button.waitFor({ timeout: 10_000 });
-    assert.ok(await button.isEnabled(), `"${buttonLabel}" should be clickable`);
+    assert.ok(await button.isEnabled(), 'the Download button should be clickable');
     await button.click();
 
     // The heading follows what was actually done: nothing is fetched when crates
@@ -244,6 +277,30 @@ async function runDownload(page: Page, buttonLabel: string): Promise<SeratoRepor
         text: `${summary?.[0] ?? ''} ${counts[0]}`.trim(),
         tracks: Number(counts[2]),
     };
+}
+
+/**
+ * Pick an option in a Mantine `SegmentedControl`.
+ *
+ * The tick boxes this screen used to carry ("Include tracks", "Include Rekordbox
+ * XML", "Write Serato crates") became two segmented controls: Format on the screen
+ * and Include behind the settings cog. Mantine builds both from real
+ * `<input type="radio">`, so they are radios to a locator, but the inputs are 0x0 with opacity 0, so `check()` can never satisfy
+ * Playwright's actionability rules. Clicking the associated label is what works.
+ */
+async function selectSegment(page: Page, name: string): Promise<void> {
+    const radio = page.getByRole('radio', { exact: true, name });
+    await radio.waitFor({ state: 'attached', timeout: 10_000 });
+    if (await radio.isChecked()) return;
+    const id = await radio.getAttribute('id');
+    assert.ok(id, `segmented option "${name}" should have an id to click its label by`);
+    await page.locator(`label[for="${id}"]`).click();
+    await page.waitForFunction(
+        (inputId) =>
+            (document.getElementById(inputId) as HTMLInputElement | null)?.checked === true,
+        id,
+        { timeout: 5000 },
+    );
 }
 
 main().catch(async (err) => {
