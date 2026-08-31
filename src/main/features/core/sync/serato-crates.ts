@@ -278,7 +278,15 @@ export function writeCrates(seratoFolder: string, crates: CrateToWrite[]): Write
     const missing: string[] = [];
     const leafFiles = new Set<string>();
     const parentFiles = new Set<string>();
-    const roots: Crate[] = [];
+    // Every branch is folded into this one tree, keyed by full ancestry, so that
+    // a crate which is both a parent (has a sub-crate) and a leaf (has tracks of
+    // its own) ends up as a single Crate object with both — one `save` call per
+    // distinct root then writes the whole subtree in one pass. Building and
+    // saving each branch separately (the previous approach) meant saving a
+    // child branch re-wrote its parent's `.crate` file as an empty stub, since
+    // tserato's save writes every level of whatever branch it's given.
+    const nodeByKey = new Map<string, Crate>();
+    const roots = new Map<string, Crate>();
     let tracksWritten = 0;
 
     for (const crate of crates) {
@@ -295,12 +303,20 @@ export function writeCrates(seratoFolder: string, crates: CrateToWrite[]): Write
         files.slice(0, -1).forEach((f) => parentFiles.add(f));
         leafFiles.add(files[files.length - 1]);
 
-        // Build the branch outermost-in, so the root is what gets saved.
-        const nodes = components.map((name) => new Crate(name));
-        for (let i = 0; i < nodes.length - 1; i += 1) {
-            nodes[i].children.set(nodes[i + 1].name, nodes[i + 1]);
+        // Walk the branch outermost-in, reusing whatever node an earlier crate
+        // in this call already created for the same ancestor path.
+        let parent: Crate | undefined;
+        for (let i = 0; i < components.length; i += 1) {
+            const key = nodeKey(components.slice(0, i + 1));
+            let node = nodeByKey.get(key);
+            if (!node) {
+                node = new Crate(components[i]);
+                nodeByKey.set(key, node);
+                if (parent) parent.children.set(node.name, node);
+            }
+            parent = node;
         }
-        const leaf = nodes[nodes.length - 1];
+        const leaf = parent as Crate;
         for (const track of crate.tracks) {
             if (!fs.existsSync(track.localPath)) {
                 // Nothing useful to write: a crate entry pointing at no file shows
@@ -311,7 +327,8 @@ export function writeCrates(seratoFolder: string, crates: CrateToWrite[]): Write
             leaf.addTrack(Track.fromPath(track.localPath));
             tracksWritten += 1;
         }
-        roots.push(nodes[0]);
+        const rootKey = nodeKey([components[0]]);
+        if (!roots.has(rootKey)) roots.set(rootKey, nodeByKey.get(rootKey) as Crate);
     }
 
     // Back up before anything is written, and only what is actually at risk.
@@ -333,7 +350,7 @@ export function writeCrates(seratoFolder: string, crates: CrateToWrite[]): Write
     // Markers2 into *every* track it saves, including ones whose cues we have no
     // business touching. Cues are written separately, and only where it is safe.
     const builder = new Builder();
-    for (const root of roots) {
+    for (const root of roots.values()) {
         builder.save(root, seratoFolder, true);
     }
 
