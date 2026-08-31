@@ -247,6 +247,7 @@ function main(): void {
     checkCratesAreWritten();
     checkPathsAreStoredSeratoStyle();
     checkAnExistingParentCrateSurvives();
+    checkAParentAndItsSubCrateInOneCall();
     checkAReplacedCrateIsBackedUp();
     checkNamesThatCannotBeFilenames();
     checkCuesAreWrittenButNeverOverwritten();
@@ -287,6 +288,33 @@ function checkAnExistingParentCrateSurvives(): void {
     );
     assert.deepEqual(byKey.get('Sets / Deep')!.tracks, [path.join(musicRoot, 'a/b/deep.mp3')]);
     console.log('  writing: an existing parent crate keeps its own tracks — OK');
+}
+
+function checkAParentAndItsSubCrateInOneCall(): void {
+    // subbox-app#117. The shape above, but with both crates handed to a single
+    // writeCrates call -- which is what a Serato -> subbox -> Serato round trip
+    // always produces, because "a big crate plus sub-crates" is the ordinary
+    // shape of a real library. Each crate used to be built as its own branch and
+    // saved separately, and tserato's save writes a .crate file for every level
+    // of the branch it is given, so saving ['Live', 'Peak'] rewrote Live.crate as
+    // an empty stub after the ['Live'] branch had just filled it. The UI still
+    // reported the parent's tracks as written, so nothing on screen said so.
+    const own = localTrack('Artist/Album/parent-own.mp3');
+    const child = localTrack('Artist/Album/child-own.mp3');
+
+    writeCrates(writeSerato, [
+        { pathComponents: ['Live'], tracks: [{ localPath: own }] },
+        { pathComponents: ['Live', 'Peak'], tracks: [{ localPath: child }] },
+    ]);
+
+    const byKey = new Map(readCrateTree(writeSerato).map((n) => [nodeKey(n.components), n]));
+    assert.deepEqual(
+        byKey.get('Live')!.tracks,
+        [own],
+        'a crate written alongside its own sub-crate keeps its tracks',
+    );
+    assert.deepEqual(byKey.get('Live / Peak')!.tracks, [child], 'the sub-crate is written too');
+    console.log('  writing: a parent and its sub-crate in one call — OK');
 }
 
 function checkAReplacedCrateIsBackedUp(): void {
