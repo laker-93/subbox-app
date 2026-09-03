@@ -272,7 +272,7 @@ if (isLinux() && !process.argv.some((a) => a.startsWith('--password-store='))) {
     app.commandLine.appendSwitch('password-store', passwordStore);
 }
 
-// Handle fractional scaling issue from Wayland https://github.com/jeffvli/subbox/issues/1271#issuecomment-4063326712
+// Handle fractional scaling issue from Wayland https://github.com/jeffvli/feishin/issues/1271#issuecomment-4063326712
 if (isLinux()) {
     app.commandLine.appendSwitch('disable-features', 'WaylandFractionalScaleV1');
 }
