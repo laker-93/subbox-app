@@ -63,7 +63,7 @@ export const UpdateAvailableDialog = () => {
                     </Button>
                     <Button
                         component="a"
-                        href="https://github.com/jeffvli/subbox/releases/latest"
+                        href="https://github.com/laker-93/subbox-app/releases/latest"
                         onClick={handleDismiss}
                         rightSection={<Icon icon="externalLink" size="sm" />}
                         size="xs"

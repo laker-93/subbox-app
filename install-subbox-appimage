@@ -51,12 +51,12 @@ if [ "${arg}" = "remove" ]; then
 fi
 
 curl --fail -L --create-dirs --write-out '%{filename_effective}\n' \
-	-o "${dir}/Subbox-linux-${arch}.AppImage" "https://github.com/jeffvli/subbox/releases/latest/download/Subbox-linux-${arch}.AppImage" \
-	-o "${localShareIcons}/512x512/apps/org.jeffvli.subbox.png" 'https://github.com/jeffvli/subbox/blob/development/assets/icons/512x512.png?raw=true' \
-	-o "${localShareIcons}/256x256/apps/org.jeffvli.subbox.png" 'https://github.com/jeffvli/subbox/blob/development/assets/icons/256x256.png?raw=true' \
-	-o "${localShareIcons}/128x128/apps/org.jeffvli.subbox.png" 'https://github.com/jeffvli/subbox/blob/development/assets/icons/128x128.png?raw=true' \
-	-o "${localShareIcons}/64x64/apps/org.jeffvli.subbox.png" 'https://github.com/jeffvli/subbox/blob/development/assets/icons/64x64.png?raw=true' \
-	-o "${localShareIcons}/32x32/apps/org.jeffvli.subbox.png" 'https://github.com/jeffvli/subbox/blob/development/assets/icons/32x32.png?raw=true'
+	-o "${dir}/Subbox-linux-${arch}.AppImage" "https://github.com/laker-93/subbox-app/releases/latest/download/Subbox-linux-${arch}.AppImage" \
+	-o "${localShareIcons}/512x512/apps/org.jeffvli.subbox.png" 'https://github.com/laker-93/subbox-app/blob/development/assets/icons/512x512.png?raw=true' \
+	-o "${localShareIcons}/256x256/apps/org.jeffvli.subbox.png" 'https://github.com/laker-93/subbox-app/blob/development/assets/icons/256x256.png?raw=true' \
+	-o "${localShareIcons}/128x128/apps/org.jeffvli.subbox.png" 'https://github.com/laker-93/subbox-app/blob/development/assets/icons/128x128.png?raw=true' \
+	-o "${localShareIcons}/64x64/apps/org.jeffvli.subbox.png" 'https://github.com/laker-93/subbox-app/blob/development/assets/icons/64x64.png?raw=true' \
+	-o "${localShareIcons}/32x32/apps/org.jeffvli.subbox.png" 'https://github.com/laker-93/subbox-app/blob/development/assets/icons/32x32.png?raw=true'
 chmod -v u+x "${dir}/Subbox-linux-${arch}.AppImage"
 
 waylandFlags=""
@@ -76,4 +76,4 @@ mkdir -pv "${localShare}/applications"
 
 export SUBBOX_DESKTOP_EXECUTABLE="${dir}/Subbox-linux-${arch}.AppImage"
 export SUBBOX_DESKTOP_ARGS="${sandboxFlag} ${waylandFlags}"
-curl --fail https://raw.githubusercontent.com/jeffvli/subbox/refs/heads/development/subbox.desktop.tmpl | envsubst > "${localShare}/applications/org.jeffvli.subbox.desktop"
+curl --fail https://raw.githubusercontent.com/laker-93/subbox-app/refs/heads/development/subbox.desktop.tmpl | envsubst > "${localShare}/applications/org.jeffvli.subbox.desktop"

@@ -124,27 +124,21 @@ export default class MenuBuilder {
             submenu: [
                 {
                     click() {
-                        shell.openExternal('https://github.com/jeffvli/subbox');
+                        shell.openExternal('https://github.com/laker-93/subbox-app');
                     },
                     label: 'Learn More',
                 },
                 {
                     click() {
                         shell.openExternal(
-                            'https://github.com/jeffvli/subbox?tab=readme-ov-file#getting-started',
+                            'https://github.com/laker-93/subbox-app?tab=readme-ov-file#getting-started',
                         );
                     },
                     label: 'Documentation',
                 },
                 {
                     click() {
-                        shell.openExternal('https://github.com/jeffvli/subbox/discussions');
-                    },
-                    label: 'Community Discussions',
-                },
-                {
-                    click() {
-                        shell.openExternal('https://github.com/jeffvli/subbox/issues');
+                        shell.openExternal('https://github.com/laker-93/subbox-app/issues');
                     },
                     label: 'Search Issues',
                 },
@@ -231,27 +225,21 @@ export default class MenuBuilder {
                 submenu: [
                     {
                         click() {
-                            shell.openExternal('https://github.com/jeffvli/subbox');
+                            shell.openExternal('https://github.com/laker-93/subbox-app');
                         },
                         label: 'Learn More',
                     },
                     {
                         click() {
                             shell.openExternal(
-                                'https://github.com/jeffvli/subbox?tab=readme-ov-file#getting-started',
+                                'https://github.com/laker-93/subbox-app?tab=readme-ov-file#getting-started',
                             );
                         },
                         label: 'Documentation',
                     },
                     {
                         click() {
-                            shell.openExternal('https://github.com/jeffvli/subbox/discussions');
-                        },
-                        label: 'Community Discussions',
-                    },
-                    {
-                        click() {
-                            shell.openExternal('https://github.com/jeffvli/subbox/issues');
+                            shell.openExternal('https://github.com/laker-93/subbox-app/issues');
                         },
                         label: 'Search Issues',
                     },

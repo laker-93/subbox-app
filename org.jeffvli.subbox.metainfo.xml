@@ -22,22 +22,22 @@
     </ul>
   </description>
   <developer id="org.jeffvli">
-    <name>jeffvli</name>
+    <name>Subbox</name>
   </developer>
   <launchable type="desktop-id">org.jeffvli.subbox.desktop</launchable>
-  <url type="homepage">https://github.com/jeffvli/subbox</url>
+  <url type="homepage">https://github.com/laker-93/subbox-app</url>
   <screenshots>
     <screenshot type="default">
       <caption>The main menu</caption>
-      <image type="source">https://raw.githubusercontent.com/jeffvli/subbox/development/media/preview_home.png</image>
+      <image type="source">https://raw.githubusercontent.com/laker-93/subbox-app/development/media/preview_home.png</image>
     </screenshot>
     <screenshot>
       <caption>Browsing an album</caption>
-      <image type="source">https://raw.githubusercontent.com/jeffvli/subbox/development/media/preview_album_detail.png</image>
+      <image type="source">https://raw.githubusercontent.com/laker-93/subbox-app/development/media/preview_album_detail.png</image>
     </screenshot>
     <screenshot>
       <caption>Smart playlist creation</caption>
-      <image type="source">https://raw.githubusercontent.com/jeffvli/subbox/development/media/preview_smart_playlist.png</image>
+      <image type="source">https://raw.githubusercontent.com/laker-93/subbox-app/development/media/preview_smart_playlist.png</image>
     </screenshot>
   </screenshots>
   <categories>
