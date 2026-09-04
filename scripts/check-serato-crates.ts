@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { Builder, Crate, Track, V2Mp3Encoder } from 'tserato';
+import { BeatgridMp3Encoder, Builder, Crate, Track, V2Mp3Encoder } from 'tserato';
 
 import {
     CRATE_ZIP_FILENAME,
@@ -11,12 +11,15 @@ import {
     nodeKey,
     readCrateTree,
     readTrackCues,
+    readTrackGrid,
     resolveSeratoFolder,
+    SeratoBeatgridWire,
     SeratoCueWire,
     storedTrackPath,
     volumeRootOf,
     writeCrates,
     writeTrackCues,
+    writeTrackGrid,
 } from '../src/main/features/core/sync/serato-crates';
 import { writeFlatZip } from '../src/main/features/core/sync/write-zip';
 
@@ -252,6 +255,8 @@ function main(): void {
     checkNamesThatCannotBeFilenames();
     checkCuesAreWrittenButNeverOverwritten();
     checkCueWritesPreserveTheAnalysis();
+    checkGridsAreWrittenButNeverOverwritten();
+    checkAnUngriddedAnalysedTrackIsNotMistakenForAGriddedOne();
     checkWrittenCratesAgainstPyserato();
 
     console.log('\nAll Serato crate checks passed.');
@@ -288,6 +293,95 @@ function checkAnExistingParentCrateSurvives(): void {
     );
     assert.deepEqual(byKey.get('Sets / Deep')!.tracks, [path.join(musicRoot, 'a/b/deep.mp3')]);
     console.log('  writing: an existing parent crate keeps its own tracks — OK');
+}
+
+/**
+ * The trap in laker-93/subbox-app#125, checked against real Serato output.
+ *
+ * Serato writes `GEOB:Serato BeatGrid` into every track it analyses, with zero
+ * anchors in it where the track is not gridded. So "does this file have the
+ * frame" is the wrong guard and would skip almost every file this feature is
+ * for. The guard has to be "does it have anchors".
+ *
+ * Needs real analysed fixtures: a synthesised file has no frame at all, which is
+ * the one case both guards happen to agree on.
+ */
+function checkAnUngriddedAnalysedTrackIsNotMistakenForAGriddedOne(): void {
+    if (!fs.existsSync(PYSERATO_PYTHON)) {
+        console.log(`  ungridded-analysed: skipped (no interpreter at ${PYSERATO_PYTHON})`);
+        return;
+    }
+    const framed = findAnalysedFixtures().filter((f) => geobFrames(f).includes('Serato BeatGrid'));
+    if (framed.length === 0) {
+        console.log(
+            `  ungridded-analysed: skipped (no analysed fixtures under ${ANALYSED_FIXTURES})`,
+        );
+        return;
+    }
+    // Not the same file. The fixture library contains both states, which is the
+    // premise of this check: carrying the frame and carrying a grid are
+    // different things, and most of the library carries the frame alone.
+    const withAnchors = framed.find((f) => (readTrackGrid(f) ?? []).length > 0);
+
+    const dir = path.join(workDir, 'gridded');
+    fs.mkdirSync(dir, { recursive: true });
+    const beatgrid: SeratoBeatgridWire[] = [{ beats_till_next: null, bpm: 128.0, position_ms: 46 }];
+
+    // ── An already-gridded track is not touched at all ───────────────────────
+    if (withAnchors) {
+        const gridded = path.join(dir, 'gridded.mp3');
+        fs.copyFileSync(withAnchors, gridded);
+        const bytesBefore = fs.readFileSync(gridded);
+        const skipped = writeTrackGrid([{ beatgrid, localPath: gridded }]);
+        assert.equal(skipped.written, 0);
+        assert.equal(skipped.alreadyGridded, 1);
+        assert.deepEqual(
+            fs.readFileSync(gridded),
+            bytesBefore,
+            'the file must not be rewritten at all',
+        );
+    } else {
+        console.log(
+            '  ungridded-analysed: no fixture carries anchors, skipping the leave-alone half',
+        );
+    }
+
+    // ── Analysed, frame present, no anchors: this one must be written ────────
+    const ungridded = path.join(dir, 'ungridded.mp3');
+    fs.copyFileSync(framed[0], ungridded);
+    // Empty the grid the way Serato leaves an analysed-but-ungridded track: the
+    // frame stays, with no anchors in it.
+    const cleared = Track.fromPath(ungridded);
+    cleared.beatgrid = [];
+    new BeatgridMp3Encoder().write(cleared);
+    const framesBefore = geobFrames(ungridded);
+    assert.ok(
+        framesBefore.includes('Serato BeatGrid'),
+        'the frame must still be there — that is the whole point of this check',
+    );
+    assert.equal(readTrackGrid(ungridded)!.length, 0, 'and it must decode to no anchors');
+
+    const result = writeTrackGrid([{ beatgrid, localPath: ungridded }]);
+    assert.equal(
+        result.written,
+        1,
+        'a present-but-empty frame is not a grid; guarding on frame presence would skip this',
+    );
+
+    const framesAfter = geobFrames(ungridded);
+    assert.deepEqual(
+        framesAfter,
+        framesBefore,
+        'writing a grid must not disturb the cues, waveform or analysis frames',
+    );
+    assert.deepEqual(
+        readTrackGrid(ungridded)!.map((m) => [m.position_ms, m.bpm]),
+        [[46, 128.0]],
+    );
+    console.log(
+        `  ungridded-analysed: frame present with no anchors is written into, all ` +
+            `${framesAfter.length} frames intact — OK`,
+    );
 }
 
 function checkAParentAndItsSubCrateInOneCall(): void {
@@ -499,6 +593,61 @@ function checkFileNamesMatchTseratoSave(): void {
         'crateFileNames must name exactly the files tserato writes',
     );
     console.log('  crate filenames: derived names match what tserato writes — OK');
+}
+
+function checkGridsAreWrittenButNeverOverwritten(): void {
+    const fresh = synthMp3('Artist/Album/gridless.mp3');
+    // Two anchors, so this exercises the shape the arithmetic actually cares
+    // about: a beat count on the first, a tempo on the terminal one.
+    const beatgrid: SeratoBeatgridWire[] = [
+        { beats_till_next: 64, bpm: null, position_ms: 46 },
+        { beats_till_next: null, bpm: 175.0, position_ms: 22000 },
+    ];
+
+    const first = writeTrackGrid([{ beatgrid, localPath: fresh }]);
+    assert.equal(
+        first.written,
+        1,
+        `a track with no grid of its own gets subbox’s: ${JSON.stringify(first.failed)}`,
+    );
+
+    const readBack = readTrackGrid(fresh)!;
+    assert.deepEqual(
+        readBack.map((m) => [m.position_ms, m.beats_till_next, m.bpm]),
+        [
+            [46, 64, null],
+            [22000, null, 175.0],
+        ],
+        'the terminal anchor keeps its tempo and the other keeps its beat count',
+    );
+
+    // The same promise the cue path makes, made separately: a track the user has
+    // gridded is theirs, and a wrong grid is worse than a missing one — it puts
+    // every hot cue on the track off-beat, the user’s own included.
+    const second = writeTrackGrid([
+        { beatgrid: [{ beats_till_next: null, bpm: 100.0, position_ms: 0 }], localPath: fresh },
+    ]);
+    assert.equal(second.written, 0);
+    assert.equal(second.alreadyGridded, 1);
+    assert.deepEqual(readTrackGrid(fresh), readBack, 'an existing grid is left exactly as it was');
+
+    // Nothing but MP3 has an encoder, on either side.
+    const flac = localTrack('Artist/Album/six.flac');
+    const skipped = writeTrackGrid([{ beatgrid, localPath: flac }]);
+    assert.equal(skipped.unsupported, 1);
+    assert.equal(readTrackGrid(flac), null);
+
+    // A file that carries cues but no grid still gets one. The two guards are
+    // separate for exactly this: one check for both would skip it.
+    const cued = synthMp3('Artist/Album/cued-not-gridded.mp3');
+    writeTrackCues([
+        { cues: [{ index: 0, name: 'in', start_ms: 8000, type: 'cue' as const }], localPath: cued },
+    ]);
+    assert.ok(readTrackCues(cued)!.length > 0, 'fixture should carry cues');
+    assert.equal(readTrackGrid(cued)!.length, 0, 'and no grid');
+    assert.equal(writeTrackGrid([{ beatgrid, localPath: cued }]).written, 1);
+
+    console.log('  grids: written into an ungridded track, never over an existing one — OK');
 }
 
 function checkNamesThatCannotBeFilenames(): void {

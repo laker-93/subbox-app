@@ -37,6 +37,19 @@ export const SeratoWriteSummary = ({ onShowFolder, result }: SeratoWriteSummaryP
                 {`${result.cues.alreadyCued} track${result.cues.alreadyCued === 1 ? ' already had' : 's already had'} cues in Serato and ${result.cues.alreadyCued === 1 ? 'was' : 'were'} left untouched.`}
             </Text>
         )}
+        {result.beatgrid.written > 0 && (
+            <Text c="dimmed" size="xs">
+                {`Beat grids written into ${result.beatgrid.written} track${result.beatgrid.written === 1 ? '' : 's'}.`}
+            </Text>
+        )}
+        {/* Same promise as the cue line above, and worth making separately: a
+            track can have a grid and no cues, so one being left alone says
+            nothing about the other. */}
+        {result.beatgrid.alreadyGridded > 0 && (
+            <Text c="dimmed" size="xs">
+                {`${result.beatgrid.alreadyGridded} track${result.beatgrid.alreadyGridded === 1 ? ' already had a beat grid' : 's already had beat grids'} in Serato and ${result.beatgrid.alreadyGridded === 1 ? 'was' : 'were'} left untouched.`}
+            </Text>
+        )}
         {result.renamed.length > 0 && (
             <Text c="yellow" size="xs">
                 {`Renamed to fit a filename: ${result.renamed

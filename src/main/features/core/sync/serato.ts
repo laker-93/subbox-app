@@ -24,13 +24,17 @@ import {
     nodeKey,
     readCrateTree,
     readTrackCues,
+    readTrackGrid,
     resolveSeratoFolder,
+    SeratoBeatgridWire,
     SeratoCueWire,
     volumeRootOf,
     writeCrates,
     WriteCratesResult,
     WriteCuesResult,
+    WriteGridResult,
     writeTrackCues,
+    writeTrackGrid,
 } from '/@/main/features/core/sync/serato-crates';
 import { getOrCreateSubboxId } from '/@/main/features/core/sync/subbox-id-tags';
 import { writeFlatZip } from '/@/main/features/core/sync/write-zip';
@@ -259,6 +263,12 @@ ipcMain.handle(
             // or unreadable) and pymix should fall back to its own copy; an empty
             // array means it can and there are none.
             const cues = readTrackCues(trackPath);
+            // The beat grid, asked for separately and for the same reason: a
+            // track can carry a grid and no cues, or cues and no grid. Note that
+            // an analysed-but-ungridded file returns [] here, not null -- the
+            // frame is present with no anchors in it, which is a reading, not a
+            // failure to read.
+            const beatgrid = readTrackGrid(trackPath);
 
             // pymix keys the manifest on the path as stored in the crate, which is
             // exactly what tserato handed us. Two crate entries can share an id --
@@ -268,6 +278,7 @@ ipcMain.handle(
                 crate_path: trackPath,
                 subbox_id: subboxId,
                 ...(cues === null ? {} : { cues }),
+                ...(beatgrid === null ? {} : { beatgrid }),
             });
             const alreadySeen = pathById.get(subboxId);
             if (alreadySeen && alreadySeen !== trackPath) {
@@ -574,10 +585,13 @@ ipcMain.handle(
 // the structure (POST /serato/export) and the crates are written here, against
 // the paths the download actually landed on.
 //
-// It also means the cues can go into the real files. Writing them is deliberately
-// timid: only into a track that has no cues of its own. See writeTrackCues.
+// It also means the cues and the beat grid can go into the real files. Writing
+// either is deliberately timid: only into a track that has none of its own. The
+// two are guarded separately, because a file can have one without the other --
+// see writeTrackCues and writeTrackGrid.
 
 export interface SeratoExportResult extends WriteCratesResult {
+    beatgrid: WriteGridResult;
     cues: WriteCuesResult;
     seratoFolder: string;
 }
@@ -591,18 +605,24 @@ ipcMain.handle(
             crates: Array<{
                 display_name: string;
                 path_components: string[];
-                tracks: Array<{ cues?: SeratoCueWire[]; relative_path: string }>;
+                tracks: Array<{
+                    beatgrid?: SeratoBeatgridWire[];
+                    cues?: SeratoCueWire[];
+                    relative_path: string;
+                }>;
             }>;
             /** Where the download put the tracks — the `music` folder, not its
              *  parent. Empty falls back to the app's own music folder, which is
              *  where a download would have put them anyway. */
             musicRoot: string;
             seratoFolder: string;
+            /** Write subbox's beat grid into files that have none of their own. */
+            writeBeatgrid?: boolean;
             /** Write subbox's cues into files that have none of their own. */
             writeCues?: boolean;
         },
     ): Promise<SeratoExportResult> => {
-        const { crates, seratoFolder, writeCues = true } = args;
+        const { crates, seratoFolder, writeBeatgrid = true, writeCues = true } = args;
         const musicRoot = args.musicRoot || getMusicPath();
 
         if (!fs.existsSync(path.join(seratoFolder, 'SubCrates'))) {
@@ -638,6 +658,7 @@ ipcMain.handle(
             pathComponents:
                 crate.path_components.length > 0 ? crate.path_components : [crate.display_name],
             tracks: crate.tracks.map((track) => ({
+                beatgrid: track.beatgrid,
                 cues: track.cues,
                 localPath: path.join(musicRoot, track.relative_path),
             })),
@@ -680,6 +701,34 @@ ipcMain.handle(
             );
         }
 
-        return { ...written, cues, seratoFolder };
+        // Deduplicated the same way and for the same reason: written twice, the
+        // second pass would find the grid it just wrote and count the file as
+        // already gridded.
+        const gridTargets = new Map<string, SeratoBeatgridWire[]>();
+        if (writeBeatgrid) {
+            for (const crate of toWrite) {
+                for (const track of crate.tracks) {
+                    if (
+                        track.beatgrid &&
+                        track.beatgrid.length > 0 &&
+                        !gridTargets.has(track.localPath)
+                    ) {
+                        gridTargets.set(track.localPath, track.beatgrid);
+                    }
+                }
+            }
+        }
+        const beatgrid = writeTrackGrid(
+            Array.from(gridTargets, ([localPath, grid]) => ({ beatgrid: grid, localPath })),
+        );
+        if (beatgrid.written > 0 || beatgrid.alreadyGridded > 0 || beatgrid.failed.length > 0) {
+            console.log(
+                `[serato] beat grids: ${beatgrid.written} written, ${beatgrid.alreadyGridded} left ` +
+                    `alone (already gridded in Serato), ${beatgrid.unsupported} unsupported ` +
+                    `format, ${beatgrid.failed.length} failed`,
+            );
+        }
+
+        return { ...written, beatgrid, cues, seratoFolder };
     },
 );

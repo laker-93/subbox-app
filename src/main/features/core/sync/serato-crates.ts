@@ -1,7 +1,15 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { Builder, Crate, HotCue, HotCueType, Track, V2Mp3Encoder } from 'tserato';
+import {
+    BeatgridMp3Encoder,
+    Builder,
+    Crate,
+    HotCue,
+    HotCueType,
+    Track,
+    V2Mp3Encoder,
+} from 'tserato';
 
 // ── Reading a Serato library ────────────────────────────────────────────────
 //
@@ -50,7 +58,21 @@ export interface CratePreview {
 export interface CrateToWrite {
     /** Root first. One `.crate` file per level, which is how Serato spells a folder. */
     pathComponents: string[];
-    tracks: Array<{ cues?: SeratoCueWire[]; localPath: string }>;
+    tracks: Array<{ beatgrid?: SeratoBeatgridWire[]; cues?: SeratoCueWire[]; localPath: string }>;
+}
+
+/**
+ * One beat-grid anchor, in the shape pymix sends and receives. Positions in ms.
+ *
+ * Already Serato-shaped when it arrives: every anchor but the last carries
+ * `beats_till_next`, and the last carries `bpm`. Rekordbox instead puts a tempo
+ * on every anchor, and pymix does that conversion before sending, so this side
+ * stays a field mapping — the same division of labour `SeratoCueWire` has.
+ */
+export interface SeratoBeatgridWire {
+    beats_till_next?: null | number;
+    bpm?: null | number;
+    position_ms: number;
 }
 
 /** One cue or loop, in the shape pymix sends and receives. Positions in ms. */
@@ -192,6 +214,15 @@ const UNSAFE_IN_CRATE_NAME = /%%|[/\\\x00-\x1f]/g;
 export interface WriteCuesResult {
     /** Files that already had cues in Serato and were left exactly as they were. */
     alreadyCued: number;
+    failed: Array<{ reason: string; trackName: string }>;
+    /** Non-MP3 files. Neither tserato nor pyserato has an encoder for anything else. */
+    unsupported: number;
+    written: number;
+}
+
+export interface WriteGridResult {
+    /** Files that already had a beat grid in Serato and were left as they were. */
+    alreadyGridded: number;
     failed: Array<{ reason: string; trackName: string }>;
     /** Non-MP3 files. Neither tserato nor pyserato has an encoder for anything else. */
     unsupported: number;
@@ -463,6 +494,31 @@ export function readTrackCues(trackPath: string): null | SeratoCueWire[] {
 }
 
 /**
+ * Read the beat grid off a local file, or null if this file can't carry one.
+ *
+ * `[]` and `null` are different answers and pymix reads them differently. `[]`
+ * is a file Serato has analysed and left ungridded -- the frame is there with no
+ * markers in it -- which is a real reading of a real absence, and pymix stores
+ * nothing rather than falling back to its own copy. `null` is "we could not
+ * read one", and pymix falls back. So frame presence is not evidence of a grid,
+ * and this must not collapse the two.
+ */
+export function readTrackGrid(trackPath: string): null | SeratoBeatgridWire[] {
+    if (path.extname(trackPath).toLowerCase() !== '.mp3') return null;
+    try {
+        return new BeatgridMp3Encoder().readBeatgrid(Track.fromPath(trackPath)).map((tempo) => ({
+            beats_till_next: tempo.beatsTillNext ?? null,
+            bpm: tempo.bpm ?? null,
+            // The frame stores seconds; everything either side of the wire is ms.
+            position_ms: Math.round((tempo.position ?? 0) * 1000),
+        }));
+    } catch (err) {
+        console.warn(`[serato] could not read a beat grid from ${path.basename(trackPath)}:`, err);
+        return null;
+    }
+}
+
+/**
  * Write subbox's cues into the user's own audio files.
  *
  * Only ever into a file that has *no* cues of its own. A track the user has
@@ -506,6 +562,55 @@ export function writeTrackCues(
                 if (isLoop) nLoops += 1;
                 else nCues += 1;
             }
+            encoder.write(track);
+            result.written += 1;
+        } catch (err: any) {
+            result.failed.push({ reason: err?.message || String(err), trackName: name });
+        }
+    }
+    return result;
+}
+
+/**
+ * Write subbox's beat grid into the user's own audio files.
+ *
+ * Same conservatism as writeTrackCues and, deliberately, a *separate* guard. A
+ * file can carry a grid and no cues or cues and no grid, so gating this on the
+ * cue check would both skip files that need a grid and write grids into files
+ * that should be left alone.
+ *
+ * The guard is "does this file already have anchors", not "does it have the
+ * frame": Serato writes the frame with zero markers into every track it has
+ * analysed, so testing for the frame would skip almost every file this is for.
+ *
+ * A wrong grid is worse than a missing one -- it puts every hot cue on the track
+ * off-beat, the user's own included -- so an anchor list that does not encode is
+ * reported as a failure rather than partially written.
+ */
+export function writeTrackGrid(
+    tracks: Array<{ beatgrid: SeratoBeatgridWire[]; localPath: string }>,
+): WriteGridResult {
+    const result: WriteGridResult = { alreadyGridded: 0, failed: [], unsupported: 0, written: 0 };
+    const encoder = new BeatgridMp3Encoder();
+
+    for (const { beatgrid, localPath } of tracks) {
+        const name = path.basename(localPath);
+        if (beatgrid.length === 0) continue;
+        if (path.extname(localPath).toLowerCase() !== '.mp3') {
+            result.unsupported += 1;
+            continue;
+        }
+        try {
+            const track = Track.fromPath(localPath);
+            if (encoder.readBeatgrid(track).length > 0) {
+                result.alreadyGridded += 1;
+                continue;
+            }
+            track.beatgrid = beatgrid.map((anchor) => ({
+                beatsTillNext: anchor.beats_till_next ?? null,
+                bpm: anchor.bpm ?? null,
+                position: anchor.position_ms / 1000,
+            }));
             encoder.write(track);
             result.written += 1;
         } catch (err: any) {

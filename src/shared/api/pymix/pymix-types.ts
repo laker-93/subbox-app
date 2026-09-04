@@ -222,10 +222,21 @@ const seratoCue = z.object({
     type: z.enum(['cue', 'loop']),
 });
 
+/**
+ * One beat-grid anchor. Serato-shaped in both directions: every anchor but the
+ * last carries `beats_till_next`, the last carries `bpm`. pymix converts a
+ * Rekordbox-sourced grid — where every anchor has its own tempo — before
+ * sending, so this side never does that arithmetic.
+ */
+const seratoBeatgridMarker = z.object({
+    beats_till_next: z.number().nullish(),
+    bpm: z.number().nullish(),
+    position_ms: z.number(),
+});
+
 const seratoImportParameters = z.object({
     track_identities: z.array(
         z.object({
-            crate_path: z.string(),
             /**
              * The cues as read off the user's own file. pymix can only read its
              * copy, which is frozen at whatever was uploaded — so for a track the
@@ -234,6 +245,15 @@ const seratoImportParameters = z.object({
              * array means "we read them and there are none", which pymix leaves
              * alone rather than treating as a deletion.
              */
+            /**
+             * The beat grid, read the same three ways `cues` is. One wrinkle of
+             * its own: a file Serato has analysed but not gridded carries the
+             * frame with zero anchors in it, so an empty array is what a
+             * *present* frame decodes to as often as it is what a missing
+             * encoder produces. Frame presence is not evidence of a grid.
+             */
+            beatgrid: z.array(seratoBeatgridMarker).optional(),
+            crate_path: z.string(),
             cues: z.array(seratoCue).optional(),
             subbox_id: z.string(),
         }),
@@ -264,6 +284,11 @@ const seratoExport = z.object({
                 z.object({
                     album: z.string(),
                     artist: z.string(),
+                    beatgrid: z.array(seratoBeatgridMarker),
+                    /** What the conversion to Serato's shape could not carry —
+                     *  a time signature, a beat-of-bar, a rounded span. To show,
+                     *  not to act on. */
+                    beatgrid_notes: z.array(z.string()),
                     cues: z.array(seratoCue),
                     rating: z.number(),
                     /** Inside the download, under `music/`. Join onto the music folder. */
