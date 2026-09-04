@@ -21,6 +21,12 @@ const SERATO_FOLDER_KEY = 'serato_folder';
  */
 export type SeratoWriteResult = {
     backupFolder: null | string;
+    beatgrid: {
+        alreadyGridded: number;
+        failed: Array<{ reason: string; trackName: string }>;
+        unsupported: number;
+        written: number;
+    };
     cratesWritten: number;
     cues: {
         alreadyCued: number;

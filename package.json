@@ -169,7 +169,7 @@
         "react-window-v2": "npm:react-window@^2.2.3",
         "semver": "^7.5.4",
         "string-to-color": "^2.2.2",
-        "tserato": "0.1.14",
+        "tserato": "0.1.15",
         "tus-js-client": "^4.3.1",
         "unzipper": "^0.12.3",
         "wavesurfer.js": "^7.11.1",
