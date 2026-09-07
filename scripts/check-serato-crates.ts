@@ -374,10 +374,16 @@ function checkAnUngriddedAnalysedTrackIsNotMistakenForAGriddedOne(): void {
         framesBefore,
         'writing a grid must not disturb the cues, waveform or analysis frames',
     );
-    assert.deepEqual(
-        readTrackGrid(ungridded)!.map((m) => [m.position_ms, m.bpm]),
-        [[46, 128.0]],
+    // Same float32 tolerance as checkGridsAreWrittenButNeverOverwritten: the
+    // frame cannot store 46ms exactly, and demanding it back exactly would be
+    // demanding that readTrackGrid rounds.
+    const writtenBack = readTrackGrid(ungridded)!;
+    assert.equal(writtenBack.length, 1, 'the empty frame was written into');
+    assert.ok(
+        Math.abs(writtenBack[0].position_ms - 46) < 0.001,
+        `anchor position ${writtenBack[0].position_ms} should be ~46`,
     );
+    assert.equal(writtenBack[0].bpm, 128.0, 'the terminal anchor keeps its tempo');
     console.log(
         `  ungridded-analysed: frame present with no anchors is written into, all ` +
             `${framesAfter.length} frames intact — OK`,
@@ -612,11 +618,26 @@ function checkGridsAreWrittenButNeverOverwritten(): void {
     );
 
     const readBack = readTrackGrid(fresh)!;
+    // Positions compare with a tolerance, not exactly. The frame stores float32
+    // seconds, which cannot represent every whole millisecond -- 46ms comes back
+    // as 46.00000008940697 -- so an exact assertion here would be asserting that
+    // readTrackGrid rounds, which is the bug it used to have (the client twin of
+    // laker-93/pymix#165). The tolerance is a thousandth of a millisecond: tight
+    // enough that the 0.49ms quantisation would still fail it, loose enough that
+    // float32 is allowed to be float32.
+    assert.equal(readBack.length, 2, 'both anchors read back');
+    const POS_TOLERANCE_MS = 0.001;
+    for (const [i, expected] of [46, 22000].entries()) {
+        assert.ok(
+            Math.abs(readBack[i].position_ms - expected) < POS_TOLERANCE_MS,
+            `anchor ${i} position ${readBack[i].position_ms} should be ~${expected}`,
+        );
+    }
     assert.deepEqual(
-        readBack.map((m) => [m.position_ms, m.beats_till_next, m.bpm]),
+        readBack.map((m) => [m.beats_till_next, m.bpm]),
         [
-            [46, 64, null],
-            [22000, null, 175.0],
+            [64, null],
+            [null, 175.0],
         ],
         'the terminal anchor keeps its tempo and the other keeps its beat count',
     );

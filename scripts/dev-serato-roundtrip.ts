@@ -9,9 +9,12 @@ import {
     nodeKey,
     readCrateTree,
     readTrackCues,
+    readTrackGrid,
+    SeratoBeatgridWire,
     SeratoCueWire,
     writeCrates,
     writeTrackCues,
+    writeTrackGrid,
 } from '../src/main/features/core/sync/serato-crates';
 
 // Rung 5 of the Serato harness, minus the Electron shell: drive the whole export
@@ -47,6 +50,12 @@ type ExportCrate = { display_name: string; path_components: string[]; tracks: Ex
 type ExportTrack = {
     album: string;
     artist: string;
+    // pymix derives Serato's whole-beat spacing server-side (beatgrid.to_serato_anchors),
+    // so what arrives is already Serato-shaped and the client only maps fields.
+    beatgrid: SeratoBeatgridWire[];
+    // What the conversion could not carry -- a dropped Metro, a non-downbeat
+    // Battito, a beat span rounded to a whole number. Surfaced, never silent.
+    beatgrid_notes: string[];
     cues: SeratoCueWire[];
     rating: number;
     relative_path: string;
@@ -85,7 +94,7 @@ async function downloadTracks(workDir: string, playlistIds: string[]): Promise<s
     console.log(`  pymix zipped ${plan.nTracksExported} tracks as ${plan.downloadFilename}`);
 
     const res = await fetch(`${PYMIX}/sync/download/${encodeURIComponent(plan.downloadFilename)}`, {
-        headers: { Cookie: cookie },
+        headers: { Connection: 'close', Cookie: cookie },
     });
     assert.ok(res.ok, `download -> ${res.status}`);
     const zipPath = path.join(workDir, 'music.zip');
@@ -130,11 +139,25 @@ async function main(): Promise<void> {
     );
     for (const crate of crates) {
         const cues = crate.tracks.reduce((n, t) => n + t.cues.length, 0);
+        const gridded = crate.tracks.filter((t) => (t.beatgrid ?? []).length > 0).length;
+        const anchors = crate.tracks.reduce((n, t) => n + (t.beatgrid ?? []).length, 0);
         console.log(
             `  ${crate.display_name}: ${crate.tracks.length} tracks, ${cues} cues, ` +
-                `depth ${crate.path_components.length}`,
+                `${gridded} gridded (${anchors} anchors), depth ${crate.path_components.length}`,
         );
+        for (const t of crate.tracks) {
+            for (const note of t.beatgrid_notes ?? []) {
+                console.log(`      note (${t.relative_path}): ${note}`);
+            }
+        }
     }
+    // A field ts-rest would not have caught: it does not validate responses, so a
+    // server that stopped sending `beatgrid` reads as `undefined` rather than
+    // throwing, and every grid assertion below would vacuously pass.
+    assert.ok(
+        crates.every((c) => c.tracks.every((t) => Array.isArray(t.beatgrid))),
+        'every exported track must carry a beatgrid array (absent === server half missing)',
+    );
     assert.ok(
         crates.some((c) => c.path_components.length > 1),
         'at least one nested crate, or the tree is not being tested',
@@ -225,6 +248,111 @@ async function main(): Promise<void> {
     }
     console.log(`  ${checked} tracks' cues read back identically — OK`);
 
+    // ── 5. write the beat grids ─────────────────────────────────────────────
+    console.log('\nWriting beat grids');
+    const gridTargets = new Map<string, SeratoBeatgridWire[]>();
+    for (const crate of crates) {
+        for (const t of crate.tracks) {
+            if ((t.beatgrid ?? []).length > 0) {
+                gridTargets.set(path.join(musicRoot, t.relative_path), t.beatgrid);
+            }
+        }
+    }
+    console.log(`  ${gridTargets.size} tracks have a grid to write`);
+
+    // The guard would otherwise make this test lie. writeTrackGrid declines any
+    // file that already carries anchors -- deliberately, because it cannot tell
+    // Serato's auto-analysis from a grid the user fixed by hand, and a wrong grid
+    // is worse than a missing one. But these files came out of subbox carrying
+    // whatever the *uploaded* copy had, so without this most of them would be
+    // skipped, the run would report success, and nothing would have been written.
+    //
+    // Clearing to n_markers=0 is not a cheat: it is exactly the state Serato
+    // leaves a track it has analysed but never gridded, which is the case the
+    // writeback exists to serve. It also proves the guard tests for *anchors*
+    // rather than for the frame, since the frame is still there afterwards.
+    let cleared = 0;
+    if (process.env.KEEP_EXISTING_GRIDS !== '1') {
+        const { BeatgridMp3Encoder, Track } = await import('tserato');
+        const encoder = new BeatgridMp3Encoder();
+        for (const localPath of gridTargets.keys()) {
+            if (path.extname(localPath).toLowerCase() !== '.mp3') continue;
+            const t = Track.fromPath(localPath);
+            if (encoder.readBeatgrid(t).length === 0) continue;
+            t.beatgrid = [];
+            encoder.write(t);
+            cleared += 1;
+        }
+        console.log(`  cleared ${cleared} pre-existing grids to the analysed-but-ungridded state`);
+    }
+
+    const gridResult = writeTrackGrid(
+        Array.from(gridTargets, ([localPath, beatgrid]) => ({ beatgrid, localPath })),
+    );
+    console.log(
+        `  ${gridResult.written} written, ${gridResult.alreadyGridded} already gridded, ` +
+            `${gridResult.unsupported} unsupported, ${gridResult.failed.length} failed`,
+    );
+    for (const f of gridResult.failed) console.log(`    FAILED ${f.trackName}: ${f.reason}`);
+    assert.equal(gridResult.failed.length, 0, 'no grid write should fail');
+
+    const mp3Targets = Array.from(gridTargets.keys()).filter(
+        (p) => path.extname(p).toLowerCase() === '.mp3',
+    );
+    if (mp3Targets.length > 0) {
+        // Assert on `written`, not on the call returning. A run where every file
+        // was skipped is the failure this phase is here to catch.
+        assert.ok(
+            gridResult.written > 0,
+            'at least one grid must actually be written -- all-skipped is not a pass',
+        );
+    }
+
+    // Read them back through the same decode the import uses.
+    let gridsChecked = 0;
+    for (const [localPath, expected] of gridTargets) {
+        if (path.extname(localPath).toLowerCase() !== '.mp3') continue;
+        const back = readTrackGrid(localPath);
+        assert.ok(back, `a grid should read back from ${path.basename(localPath)}`);
+        assert.equal(
+            back.length,
+            expected.length,
+            `${path.basename(localPath)} should have ${expected.length} anchors`,
+        );
+        for (let i = 0; i < expected.length; i += 1) {
+            // Serato stores float32 seconds, so a position survives to about
+            // 1e-4 ms -- far finer than the 0.49ms int() rounding pymix#165 fixed,
+            // and the reason this compares with a tolerance rather than exactly.
+            assert.ok(
+                Math.abs(back[i].position_ms - expected[i].position_ms) < 0.01,
+                `anchor ${i} of ${path.basename(localPath)}: ` +
+                    `${back[i].position_ms} != ${expected[i].position_ms}`,
+            );
+            assert.equal(
+                back[i].beats_till_next ?? null,
+                expected[i].beats_till_next ?? null,
+                `anchor ${i} of ${path.basename(localPath)} should keep its beat count`,
+            );
+        }
+        gridsChecked += 1;
+    }
+    console.log(`  ${gridsChecked} tracks' grids read back anchor for anchor — OK`);
+
+    // The cues must still be there. Writing two GEOB frames on one file is where
+    // tserato#9 went wrong, and a grid write that took the cues with it would
+    // otherwise pass every assertion above.
+    for (const [localPath, expected] of cueTargets) {
+        if (path.extname(localPath).toLowerCase() !== '.mp3') continue;
+        const back = readTrackCues(localPath);
+        assert.ok(back, `cues must survive the grid write on ${path.basename(localPath)}`);
+        assert.equal(
+            back.length,
+            expected.length,
+            `${path.basename(localPath)} lost cues when its grid was written`,
+        );
+    }
+    console.log('  cues survived the grid write — OK');
+
     // The damage check. tserato#9 was a write that replaced the whole GEOB array,
     // taking the beatgrid and waveform with it.
     console.log(`\nWorkspace kept for inspection:\n  ${workDir}`);
@@ -232,10 +360,19 @@ async function main(): Promise<void> {
     console.log('\nSerato round trip passed.');
 }
 
+// Never reuse a socket. uvicorn's default keep-alive timeout is 5s, and this
+// script does seconds of blocking ID3 work between calls -- reading cues and
+// grids off every track in the manifest -- so a pooled connection is routinely
+// dead by the time the next request goes out. undici writes into it and reports
+// `other side closed`, which reads like a server error and is not one.
 async function pymix<T>(pathname: string, body: unknown): Promise<T> {
     const res = await fetch(`${PYMIX}${pathname}`, {
         body: JSON.stringify(body),
-        headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+        headers: {
+            Connection: 'close',
+            'Content-Type': 'application/json',
+            ...(cookie ? { Cookie: cookie } : {}),
+        },
         method: 'POST',
     });
     const setCookie = res.headers.getSetCookie?.() ?? [];

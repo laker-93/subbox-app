@@ -510,7 +510,17 @@ export function readTrackGrid(trackPath: string): null | SeratoBeatgridWire[] {
             beats_till_next: tempo.beatsTillNext ?? null,
             bpm: tempo.bpm ?? null,
             // The frame stores seconds; everything either side of the wire is ms.
-            position_ms: Math.round((tempo.position ?? 0) * 1000),
+            //
+            // Not rounded. Serato stores anchor positions as float32 seconds,
+            // which is finer than a whole millisecond, and rounding here moved
+            // every anchor of a real hand-gridded track by up to 0.49ms -- so a
+            // grid could not make the trip out and back unchanged. This is the
+            // client-side twin of laker-93/pymix#165, which fixed the same
+            // quantisation on the server's `position_ms: int`; the wire type and
+            // pymix's JSON schema have always said `number`, and only these two
+            // annotations disagreed. Inaudible drift, but byte-identity is far
+            // easier to keep than to re-establish.
+            position_ms: (tempo.position ?? 0) * 1000,
         }));
     } catch (err) {
         console.warn(`[serato] could not read a beat grid from ${path.basename(trackPath)}:`, err);
