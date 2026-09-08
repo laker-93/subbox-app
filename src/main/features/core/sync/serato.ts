@@ -259,9 +259,10 @@ ipcMain.handle(
             // The cues, read off the file the user is actually cueing. pymix can
             // only read its own copy, which is frozen at whatever was uploaded, so
             // for a track the library already has, every cue set in Serato since is
-            // invisible to it. null means this file can't carry cues (not an MP3,
-            // or unreadable) and pymix should fall back to its own copy; an empty
-            // array means it can and there are none.
+            // invisible to it. null means this file can't carry cues (a
+            // container tserato has no reader for, or unreadable) and pymix
+            // should fall back to its own copy; an empty array means it can and
+            // there are none.
             const cues = readTrackCues(trackPath);
             // The beat grid, asked for separately and for the same reason: a
             // track can carry a grid and no cues, or cues and no grid. Note that
