@@ -69,7 +69,7 @@ async function main(): Promise<void> {
     console.log(`\n  re-cueing ${path.basename(victim)} at ${NEW_CUE.start_ms}ms`);
     // Written straight into the file's Markers2 frame, which is exactly what
     // Serato would have left behind.
-    const { HotCue, HotCueType, Track, V2Mp3Encoder } = await import('tserato');
+    const { HotCue, HotCueType, Track, V2Encoder } = await import('tserato');
     const t = Track.fromPath(victim);
     // HotCue takes start/end, not the wire shape's start_ms/end_ms. Spreading the
     // wire object here silently wrote the cue at 0 — worth the two extra lines.
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
             type: HotCueType.CUE,
         }),
     );
-    new V2Mp3Encoder().write(t);
+    new V2Encoder().write(t);
     const onDisk = readTrackCues(victim)!;
     assert.ok(
         onDisk.some((c) => c.name === NEW_CUE.name && c.start_ms === NEW_CUE.start_ms),
