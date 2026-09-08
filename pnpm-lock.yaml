@@ -216,8 +216,8 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       tserato:
-        specifier: 0.1.15
-        version: 0.1.15
+        specifier: 0.2.0
+        version: 0.2.0
       tus-js-client:
         specifier: ^4.3.1
         version: 4.3.1
@@ -3413,6 +3413,9 @@ packages:
     resolution: {integrity: sha512-78/PXT1wlLLDgTzDs7sjq9hzz0vXD+zn+7wypEe4fXQxCmdmqfGsEPQxmiCSQI3ajFV91bVSsvNtrJRiW6nGng==}
     engines: {node: '>=10'}
 
+  flac-tagger@1.0.8:
+    resolution: {integrity: sha512-Cq0daZWn8ZpbrDAAwkVg82yIe+Xoc+iOAWDDqNCsWEmVfYrhNXDBWyfiQzzjqSYEaQgngvBMCgj8pJoKzgTfzw==}
+
   flat-cache@4.0.1:
     resolution: {integrity: sha512-f7ccFPK3SXFHpx15UIGyRJ/FJQctuKZ0zVuN3frBo4HnK3cay9VEW0R6yPYFHC0AgqhukPzKjq22t5DmAyqGyw==}
     engines: {node: '>=16'}
@@ -3770,6 +3773,10 @@ packages:
   ignore@7.0.5:
     resolution: {integrity: sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg==}
     engines: {node: '>= 4'}
+
+  imageinfo@1.0.4:
+    resolution: {integrity: sha512-BJml4q/QCO2187F4UcO/b6hTYIhbq4nnd1XNs65jyCED9em4m6XmeGWDxjewjfJoC7VJABhOdmqb64KA24rLZw==}
+    engines: {node: '>=0.4'}
 
   immediate@3.0.6:
     resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
@@ -5702,8 +5709,8 @@ packages:
     peerDependencies:
       typescript: '>=4.8.4'
 
-  tserato@0.1.15:
-    resolution: {integrity: sha512-nQOWc/BpIAindKqsSih5UHTPudeeQY0HuBM5QQftrIC1pVPNrP4wX25QpcWq50djNkyS545lqDbZgzQ1tLR4uA==}
+  tserato@0.2.0:
+    resolution: {integrity: sha512-Ly8/5G1XFNpfWxhtdewB7DtN76r9b4J6cUX+UlMlmn9gOjaQM4eHs4sacm3QKrj16idhpeW16WZf+CQjXEDcvw==}
 
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
@@ -9731,6 +9738,10 @@ snapshots:
       locate-path: 6.0.0
       path-exists: 4.0.0
 
+  flac-tagger@1.0.8:
+    dependencies:
+      imageinfo: 1.0.4
+
   flat-cache@4.0.1:
     dependencies:
       flatted: 3.3.3
@@ -10152,6 +10163,8 @@ snapshots:
   ignore@5.3.2: {}
 
   ignore@7.0.5: {}
+
+  imageinfo@1.0.4: {}
 
   immediate@3.0.6: {}
 
@@ -12099,9 +12112,10 @@ snapshots:
     dependencies:
       typescript: 5.8.3
 
-  tserato@0.1.15:
+  tserato@0.2.0:
     dependencies:
       base-64: 1.0.0
+      flac-tagger: 1.0.8
       mp3tag.js: 3.17.0
 
   tslib@2.8.1: {}
