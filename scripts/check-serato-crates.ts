@@ -914,6 +914,19 @@ function synthFlac(relative: string): string {
     return full;
 }
 
+/** An mp3 real enough for mp3tag.js, after check-taglib-tagging.ts's builder. */
+function synthMp3(relative: string): string {
+    const full = path.join(musicRoot, relative);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    const header = Buffer.alloc(10);
+    header.write('ID3', 0, 'latin1');
+    header[3] = 3;
+    // A 128kbps 44.1kHz mono MPEG-1 Layer III frame, followed by its 417 bytes.
+    const frame = Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x44]), Buffer.alloc(417)]);
+    fs.writeFileSync(full, Buffer.concat([header, frame, frame, frame]));
+    return full;
+}
+
 /**
  * A WAV header, which is all that is needed: nothing reads past it.
  *
@@ -938,18 +951,5 @@ function synthWav(relative: string): string {
     wav.write('data', 36, 'latin1');
     wav.writeUInt32LE(0, 40);
     fs.writeFileSync(full, wav);
-    return full;
-}
-
-/** An mp3 real enough for mp3tag.js, after check-taglib-tagging.ts's builder. */
-function synthMp3(relative: string): string {
-    const full = path.join(musicRoot, relative);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    const header = Buffer.alloc(10);
-    header.write('ID3', 0, 'latin1');
-    header[3] = 3;
-    // A 128kbps 44.1kHz mono MPEG-1 Layer III frame, followed by its 417 bytes.
-    const frame = Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x44]), Buffer.alloc(417)]);
-    fs.writeFileSync(full, Buffer.concat([header, frame, frame, frame]));
     return full;
 }
