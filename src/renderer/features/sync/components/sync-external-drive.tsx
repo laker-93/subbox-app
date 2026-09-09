@@ -12,6 +12,7 @@ import {
     FormatSelect,
     RekordboxImportSteps,
     SelectableList,
+    SeratoOverwriteOptions,
     SeratoWriteSummary,
     SyncFlow,
     SyncLoading,
@@ -766,6 +767,10 @@ export const SyncExternalDrive = () => {
                         tooltip="The _Serato_ folder your crates are written into. It has to be on the same drive as your music, so this is normally the one in your Music folder, not one on the USB."
                     />
                 )}
+
+                {/* Only under Serato here: the Rekordbox route on this screen writes
+                    an XML and never touches the user's Serato tags. */}
+                {format === 'serato' && <SeratoOverwriteOptions />}
             </SyncSettingsModal>
 
             {/* Both routes end the same way: the tracks land in the local library and

@@ -30,11 +30,20 @@ export const SeratoWriteSummary = ({ onShowFolder, result }: SeratoWriteSummaryP
                 {`Cues written into ${result.cues.written} track${result.cues.written === 1 ? '' : 's'}.`}
             </Text>
         )}
-        {/* Not a failure, and worth saying out loud: subbox deliberately never
-            overwrites cues you already have. */}
+        {/* Louder than the rest: this run took something away, because the user
+            asked it to. Coloured rather than dimmed for the same reason the
+            renamed/missing lines are. */}
+        {result.cues.replaced > 0 && (
+            <Text c="yellow" size="xs">
+                {`${result.cues.replaced} track${result.cues.replaced === 1 ? "'s existing Serato cues were" : "s' existing Serato cues were"} replaced.`}
+            </Text>
+        )}
+        {/* Not a failure, and worth saying out loud: subbox does not overwrite cues
+            you already have unless you turn that on. Which the user cannot act on
+            unless the line says where the setting is. */}
         {result.cues.alreadyCued > 0 && (
             <Text c="dimmed" size="xs">
-                {`${result.cues.alreadyCued} track${result.cues.alreadyCued === 1 ? ' already had' : 's already had'} cues in Serato and ${result.cues.alreadyCued === 1 ? 'was' : 'were'} left untouched.`}
+                {`${result.cues.alreadyCued} track${result.cues.alreadyCued === 1 ? ' already had' : 's already had'} cues in Serato and ${result.cues.alreadyCued === 1 ? 'was' : 'were'} left untouched. Turn on "Replace cues already in Serato" under the cog to overwrite them.`}
             </Text>
         )}
         {result.beatgrid.written > 0 && (
@@ -42,12 +51,19 @@ export const SeratoWriteSummary = ({ onShowFolder, result }: SeratoWriteSummaryP
                 {`Beat grids written into ${result.beatgrid.written} track${result.beatgrid.written === 1 ? '' : 's'}.`}
             </Text>
         )}
+        {result.beatgrid.replaced > 0 && (
+            <Text c="yellow" size="xs">
+                {`${result.beatgrid.replaced} track${result.beatgrid.replaced === 1 ? "'s existing Serato beat grid was" : "s' existing Serato beat grids were"} replaced.`}
+            </Text>
+        )}
         {/* Same promise as the cue line above, and worth making separately: a
             track can have a grid and no cues, so one being left alone says
-            nothing about the other. */}
+            nothing about the other. This is the line most people will see, because
+            Serato's own analysis writes an anchor into everything it has looked at
+            -- so it has to say how to change the outcome, not just report it. */}
         {result.beatgrid.alreadyGridded > 0 && (
             <Text c="dimmed" size="xs">
-                {`${result.beatgrid.alreadyGridded} track${result.beatgrid.alreadyGridded === 1 ? ' already had a beat grid' : 's already had beat grids'} in Serato and ${result.beatgrid.alreadyGridded === 1 ? 'was' : 'were'} left untouched.`}
+                {`${result.beatgrid.alreadyGridded} track${result.beatgrid.alreadyGridded === 1 ? ' already had a beat grid' : 's already had beat grids'} in Serato and ${result.beatgrid.alreadyGridded === 1 ? 'was' : 'were'} left untouched. Serato writes one into every track it analyses, so turn on "Replace beat grids already in Serato" under the cog to send yours anyway.`}
             </Text>
         )}
         {result.renamed.length > 0 && (

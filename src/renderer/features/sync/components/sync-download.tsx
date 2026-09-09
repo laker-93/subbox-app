@@ -13,6 +13,7 @@ import {
     FormatSelect,
     RekordboxImportSteps,
     SelectableList,
+    SeratoOverwriteOptions,
     SeratoWriteSummary,
     SyncFlow,
     SyncLoading,
@@ -1038,6 +1039,11 @@ export const SyncDownload = () => {
                         tooltip="The _Serato_ folder your crates are written into. Normally inside your Music folder; on an external drive it is at the top level."
                     />
                 )}
+
+                {/* Shown whenever this run will write crates, under either format:
+                    the Rekordbox path writes them too when "Also write Serato crates"
+                    is on, and it is the path a grid built in Rekordbox arrives by. */}
+                {isElectron() && includeSeratoCrates && <SeratoOverwriteOptions />}
 
                 {/* Where the Rekordbox XML is saved (desktop only) */}
                 {isElectron() && includeRekordboxXml && (

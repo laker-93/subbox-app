@@ -212,12 +212,35 @@ export function resolveSeratoFolder(picked: string): null | string {
 // eslint-disable-next-line no-control-regex
 const UNSAFE_IN_CRATE_NAME = /%%|[/\\\x00-\x1f]/g;
 
+/**
+ * Write into files that already carry Serato's own cues or grid.
+ *
+ * Off unless the user asks for it, on both counts. The default guard is right for
+ * the case it was written for -- a freshly downloaded track has nothing of its own
+ * to lose -- but it is wrong for the case that motivates the whole
+ * Rekordbox -> Serato direction: a track the DJ already has in Serato, gridded
+ * there, that they have since re-gridded in Rekordbox. Serato's *auto*-analysis
+ * writes a single anchor, so a track it has merely seen already trips the grid
+ * guard; measured across a real library, 27 of 34 gridded files (79%) were
+ * declined, and nothing on screen said so.
+ *
+ * The guard cannot tell Serato's guess from a hand-built grid and never will --
+ * the frame says nothing about who wrote it -- so the decision is handed to the
+ * only party who knows. There is no undo: the encoder replaces the whole tag.
+ */
+export interface OverwriteOptions {
+    overwrite?: boolean;
+}
+
 export interface WriteCuesResult {
     /** Files that already had cues in Serato and were left exactly as they were. */
     alreadyCued: number;
     failed: Array<{ reason: string; trackName: string }>;
+    /** Files that had cues of their own and were overwritten anyway, on request. */
+    replaced: number;
     /** WAV, AIFF and M4A. Neither tserato nor pyserato reads those yet (tserato#17). */
     unsupported: number;
+    /** Files written into. Includes `replaced`, which counts a subset of these. */
     written: number;
 }
 
@@ -225,8 +248,11 @@ export interface WriteGridResult {
     /** Files that already had a beat grid in Serato and were left as they were. */
     alreadyGridded: number;
     failed: Array<{ reason: string; trackName: string }>;
+    /** Files that had a grid of their own and were overwritten anyway, on request. */
+    replaced: number;
     /** WAV, AIFF and M4A. Neither tserato nor pyserato reads those yet (tserato#17). */
     unsupported: number;
+    /** Files written into. Includes `replaced`, which counts a subset of these. */
     written: number;
 }
 
@@ -549,15 +575,26 @@ export function readTrackGrid(trackPath: string): null | SeratoBeatgridWire[] {
 /**
  * Write subbox's cues into the user's own audio files.
  *
- * Only ever into a file that has *no* cues of its own. A track the user has
+ * By default only into a file that has *no* cues of its own. A track the user has
  * already cued in Serato is theirs, and subbox's copy of its cues is as old as
  * the last import — overwriting is how a DJ loses an evening's work with no
  * undo. The freshly downloaded track, which is what this is for, has none.
+ *
+ * `overwrite` is that judgement handed back to the user, who is the only one who
+ * knows whether the cues in the file or the cues in subbox are the ones they
+ * meant to keep. See OverwriteOptions.
  */
 export function writeTrackCues(
     tracks: Array<{ cues: SeratoCueWire[]; localPath: string }>,
+    { overwrite = false }: OverwriteOptions = {},
 ): WriteCuesResult {
-    const result: WriteCuesResult = { alreadyCued: 0, failed: [], unsupported: 0, written: 0 };
+    const result: WriteCuesResult = {
+        alreadyCued: 0,
+        failed: [],
+        replaced: 0,
+        unsupported: 0,
+        written: 0,
+    };
     const encoder = new V2Encoder();
 
     for (const { cues, localPath } of tracks) {
@@ -565,10 +602,14 @@ export function writeTrackCues(
         if (cues.length === 0) continue;
         try {
             const track = Track.fromPath(localPath);
-            if (encoder.readCues(track).length > 0) {
+            // Read even when overwriting: the count is what tells the user, on the
+            // done screen, that this run took something away from them.
+            const hadCues = encoder.readCues(track).length > 0;
+            if (hadCues && !overwrite) {
                 result.alreadyCued += 1;
                 continue;
             }
+            if (hadCues) result.replaced += 1;
             let nCues = 0;
             let nLoops = 0;
             for (const cue of cues) {
@@ -611,6 +652,9 @@ export function writeTrackCues(
  * The guard is "does this file already have anchors", not "does it have the
  * frame": Serato writes the frame with zero markers into every track it has
  * analysed, so testing for the frame would skip almost every file this is for.
+ * It still skips most of them -- Serato's auto-analysis writes one anchor, which
+ * is indistinguishable from a hand-set downbeat -- which is what `overwrite` is
+ * for. See OverwriteOptions.
  *
  * A wrong grid is worse than a missing one -- it puts every hot cue on the track
  * off-beat, the user's own included -- so an anchor list that does not encode is
@@ -618,8 +662,15 @@ export function writeTrackCues(
  */
 export function writeTrackGrid(
     tracks: Array<{ beatgrid: SeratoBeatgridWire[]; localPath: string }>,
+    { overwrite = false }: OverwriteOptions = {},
 ): WriteGridResult {
-    const result: WriteGridResult = { alreadyGridded: 0, failed: [], unsupported: 0, written: 0 };
+    const result: WriteGridResult = {
+        alreadyGridded: 0,
+        failed: [],
+        replaced: 0,
+        unsupported: 0,
+        written: 0,
+    };
     const encoder = new BeatgridEncoder();
 
     for (const { beatgrid, localPath } of tracks) {
@@ -627,10 +678,12 @@ export function writeTrackGrid(
         if (beatgrid.length === 0) continue;
         try {
             const track = Track.fromPath(localPath);
-            if (encoder.readBeatgrid(track).length > 0) {
+            const hadGrid = encoder.readBeatgrid(track).length > 0;
+            if (hadGrid && !overwrite) {
                 result.alreadyGridded += 1;
                 continue;
             }
+            if (hadGrid) result.replaced += 1;
             track.beatgrid = beatgrid.map((anchor) => ({
                 beatsTillNext: anchor.beats_till_next ?? null,
                 bpm: anchor.bpm ?? null,

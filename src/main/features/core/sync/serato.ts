@@ -587,9 +587,10 @@ ipcMain.handle(
 // the paths the download actually landed on.
 //
 // It also means the cues and the beat grid can go into the real files. Writing
-// either is deliberately timid: only into a track that has none of its own. The
-// two are guarded separately, because a file can have one without the other --
-// see writeTrackCues and writeTrackGrid.
+// either is deliberately timid by default: only into a track that has none of its
+// own, unless the user has asked for the opposite. The two are guarded separately,
+// because a file can have one without the other -- see writeTrackCues,
+// writeTrackGrid and OverwriteOptions.
 
 export interface SeratoExportResult extends WriteCratesResult {
     beatgrid: WriteGridResult;
@@ -616,6 +617,10 @@ ipcMain.handle(
              *  parent. Empty falls back to the app's own music folder, which is
              *  where a download would have put them anyway. */
             musicRoot: string;
+            /** Replace a beat grid the file already carries. Off unless asked for. */
+            overwriteBeatgrid?: boolean;
+            /** Replace cues the file already carries. Off unless asked for. */
+            overwriteCues?: boolean;
             seratoFolder: string;
             /** Write subbox's beat grid into files that have none of their own. */
             writeBeatgrid?: boolean;
@@ -623,7 +628,14 @@ ipcMain.handle(
             writeCues?: boolean;
         },
     ): Promise<SeratoExportResult> => {
-        const { crates, seratoFolder, writeBeatgrid = true, writeCues = true } = args;
+        const {
+            crates,
+            overwriteBeatgrid = false,
+            overwriteCues = false,
+            seratoFolder,
+            writeBeatgrid = true,
+            writeCues = true,
+        } = args;
         const musicRoot = args.musicRoot || getMusicPath();
 
         if (!fs.existsSync(path.join(seratoFolder, 'SubCrates'))) {
@@ -693,10 +705,12 @@ ipcMain.handle(
         }
         const cues = writeTrackCues(
             Array.from(cueTargets, ([localPath, trackCues]) => ({ cues: trackCues, localPath })),
+            { overwrite: overwriteCues },
         );
         if (cues.written > 0 || cues.alreadyCued > 0 || cues.failed.length > 0) {
             console.log(
-                `[serato] cues: ${cues.written} written, ${cues.alreadyCued} left alone ` +
+                `[serato] cues: ${cues.written} written, ${cues.replaced} of them replacing ` +
+                    `existing Serato cues, ${cues.alreadyCued} left alone ` +
                     `(already cued in Serato), ${cues.unsupported} unsupported format, ` +
                     `${cues.failed.length} failed`,
             );
@@ -721,10 +735,12 @@ ipcMain.handle(
         }
         const beatgrid = writeTrackGrid(
             Array.from(gridTargets, ([localPath, grid]) => ({ beatgrid: grid, localPath })),
+            { overwrite: overwriteBeatgrid },
         );
         if (beatgrid.written > 0 || beatgrid.alreadyGridded > 0 || beatgrid.failed.length > 0) {
             console.log(
-                `[serato] beat grids: ${beatgrid.written} written, ${beatgrid.alreadyGridded} left ` +
+                `[serato] beat grids: ${beatgrid.written} written, ${beatgrid.replaced} of them ` +
+                    `replacing existing Serato grids, ${beatgrid.alreadyGridded} left ` +
                     `alone (already gridded in Serato), ${beatgrid.unsupported} unsupported ` +
                     `format, ${beatgrid.failed.length} failed`,
             );
