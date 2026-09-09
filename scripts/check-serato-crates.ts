@@ -673,14 +673,13 @@ function checkGridsAreWrittenButNeverOverwritten(): void {
     const flac = synthFlac('Artist/Album/six.flac');
     assert.deepEqual(readTrackGrid(flac), [], 'an ungridded FLAC reads as no anchors, not null');
     assert.equal(writeTrackGrid([{ beatgrid, localPath: flac }]).written, 1);
-    assert.deepEqual(
-        readTrackGrid(flac)!.map((m) => [m.position_ms, m.beats_till_next, m.bpm]),
-        [
-            [46, 64, null],
-            [22000, null, 175.0],
-        ],
-        'a FLAC round-trips exactly what an MP3 does',
-    );
+    // Compared against the MP3's own read rather than against literals, which is
+    // both stronger and what the message already claims: the BeatGrid payload is
+    // the same bytes in either container, so the float32 positions must agree to
+    // the last bit -- no tolerance needed here, and no second copy of the
+    // expected numbers to go stale the next time the read side changes (as it
+    // just did: readTrackGrid no longer rounds, so 46 is 46.00000008940697).
+    assert.deepEqual(readTrackGrid(flac), readBack, 'a FLAC round-trips exactly what an MP3 does');
     assert.equal(writeTrackGrid([{ beatgrid, localPath: flac }]).alreadyGridded, 1);
 
     const wav = synthWav('Artist/Album/six.wav');

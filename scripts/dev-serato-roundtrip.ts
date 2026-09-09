@@ -273,8 +273,8 @@ async function main(): Promise<void> {
     // rather than for the frame, since the frame is still there afterwards.
     let cleared = 0;
     if (process.env.KEEP_EXISTING_GRIDS !== '1') {
-        const { BeatgridMp3Encoder, Track } = await import('tserato');
-        const encoder = new BeatgridMp3Encoder();
+        const { BeatgridEncoder, Track } = await import('tserato');
+        const encoder = new BeatgridEncoder();
         for (const localPath of gridTargets.keys()) {
             if (path.extname(localPath).toLowerCase() !== '.mp3') continue;
             const t = Track.fromPath(localPath);

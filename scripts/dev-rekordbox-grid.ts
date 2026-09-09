@@ -252,8 +252,8 @@ async function main(): Promise<void> {
             ),
         local,
     );
-    const { BeatgridMp3Encoder, Track } = await import('tserato');
-    const encoder = new BeatgridMp3Encoder();
+    const { BeatgridEncoder, Track } = await import('tserato');
+    const encoder = new BeatgridEncoder();
     // Clear to the analysed-but-ungridded state so the write guard permits the
     // write -- the same state Serato leaves a track it analysed and never gridded.
     const cleared = Track.fromPath(local);
