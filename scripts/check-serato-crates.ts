@@ -374,10 +374,16 @@ function checkAnUngriddedAnalysedTrackIsNotMistakenForAGriddedOne(): void {
         framesBefore,
         'writing a grid must not disturb the cues, waveform or analysis frames',
     );
-    assert.deepEqual(
-        readTrackGrid(ungridded)!.map((m) => [m.position_ms, m.bpm]),
-        [[46, 128.0]],
+    // Same float32 tolerance as checkGridsAreWrittenButNeverOverwritten: the
+    // frame cannot store 46ms exactly, and demanding it back exactly would be
+    // demanding that readTrackGrid rounds.
+    const writtenBack = readTrackGrid(ungridded)!;
+    assert.equal(writtenBack.length, 1, 'the empty frame was written into');
+    assert.ok(
+        Math.abs(writtenBack[0].position_ms - 46) < 0.001,
+        `anchor position ${writtenBack[0].position_ms} should be ~46`,
     );
+    assert.equal(writtenBack[0].bpm, 128.0, 'the terminal anchor keeps its tempo');
     console.log(
         `  ungridded-analysed: frame present with no anchors is written into, all ` +
             `${framesAfter.length} frames intact — OK`,
@@ -629,11 +635,26 @@ function checkGridsAreWrittenButNeverOverwritten(): void {
     );
 
     const readBack = readTrackGrid(fresh)!;
+    // Positions compare with a tolerance, not exactly. The frame stores float32
+    // seconds, which cannot represent every whole millisecond -- 46ms comes back
+    // as 46.00000008940697 -- so an exact assertion here would be asserting that
+    // readTrackGrid rounds, which is the bug it used to have (the client twin of
+    // laker-93/pymix#165). The tolerance is a thousandth of a millisecond: tight
+    // enough that the 0.49ms quantisation would still fail it, loose enough that
+    // float32 is allowed to be float32.
+    assert.equal(readBack.length, 2, 'both anchors read back');
+    const POS_TOLERANCE_MS = 0.001;
+    for (const [i, expected] of [46, 22000].entries()) {
+        assert.ok(
+            Math.abs(readBack[i].position_ms - expected) < POS_TOLERANCE_MS,
+            `anchor ${i} position ${readBack[i].position_ms} should be ~${expected}`,
+        );
+    }
     assert.deepEqual(
-        readBack.map((m) => [m.position_ms, m.beats_till_next, m.bpm]),
+        readBack.map((m) => [m.beats_till_next, m.bpm]),
         [
-            [46, 64, null],
-            [22000, null, 175.0],
+            [64, null],
+            [null, 175.0],
         ],
         'the terminal anchor keeps its tempo and the other keeps its beat count',
     );
@@ -652,14 +673,13 @@ function checkGridsAreWrittenButNeverOverwritten(): void {
     const flac = synthFlac('Artist/Album/six.flac');
     assert.deepEqual(readTrackGrid(flac), [], 'an ungridded FLAC reads as no anchors, not null');
     assert.equal(writeTrackGrid([{ beatgrid, localPath: flac }]).written, 1);
-    assert.deepEqual(
-        readTrackGrid(flac)!.map((m) => [m.position_ms, m.beats_till_next, m.bpm]),
-        [
-            [46, 64, null],
-            [22000, null, 175.0],
-        ],
-        'a FLAC round-trips exactly what an MP3 does',
-    );
+    // Compared against the MP3's own read rather than against literals, which is
+    // both stronger and what the message already claims: the BeatGrid payload is
+    // the same bytes in either container, so the float32 positions must agree to
+    // the last bit -- no tolerance needed here, and no second copy of the
+    // expected numbers to go stale the next time the read side changes (as it
+    // just did: readTrackGrid no longer rounds, so 46 is 46.00000008940697).
+    assert.deepEqual(readTrackGrid(flac), readBack, 'a FLAC round-trips exactly what an MP3 does');
     assert.equal(writeTrackGrid([{ beatgrid, localPath: flac }]).alreadyGridded, 1);
 
     const wav = synthWav('Artist/Album/six.wav');
