@@ -2,13 +2,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-    BeatgridMp3Encoder,
+    BeatgridEncoder,
     Builder,
     Crate,
     HotCue,
     HotCueType,
     Track,
-    V2Mp3Encoder,
+    UnsupportedContainerError,
+    V2Encoder,
 } from 'tserato';
 
 // ── Reading a Serato library ────────────────────────────────────────────────
@@ -215,7 +216,7 @@ export interface WriteCuesResult {
     /** Files that already had cues in Serato and were left exactly as they were. */
     alreadyCued: number;
     failed: Array<{ reason: string; trackName: string }>;
-    /** Non-MP3 files. Neither tserato nor pyserato has an encoder for anything else. */
+    /** WAV, AIFF and M4A. Neither tserato nor pyserato reads those yet (tserato#17). */
     unsupported: number;
     written: number;
 }
@@ -224,7 +225,7 @@ export interface WriteGridResult {
     /** Files that already had a beat grid in Serato and were left as they were. */
     alreadyGridded: number;
     failed: Array<{ reason: string; trackName: string }>;
-    /** Non-MP3 files. Neither tserato nor pyserato has an encoder for anything else. */
+    /** WAV, AIFF and M4A. Neither tserato nor pyserato reads those yet (tserato#17). */
     unsupported: number;
     written: number;
 }
@@ -476,11 +477,17 @@ function rewriteCrateTrackPaths(file: string, rewrite: (stored: string) => strin
 const MAX_CUES = 8;
 const MAX_LOOPS = 4;
 
-/** Read the cues off a local file, or null if this file can't carry any. */
+/**
+ * Read the cues off a local file, or null if this file can't carry any.
+ *
+ * MP3 and FLAC. The container is decided by tserato from the file's magic
+ * bytes, not from its extension -- a DJ library is full of files whose
+ * extension lies, and the old check here sent a FLAC named `.mp3` down the
+ * "can't carry cues" path along with the ones that really can't.
+ */
 export function readTrackCues(trackPath: string): null | SeratoCueWire[] {
-    if (path.extname(trackPath).toLowerCase() !== '.mp3') return null;
     try {
-        return new V2Mp3Encoder().readCues(Track.fromPath(trackPath)).map((cue) => ({
+        return new V2Encoder().readCues(Track.fromPath(trackPath)).map((cue) => ({
             end_ms: cue.end ?? null,
             index: cue.index,
             name: cue.name,
@@ -488,7 +495,12 @@ export function readTrackCues(trackPath: string): null | SeratoCueWire[] {
             type: cue.type === HotCueType.LOOP ? ('loop' as const) : ('cue' as const),
         }));
     } catch (err) {
-        console.warn(`[serato] could not read cues from ${path.basename(trackPath)}:`, err);
+        // A container with no reader yet is not a warning: a real library is
+        // full of them and they sync perfectly well without cues. Anything
+        // else is a file that should have been readable and was not.
+        if (!(err instanceof UnsupportedContainerError)) {
+            console.warn(`[serato] could not read cues from ${path.basename(trackPath)}:`, err);
+        }
         return null;
     }
 }
@@ -502,11 +514,12 @@ export function readTrackCues(trackPath: string): null | SeratoCueWire[] {
  * nothing rather than falling back to its own copy. `null` is "we could not
  * read one", and pymix falls back. So frame presence is not evidence of a grid,
  * and this must not collapse the two.
+ *
+ * MP3 and FLAC, decided from the file's magic bytes -- see readTrackCues.
  */
 export function readTrackGrid(trackPath: string): null | SeratoBeatgridWire[] {
-    if (path.extname(trackPath).toLowerCase() !== '.mp3') return null;
     try {
-        return new BeatgridMp3Encoder().readBeatgrid(Track.fromPath(trackPath)).map((tempo) => ({
+        return new BeatgridEncoder().readBeatgrid(Track.fromPath(trackPath)).map((tempo) => ({
             beats_till_next: tempo.beatsTillNext ?? null,
             bpm: tempo.bpm ?? null,
             // The frame stores seconds; everything either side of the wire is ms.
@@ -523,7 +536,12 @@ export function readTrackGrid(trackPath: string): null | SeratoBeatgridWire[] {
             position_ms: (tempo.position ?? 0) * 1000,
         }));
     } catch (err) {
-        console.warn(`[serato] could not read a beat grid from ${path.basename(trackPath)}:`, err);
+        if (!(err instanceof UnsupportedContainerError)) {
+            console.warn(
+                `[serato] could not read a beat grid from ${path.basename(trackPath)}:`,
+                err,
+            );
+        }
         return null;
     }
 }
@@ -540,15 +558,11 @@ export function writeTrackCues(
     tracks: Array<{ cues: SeratoCueWire[]; localPath: string }>,
 ): WriteCuesResult {
     const result: WriteCuesResult = { alreadyCued: 0, failed: [], unsupported: 0, written: 0 };
-    const encoder = new V2Mp3Encoder();
+    const encoder = new V2Encoder();
 
     for (const { cues, localPath } of tracks) {
         const name = path.basename(localPath);
         if (cues.length === 0) continue;
-        if (path.extname(localPath).toLowerCase() !== '.mp3') {
-            result.unsupported += 1;
-            continue;
-        }
         try {
             const track = Track.fromPath(localPath);
             if (encoder.readCues(track).length > 0) {
@@ -575,7 +589,12 @@ export function writeTrackCues(
             encoder.write(track);
             result.written += 1;
         } catch (err: any) {
-            result.failed.push({ reason: err?.message || String(err), trackName: name });
+            // Counted, not failed. "We have no writer for this container" is a
+            // property of subbox, not of the user's file, and putting it in
+            // `failed` would tell them something went wrong with a track that
+            // is perfectly fine.
+            if (err instanceof UnsupportedContainerError) result.unsupported += 1;
+            else result.failed.push({ reason: err?.message || String(err), trackName: name });
         }
     }
     return result;
@@ -601,15 +620,11 @@ export function writeTrackGrid(
     tracks: Array<{ beatgrid: SeratoBeatgridWire[]; localPath: string }>,
 ): WriteGridResult {
     const result: WriteGridResult = { alreadyGridded: 0, failed: [], unsupported: 0, written: 0 };
-    const encoder = new BeatgridMp3Encoder();
+    const encoder = new BeatgridEncoder();
 
     for (const { beatgrid, localPath } of tracks) {
         const name = path.basename(localPath);
         if (beatgrid.length === 0) continue;
-        if (path.extname(localPath).toLowerCase() !== '.mp3') {
-            result.unsupported += 1;
-            continue;
-        }
         try {
             const track = Track.fromPath(localPath);
             if (encoder.readBeatgrid(track).length > 0) {
@@ -624,7 +639,8 @@ export function writeTrackGrid(
             encoder.write(track);
             result.written += 1;
         } catch (err: any) {
-            result.failed.push({ reason: err?.message || String(err), trackName: name });
+            if (err instanceof UnsupportedContainerError) result.unsupported += 1;
+            else result.failed.push({ reason: err?.message || String(err), trackName: name });
         }
     }
     return result;

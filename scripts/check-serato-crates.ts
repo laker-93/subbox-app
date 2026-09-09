@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { BeatgridMp3Encoder, Builder, Crate, Track, V2Mp3Encoder } from 'tserato';
+import { BeatgridEncoder, Builder, Crate, Track, V2Encoder } from 'tserato';
 
 import {
     CRATE_ZIP_FILENAME,
@@ -353,7 +353,7 @@ function checkAnUngriddedAnalysedTrackIsNotMistakenForAGriddedOne(): void {
     // frame stays, with no anchors in it.
     const cleared = Track.fromPath(ungridded);
     cleared.beatgrid = [];
-    new BeatgridMp3Encoder().write(cleared);
+    new BeatgridEncoder().write(cleared);
     const framesBefore = geobFrames(ungridded);
     assert.ok(
         framesBefore.includes('Serato BeatGrid'),
@@ -505,11 +505,28 @@ function checkCuesAreWrittenButNeverOverwritten(): void {
     assert.equal(second.alreadyCued, 1);
     assert.deepEqual(readTrackCues(fresh), readBack, 'existing cues are left exactly as they were');
 
-    // Nothing but MP3 has an encoder, on either side.
-    const flac = localTrack('Artist/Album/five.flac');
-    const skipped = writeTrackCues([{ cues, localPath: flac }]);
+    // FLAC goes down the same path, with the same promises. The payload is the
+    // same bytes as the MP3's; only where it is stored differs.
+    const flac = synthFlac('Artist/Album/five.flac');
+    assert.deepEqual(readTrackCues(flac), [], 'a FLAC nothing has cued reads as no cues, not null');
+    assert.equal(writeTrackCues([{ cues, localPath: flac }]).written, 1);
+    assert.deepEqual(
+        readTrackCues(flac)!.map((c) => [c.type, c.start_ms, c.end_ms, c.name]),
+        [
+            ['cue', 8000, null, 'in'],
+            ['loop', 180000, 188000, 'tail'],
+        ],
+        'a FLAC round-trips exactly what an MP3 does',
+    );
+    assert.equal(writeTrackCues([{ cues, localPath: flac }]).alreadyCued, 1);
+
+    // WAV, AIFF and M4A have no reader on either side yet. Counted as
+    // unsupported, not failed: nothing is wrong with the user's file.
+    const wav = synthWav('Artist/Album/five.wav');
+    const skipped = writeTrackCues([{ cues, localPath: wav }]);
     assert.equal(skipped.unsupported, 1);
-    assert.equal(readTrackCues(flac), null);
+    assert.deepEqual(skipped.failed, []);
+    assert.equal(readTrackCues(wav), null, 'null, not [] — subbox could not look');
 
     console.log('  cues: written into an uncued track, never over an existing one — OK');
 }
@@ -551,7 +568,7 @@ function checkCueWritesPreserveTheAnalysis(): void {
     // Clear just the cues, the way a user who deleted them in Serato would: an
     // empty Markers2, with the other five frames still in place.
     const cleared = Track.fromPath(fresh);
-    new V2Mp3Encoder().write(cleared);
+    new V2Encoder().write(cleared);
     const framesBefore = geobFrames(fresh);
     assert.equal(readTrackCues(fresh)!.length, 0, 'cues cleared, frames kept');
     assert.ok(framesBefore.length >= 6, `expected the full frame set, got ${framesBefore}`);
@@ -652,11 +669,25 @@ function checkGridsAreWrittenButNeverOverwritten(): void {
     assert.equal(second.alreadyGridded, 1);
     assert.deepEqual(readTrackGrid(fresh), readBack, 'an existing grid is left exactly as it was');
 
-    // Nothing but MP3 has an encoder, on either side.
-    const flac = localTrack('Artist/Album/six.flac');
-    const skipped = writeTrackGrid([{ beatgrid, localPath: flac }]);
+    // FLAC, again through the same path.
+    const flac = synthFlac('Artist/Album/six.flac');
+    assert.deepEqual(readTrackGrid(flac), [], 'an ungridded FLAC reads as no anchors, not null');
+    assert.equal(writeTrackGrid([{ beatgrid, localPath: flac }]).written, 1);
+    assert.deepEqual(
+        readTrackGrid(flac)!.map((m) => [m.position_ms, m.beats_till_next, m.bpm]),
+        [
+            [46, 64, null],
+            [22000, null, 175.0],
+        ],
+        'a FLAC round-trips exactly what an MP3 does',
+    );
+    assert.equal(writeTrackGrid([{ beatgrid, localPath: flac }]).alreadyGridded, 1);
+
+    const wav = synthWav('Artist/Album/six.wav');
+    const skipped = writeTrackGrid([{ beatgrid, localPath: wav }]);
     assert.equal(skipped.unsupported, 1);
-    assert.equal(readTrackGrid(flac), null);
+    assert.deepEqual(skipped.failed, []);
+    assert.equal(readTrackGrid(wav), null, 'null, not [] — subbox could not look');
 
     // A file that carries cues but no grid still gets one. The two guards are
     // separate for exactly this: one check for both would skip it.
@@ -839,6 +870,71 @@ function ptrkOf(cratePath: string): string {
     throw new Error(`no otrk chunk in ${cratePath}`);
 }
 
+/**
+ * A FLAC real enough for the FLAC reader: header, one comment block, padding.
+ *
+ * Not playable, and deliberately not built by tserato — the point of it is to
+ * be a file with structure the writer has to preserve rather than rebuild.
+ */
+function synthFlac(relative: string): string {
+    const full = path.join(musicRoot, relative);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+
+    // STREAMINFO: 4096/4096 blocksize, unknown framesizes, 44.1kHz stereo 16-bit,
+    // one second of samples, then a zero md5.
+    const bits = [
+        [4096, 16],
+        [4096, 16],
+        [0, 24],
+        [0, 24],
+        [44100, 20],
+        [1, 3],
+        [15, 5],
+        [44100, 36],
+    ]
+        .map(([value, width]) => value.toString(2).padStart(width, '0'))
+        .join('');
+    const streamInfo = Buffer.alloc(34);
+    for (let i = 0; i < 18; i += 1) {
+        streamInfo[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+    }
+
+    const comments = ['ARTIST=Basalt Bloom', 'TITLE=Zenith Lantern'];
+    const vendor = Buffer.from('subbox check', 'utf8');
+    const parts = [Buffer.alloc(4), vendor, Buffer.alloc(4)];
+    parts[0].writeUInt32LE(vendor.length);
+    parts[2].writeUInt32LE(comments.length);
+    for (const comment of comments) {
+        const encoded = Buffer.from(comment, 'utf8');
+        const length = Buffer.alloc(4);
+        length.writeUInt32LE(encoded.length);
+        parts.push(length, encoded);
+    }
+
+    const block = (type: number, body: Buffer, last: boolean): Buffer => {
+        const header = Buffer.alloc(4);
+        header[0] = type | (last ? 0x80 : 0);
+        header.writeUIntBE(body.length, 1, 3);
+        return Buffer.concat([header, body]);
+    };
+
+    fs.writeFileSync(
+        full,
+        Buffer.concat([
+            Buffer.from('fLaC', 'latin1'),
+            block(0, streamInfo, false),
+            block(4, Buffer.concat(parts), false),
+            block(1, Buffer.alloc(256), true),
+            // One audio frame's worth of bytes. A FLAC that stops at its last
+            // metadata block is not a file anything should accept, and tserato
+            // refuses it by name -- so a fixture without this would be testing
+            // the truncation guard rather than the FLAC path.
+            Buffer.concat([Buffer.from([0xff, 0xf8, 0x69, 0x18]), Buffer.alloc(64)]),
+        ]),
+    );
+    return full;
+}
+
 /** An mp3 real enough for mp3tag.js, after check-taglib-tagging.ts's builder. */
 function synthMp3(relative: string): string {
     const full = path.join(musicRoot, relative);
@@ -849,5 +945,32 @@ function synthMp3(relative: string): string {
     // A 128kbps 44.1kHz mono MPEG-1 Layer III frame, followed by its 417 bytes.
     const frame = Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x44]), Buffer.alloc(417)]);
     fs.writeFileSync(full, Buffer.concat([header, frame, frame, frame]));
+    return full;
+}
+
+/**
+ * A WAV header, which is all that is needed: nothing reads past it.
+ *
+ * Serato does keep cues in a WAV — in an ID3 chunk, byte-identical to the MP3's
+ * GEOB frame — but neither library reads them yet (tserato#17, pyserato#16), so
+ * this stands for "a container subbox has no reader for" rather than for WAV.
+ */
+function synthWav(relative: string): string {
+    const full = path.join(musicRoot, relative);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    const wav = Buffer.alloc(44);
+    wav.write('RIFF', 0, 'latin1');
+    wav.writeUInt32LE(36, 4);
+    wav.write('WAVEfmt ', 8, 'latin1');
+    wav.writeUInt32LE(16, 16); // PCM fmt chunk size
+    wav.writeUInt16LE(1, 20); // PCM
+    wav.writeUInt16LE(2, 22); // stereo
+    wav.writeUInt32LE(44100, 24);
+    wav.writeUInt32LE(44100 * 4, 28);
+    wav.writeUInt16LE(4, 32);
+    wav.writeUInt16LE(16, 34);
+    wav.write('data', 36, 'latin1');
+    wav.writeUInt32LE(0, 40);
+    fs.writeFileSync(full, wav);
     return full;
 }
