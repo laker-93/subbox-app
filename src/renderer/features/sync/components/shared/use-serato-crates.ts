@@ -3,7 +3,12 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
-import { useAppStore, useSeratoFolder, useSetSeratoFolder } from '/@/renderer/store';
+import {
+    useAppStore,
+    useSeratoFolder,
+    useSeratoOverwrite,
+    useSetSeratoFolder,
+} from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 
 const ipc = isElectron() ? window.api.ipc : null;
@@ -24,6 +29,8 @@ export type SeratoWriteResult = {
     beatgrid: {
         alreadyGridded: number;
         failed: Array<{ reason: string; trackName: string }>;
+        /** Of `written`, how many replaced a grid the file already had. */
+        replaced: number;
         unsupported: number;
         written: number;
     };
@@ -31,6 +38,8 @@ export type SeratoWriteResult = {
     cues: {
         alreadyCued: number;
         failed: Array<{ reason: string; trackName: string }>;
+        /** Of `written`, how many replaced cues the file already had. */
+        replaced: number;
         unsupported: number;
         written: number;
     };
@@ -54,6 +63,7 @@ export type SeratoWriteResult = {
 export const useSeratoCrates = () => {
     const seratoFolder = useSeratoFolder();
     const setSeratoFolder = useSetSeratoFolder();
+    const overwrite = useSeratoOverwrite();
     const [result, setResult] = useState<null | SeratoWriteResult>(null);
 
     // Fill an empty setting on mount: the user's old localSettings value if they
@@ -108,11 +118,17 @@ export const useSeratoCrates = () => {
             const written = (await window.api.ipc.invoke('sync:write-serato-crates', {
                 crates: structure.crates,
                 musicRoot,
+                // Two persisted settings rather than arguments of this call: the
+                // screens that write crates should not each have to remember to
+                // pass them, and forgetting would silently mean "leave the user's
+                // files alone" on a run they asked to overwrite.
+                overwriteBeatgrid: overwrite.beatgrid,
+                overwriteCues: overwrite.cues,
                 seratoFolder,
             })) as SeratoWriteResult;
             setResult(written);
         },
-        [seratoFolder],
+        [seratoFolder, overwrite.beatgrid, overwrite.cues],
     );
 
     // Read out of `result` first: depending on the whole object here would reopen

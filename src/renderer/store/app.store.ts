@@ -30,6 +30,7 @@ export interface AppSlice extends AppState {
         setPageSidebar: (key: string, value: boolean) => void;
         setPrivateMode: (enabled: boolean) => void;
         setSeratoFolder: (folder: null | string) => void;
+        setSeratoOverwrite: (key: 'beatgrid' | 'cues', value: boolean) => void;
         setShowTimeRemaining: (enabled: boolean) => void;
         setSideBar: (options: Partial<SidebarProps>) => void;
         setTitleBar: (options: Partial<TitlebarProps>) => void;
@@ -82,6 +83,22 @@ export interface AppState {
      * where nothing reads it.
      */
     seratoFolder: null | string;
+    /**
+     * Whether a crate write may replace cues and beat grids the user's files
+     * already carry in Serato.
+     *
+     * Both off by default and both persisted, because this is a standing answer to
+     * "which copy is the one you meant" rather than a per-run choice: a DJ who
+     * grids in Rekordbox and treats Serato as the destination wants it on every
+     * time, and one who cues in Serato wants it off every time. Separate keys
+     * because the answer differs between the two -- replacing a grid you set by
+     * hand in Serato is an inconvenience, replacing the cue points you played last
+     * night is an evening's work, and there is no undo for either.
+     */
+    seratoOverwrite: {
+        beatgrid: boolean;
+        cues: boolean;
+    };
     showTimeRemaining: boolean;
     sidebar: SidebarProps;
     titlebar: TitlebarProps;
@@ -230,6 +247,11 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                             state.seratoFolder = folder;
                         });
                     },
+                    setSeratoOverwrite: (key, value) => {
+                        set((state) => {
+                            state.seratoOverwrite[key] = value;
+                        });
+                    },
                     setShowTimeRemaining: (showTimeRemaining) => {
                         set((state) => {
                             state.showTimeRemaining = showTimeRemaining;
@@ -311,6 +333,10 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                 // No migrate branch: `merge(currentState, persistedState)` fills a key
                 // the persisted state has never heard of from the initial state.
                 seratoFolder: null,
+                seratoOverwrite: {
+                    beatgrid: false,
+                    cues: false,
+                },
                 showTimeRemaining: false,
                 sidebar: {
                     collapsed: false,
@@ -399,6 +425,10 @@ export const useSetLibraryFormat = () => useAppStore((state) => state.actions.se
 export const useSeratoFolder = () => useAppStore((state) => state.seratoFolder);
 
 export const useSetSeratoFolder = () => useAppStore((state) => state.actions.setSeratoFolder);
+
+export const useSeratoOverwrite = () => useAppStore((state) => state.seratoOverwrite);
+
+export const useSetSeratoOverwrite = () => useAppStore((state) => state.actions.setSeratoOverwrite);
 
 export const useGlobalExpanded = () => useAppStore((state) => state.globalExpanded);
 
