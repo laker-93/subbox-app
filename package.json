@@ -61,6 +61,7 @@
         "dev:serato-ui": "tsx scripts/dev-serato-ui.ts",
         "dev:serato-dmg": "tsx scripts/dev-serato-dmg.ts",
         "check:taglib-tagging": "tsx scripts/check-taglib-tagging.ts",
+        "check:job-outcome": "tsx scripts/check-job-outcome.ts",
         "postinstall": "electron-builder install-app-deps",
         "lint": "pnpm run typecheck && pnpm run lint-code && pnpm run lint-styles",
         "lint-code": "eslint --max-warnings=0 --cache .",

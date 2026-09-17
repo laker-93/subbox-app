@@ -65,6 +65,17 @@ const importJob = z.object({
     success: z.boolean(),
 });
 
+// What one pass of a job attempted, and how it went (pymix migration 019). The
+// counts are the work itself; `reason` and `warnings` below are prose *about* it
+// and can only ever describe one pass.
+const jobPhase = z.object({
+    failed: z.number(),
+    ok: z.number(),
+    phase: z.string(),
+    skipped: z.number(),
+    total: z.number(),
+});
+
 const beetsImportProgress = z.object({
     in_progress: z.boolean(),
     n_tracks_processed: z.number(),
@@ -76,6 +87,10 @@ const beetsImportProgress = z.object({
     phase: z.string().nullish(),
     phase_n_processed: z.number().optional(),
     phase_n_total: z.number().optional(),
+    // Written once, when the job finishes, so it is empty for the whole run — and
+    // empty on a server that predates it, and on a job completed without a ledger.
+    // So absent means "not reported", never "the job did nothing".
+    phases: z.array(jobPhase).nullish(),
     reason: z.string(),
     result: z.boolean(),
     // Set on a job that *succeeded* but did not do everything asked of it — a

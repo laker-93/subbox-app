@@ -7,6 +7,9 @@ import { urlConfig } from '/@/renderer/config/url-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import {
     DestinationPath,
+    IMPORT_PHASE_LABELS,
+    type ImportProgress,
+    JobOutcome,
     PathText,
     SelectableList,
     SyncFlow,
@@ -36,29 +39,6 @@ import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 
 const ipc = isElectron() ? window.api.ipc : null;
-
-type ImportPhase = 'applying_metadata' | 'complete' | 'importing_audio' | 'mapping_ids';
-
-interface ImportProgress {
-    in_progress: boolean;
-    n_tracks_processed: number;
-    n_tracks_to_process: number;
-    percentage_complete: number;
-    phase?: ImportPhase | null;
-    phase_n_processed?: number;
-    phase_n_total?: number;
-    reason: string;
-    result: boolean;
-    /** Set on a job that finished but left crate entries out — see the done screen. */
-    warnings?: null | string;
-}
-
-const IMPORT_PHASE_LABELS: Record<ImportPhase, string> = {
-    applying_metadata: 'Applying cue points and metadata...',
-    complete: 'Finishing up...',
-    importing_audio: 'Importing into library...',
-    mapping_ids: 'Linking tracks to your library...',
-};
 
 interface CratePreview {
     files: string[];
@@ -648,6 +628,10 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
             uploadResult ? `uploaded: ${uploadResult.uploaded}` : null,
             uploadResult ? `identified: ${uploadResult.trackIdentities.length}` : null,
             importProgress ? `imported: ${importProgress.n_tracks_processed}` : null,
+            ...(importProgress?.phases ?? []).map(
+                (p) =>
+                    `${p.phase}: ${p.ok} ok, ${p.skipped} skipped, ${p.failed} failed of ${p.total}`,
+            ),
         ]
             .filter(Boolean)
             .join('\n');
@@ -692,6 +676,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                         )}
                     </Stack>
                 )}
+                <JobOutcome progress={importProgress} />
                 <Text c="dimmed" size="xs" ta="center">
                     {error}
                 </Text>
@@ -743,15 +728,11 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                             ))}
                         </Stack>
                     )}
-                    {/* The server's own account of what it left out. A crate can
-                        name a track that is in no state to be placed in a playlist,
-                        and the job still succeeds. So this is the only place the
-                        shortfall is ever explained. */}
-                    {importProgress?.warnings && (
-                        <Text c="dimmed" size="sm" ta="center">
-                            {importProgress.warnings}
-                        </Text>
-                    )}
+                    {/* The server's own account of what it did and what it left
+                        out. A crate can name a track that is in no state to be
+                        placed in a playlist, and the job still succeeds — so this
+                        is the only place the shortfall is ever explained. */}
+                    <JobOutcome progress={importProgress} />
                     {dropped.length > 0 && (
                         <Stack align="center" gap={2}>
                             <Text c="dimmed" size="sm" ta="center">

@@ -6,6 +6,10 @@ import { isUploadForbidden, PymixController } from '/@/renderer/api/pymix/pymix-
 import { urlConfig } from '/@/renderer/config/url-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import {
+    describeJobWork,
+    IMPORT_PHASE_LABELS,
+    type ImportProgress,
+    JobOutcome,
     SelectableList,
     SyncFlow,
     SyncFlowFill,
@@ -27,38 +31,6 @@ import { toast } from '/@/shared/components/toast/toast';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 
 const ipc = isElectron() ? window.api.ipc : null;
-
-type ImportPhase = 'applying_metadata' | 'complete' | 'importing_audio' | 'mapping_ids';
-
-interface ImportProgress {
-    in_progress: boolean;
-    n_tracks_processed: number;
-    n_tracks_to_process: number;
-    percentage_complete: number;
-    // Which pass of the import the server is on, and how far through it is. An
-    // import is three passes, and only the first shows up in the track count the
-    // percentage used to be derived from -- so the bar read a frozen 100% for the
-    // whole tail (laker-93/pymix#51). Optional: a server predating that fix, or an
-    // import job created before it, sends neither.
-    phase?: ImportPhase | null;
-    phase_n_processed?: number;
-    phase_n_total?: number;
-    reason: string;
-    result: boolean;
-    /**
-     * What a *successful* job could not do. `reason` only reaches the client on a
-     * failed job, so a job that finished but left something out has nowhere else to
-     * say so (laker-93/pymix#136).
-     */
-    warnings?: null | string;
-}
-
-const IMPORT_PHASE_LABELS: Record<ImportPhase, string> = {
-    applying_metadata: 'Applying cue points and metadata...',
-    complete: 'Finishing up...',
-    importing_audio: 'Importing into library...',
-    mapping_ids: 'Linking tracks to your library...',
-};
 
 interface PlaylistPreview {
     name: string;
@@ -334,13 +306,17 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                     if (!prog.in_progress) {
                         setStep('done');
                         if (prog.result) {
+                            // A metadata-only import lands no tracks, so
+                            // "Imported 0 tracks" reads like a failure on the run
+                            // that is most often the point of re-importing an XML.
+                            // The server now says what it did instead of leaving us
+                            // to infer it from a count of new audio (#50).
+                            const [work] = describeJobWork(prog as ImportProgress);
                             toast.success({
-                                // A metadata-only import lands no tracks, and
-                                // "Imported 0 tracks" reads like a failure.
                                 message:
                                     prog.n_tracks_processed > 0
                                         ? `Imported ${prog.n_tracks_processed} tracks`
-                                        : 'Library updated from your Rekordbox XML',
+                                        : (work ?? 'Library updated from your Rekordbox XML'),
                             });
                         } else {
                             setError(prog.reason || 'Import failed');
@@ -651,6 +627,13 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
             failedPhase ? `phase: ${failedPhase}` : null,
             uploadResult ? `uploaded: ${uploadResult.uploaded}` : null,
             importProgress ? `imported: ${importProgress.n_tracks_processed}` : null,
+            // How far each pass got before it broke. This is the difference
+            // between "the metadata pass died having done nothing" and "it did
+            // four of five", and it is the first thing to ask of a bug report.
+            ...(importProgress?.phases ?? []).map(
+                (p) =>
+                    `${p.phase}: ${p.ok} ok, ${p.skipped} skipped, ${p.failed} failed of ${p.total}`,
+            ),
         ]
             .filter(Boolean)
             .join('\n');
@@ -708,6 +691,9 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         )}
                     </Stack>
                 )}
+                {/* A failed job still did whatever it did before it broke, and
+                    that is what decides whether to re-upload or just retry. */}
+                <JobOutcome progress={importProgress} />
                 <Text c="dimmed" size="xs" ta="center">
                     {error}
                 </Text>
@@ -772,13 +758,11 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                             )}
                         </>
                     )}
-                    {/* A job can succeed and still not have done everything asked
-                        of it. Nothing else on this screen would show that. */}
-                    {importProgress?.warnings && (
-                        <Text c="dimmed" size="sm" ta="center">
-                            {importProgress.warnings}
-                        </Text>
-                    )}
+                    {/* What the server says it did, and what it could not do.
+                        "0 tracks uploaded, 0 tracks imported" is true of a
+                        re-import that rewrote the metadata on every track, and
+                        this is the only line on the screen that says so (#50). */}
+                    <JobOutcome progress={importProgress} />
                     {/* Outside the branch above: a run can upload nothing and still
                         have dropped tracks, and "everything is already up to date"
                         would be wrong without this qualifying it. */}

@@ -1,6 +1,14 @@
 export { DestinationPath } from './destination-path';
 export { formatBytes, formatDuration } from './format';
 export { FormatSelect } from './format-select';
+export {
+    describeJobWork,
+    IMPORT_PHASE_LABELS,
+    type ImportPhase,
+    type ImportProgress,
+    type JobPhaseCounts,
+} from './job-envelope';
+export { JobOutcome } from './job-outcome';
 export { PathText } from './path-text';
 export { RekordboxImportSteps } from './rekordbox-import-steps';
 export { type SelectableItem, SelectableList, SelectionToolbar } from './selectable-list';
