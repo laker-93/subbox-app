@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
+import { useItemListColumnSort } from '/@/renderer/components/item-list/helpers/use-item-list-column-sort';
 import { useItemListColumnVisibility } from '/@/renderer/components/item-list/helpers/use-item-list-column-visibility';
 import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpers/use-item-list-scroll-persist';
 import { ItemListWithPagination } from '/@/renderer/components/item-list/item-list-pagination/item-list-pagination';
@@ -22,6 +23,8 @@ import {
     PlaylistSongListQuery,
     PlaylistSongListResponse,
     Song,
+    SongListSort,
+    SortOrder,
 } from '/@/shared/types/domain-types';
 import { ItemListKey, Play, TableColumn } from '/@/shared/types/types';
 
@@ -70,6 +73,17 @@ export const PlaylistDetailSongListTable = forwardRef<any, PlaylistDetailSongLis
         const columnVisibility = useItemListColumnVisibility({
             itemListKey: ItemListKey.PLAYLIST_SONG,
             tableColumnsData: PLAYLIST_SONG_TABLE_COLUMNS,
+        });
+
+        // Writes the same sort params `usePlaylistSongListFilters` reads, so the header
+        // and the sort dropdown above it stay in lockstep. The sort itself is client-side
+        // (`sortSongList` in `usePlaylistTrackList`) — a playlist's songs arrive in one
+        // response, in playlist order, and are never re-fetched to reorder them.
+        const columnSort = useItemListColumnSort({
+            defaultSortBy: SongListSort.ID,
+            defaultSortOrder: SortOrder.ASC,
+            itemType: LibraryItem.PLAYLIST_SONG,
+            listKey: ItemListKey.PLAYLIST_SONG,
         });
 
         const { searchTerm } = useSearchTermFilter();
@@ -152,6 +166,7 @@ export const PlaylistDetailSongListTable = forwardRef<any, PlaylistDetailSongLis
                 autoFitColumns={autoFitColumns}
                 CellComponent={ItemTableListColumn}
                 columns={effectiveColumns}
+                columnSort={columnSort}
                 columnVisibility={columnVisibility}
                 data={dataToRender}
                 enableAlternateRowColors={enableAlternateRowColors}

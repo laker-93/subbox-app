@@ -17,8 +17,10 @@ interface UseItemListColumnSortProps {
     defaultSortBy: string;
     defaultSortOrder: SortOrder;
     /**
-     * The item type whose sort fields apply. Song tables nested under another entity
-     * (playlist detail, artist detail) still sort by `LibraryItem.SONG` fields.
+     * The item type whose sort fields apply — it decides both which columns map to a
+     * sort field and which of those fields are on offer. A playlist's song table passes
+     * `PLAYLIST_SONG`: the columns are the song columns, but the fields on offer are the
+     * client-side set, not what the server can sort.
      */
     itemType: LibraryItem;
     listKey: ItemListKey;
