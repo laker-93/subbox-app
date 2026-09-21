@@ -10,11 +10,13 @@ import {
 import { TableColumn } from '/@/shared/types/types';
 
 /**
- * Which server-side sort field each table column sorts by, per item type.
+ * Which sort field each table column sorts by, per item type.
  *
  * A column absent from the map is not clickable to sort. A column present here is
- * still only clickable when the *server* supports that sort field — Navidrome and
- * Subsonic differ — so consumers must intersect this with `getListSortOptions`.
+ * still only clickable when that sort field is actually offered for the item type —
+ * Navidrome and Subsonic differ on what the server can sort, and a playlist's songs
+ * are sorted in the client — so consumers must intersect this with
+ * `getListSortOptions`.
  *
  * Several title columns map to the same sort field (they render the same underlying
  * name), which is why the active column is resolved by comparing sort fields rather
@@ -111,5 +113,8 @@ export const COLUMN_SORT_KEYS: Partial<Record<LibraryItem, Partial<Record<TableC
         [LibraryItem.ARTIST]: ARTIST_COLUMN_SORT_KEYS,
         [LibraryItem.GENRE]: GENRE_COLUMN_SORT_KEYS,
         [LibraryItem.PLAYLIST]: PLAYLIST_COLUMN_SORT_KEYS,
+        // A playlist's song table shows song columns and sorts by song fields; only the
+        // set of fields on offer differs (client-side, so `getListSortOptions` gates it).
+        [LibraryItem.PLAYLIST_SONG]: SONG_COLUMN_SORT_KEYS,
         [LibraryItem.SONG]: SONG_COLUMN_SORT_KEYS,
     };
