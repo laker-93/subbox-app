@@ -6,14 +6,13 @@ import { ListConfigMenu } from '/@/renderer/features/shared/components/list-conf
 import { ListDisplayTypeToggleButton } from '/@/renderer/features/shared/components/list-display-type-toggle-button';
 import { ListRefreshButton } from '/@/renderer/features/shared/components/list-refresh-button';
 import { ListSelectFilter } from '/@/renderer/features/shared/components/list-select-filter';
-import { ListSortByDropdown } from '/@/renderer/features/shared/components/list-sort-by-dropdown';
-import { ListSortOrderToggleButton } from '/@/renderer/features/shared/components/list-sort-order-toggle-button';
+import { ListSortControls } from '/@/renderer/features/shared/components/list-sort-controls';
 import { FILTER_KEYS } from '/@/renderer/features/shared/utils';
 import { useCurrentServer } from '/@/renderer/store';
 import { Divider } from '/@/shared/components/divider/divider';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
-import { ArtistListSort, LibraryItem, SortOrder } from '/@/shared/types/domain-types';
+import { ArtistListSort, LibraryItem } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
 
 export const ArtistListHeaderFilters = () => {
@@ -24,14 +23,10 @@ export const ArtistListHeaderFilters = () => {
     return (
         <Flex justify="space-between">
             <Group gap="sm" w="100%">
-                <ListSortByDropdown
+                <ListSortControls
                     defaultSortByValue={ArtistListSort.NAME}
+                    displayKey={ItemListKey.ARTIST}
                     itemType={LibraryItem.ARTIST}
-                    listKey={ItemListKey.ARTIST}
-                />
-                <Divider orientation="vertical" />
-                <ListSortOrderToggleButton
-                    defaultSortOrder={SortOrder.ASC}
                     listKey={ItemListKey.ARTIST}
                 />
                 {rolesQuery.data && rolesQuery.data.length > 0 && (

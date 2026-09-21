@@ -1291,7 +1291,7 @@ const initialState: SettingsState = {
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
-                size: 'default',
+                size: 'compact',
             },
         },
         [ItemListKey.PLAYLIST_ALBUM]: {
@@ -1368,7 +1368,7 @@ const initialState: SettingsState = {
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
-                size: 'default',
+                size: 'compact',
             },
         },
         [LibraryItem.ALBUM]: {
@@ -1445,7 +1445,7 @@ const initialState: SettingsState = {
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
-                size: 'default',
+                size: 'compact',
             },
         },
         [LibraryItem.ALBUM_ARTIST]: {
@@ -1486,7 +1486,7 @@ const initialState: SettingsState = {
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
-                size: 'default',
+                size: 'compact',
             },
         },
         [LibraryItem.ARTIST]: {
@@ -1532,7 +1532,7 @@ const initialState: SettingsState = {
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
-                size: 'default',
+                size: 'compact',
             },
         },
         [LibraryItem.GENRE]: {
@@ -1614,7 +1614,7 @@ const initialState: SettingsState = {
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
-                size: 'default',
+                size: 'compact',
             },
         },
         [LibraryItem.PLAYLIST_SONG]: {
@@ -1661,7 +1661,7 @@ const initialState: SettingsState = {
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
-                size: 'default',
+                size: 'compact',
             },
         },
         [LibraryItem.QUEUE_SONG]: {
@@ -1690,7 +1690,7 @@ const initialState: SettingsState = {
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
-                size: 'default',
+                size: 'compact',
             },
         },
         [LibraryItem.SONG]: {
@@ -1737,7 +1737,7 @@ const initialState: SettingsState = {
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
-                size: 'default',
+                size: 'compact',
             },
         },
         ['sideQueue']: {
@@ -1768,7 +1768,7 @@ const initialState: SettingsState = {
                 enableHorizontalBorders: false,
                 enableRowHoverHighlight: true,
                 enableVerticalBorders: false,
-                size: 'default',
+                size: 'compact',
             },
         },
     },
@@ -2456,10 +2456,27 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     });
                 }
 
+                if (version <= 29) {
+                    // Compact rows are the new default for every table, so more tracks
+                    // fit on screen. Only move lists still sitting on the old 'default'
+                    // size — an explicit 'large' (or already-'compact') choice is kept.
+                    Object.values(state.lists).forEach((listConfig) => {
+                        const list = listConfig as ItemListSettings;
+
+                        if (list?.table?.size === 'default') {
+                            list.table.size = 'compact';
+                        }
+
+                        if (list?.detail?.size === 'default') {
+                            list.detail.size = 'compact';
+                        }
+                    });
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 29,
+            version: 30,
         },
     ),
 );

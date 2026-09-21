@@ -9,6 +9,7 @@ import {
     Playlist,
     Song,
 } from '/@/shared/types/domain-types';
+import { SortOrder } from '/@/shared/types/domain-types';
 import { Play, TableColumn } from '/@/shared/types/types';
 
 export interface DefaultItemControlProps {
@@ -55,6 +56,29 @@ export interface ItemControls {
         itemType,
         rating,
     }: DefaultItemControlProps & { rating: number }) => void;
+}
+
+/**
+ * Click-to-sort state for a table's header row. Produced by `useItemListColumnSort`
+ * and threaded down to the header cells; absent when a table has no server-side sort
+ * (playlist detail and the queue keep their manual order).
+ */
+export interface ItemListColumnSort {
+    /** Sortable columns, mapped to the sort field each one sorts by. */
+    columnSortKeys: Map<TableColumn, string>;
+    /** Clicking a column: its natural direction when new, flipped when already sorted. */
+    onSort: (columnId: TableColumn) => void;
+    sortBy?: string;
+    sortOrder?: SortOrder;
+}
+
+/**
+ * Column visibility for a table's header menu. Produced by `useItemListColumnVisibility`;
+ * the same settings the configure modal writes, so the two surfaces stay in lockstep.
+ */
+export interface ItemListColumnVisibility {
+    columns: { id: TableColumn; isEnabled: boolean; label: string }[];
+    onToggleColumn: (columnId: TableColumn) => void;
 }
 
 export interface ItemListComponentProps<TQuery> {

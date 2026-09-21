@@ -4,9 +4,12 @@ import { api } from '/@/renderer/api';
 import { useItemListPaginatedLoader } from '/@/renderer/components/item-list/helpers/item-list-paginated-loader';
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
+import { useItemListColumnSort } from '/@/renderer/components/item-list/helpers/use-item-list-column-sort';
+import { useItemListColumnVisibility } from '/@/renderer/components/item-list/helpers/use-item-list-column-visibility';
 import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpers/use-item-list-scroll-persist';
 import { ItemListWithPagination } from '/@/renderer/components/item-list/item-list-pagination/item-list-pagination';
 import { useItemListPagination } from '/@/renderer/components/item-list/item-list-pagination/use-item-list-pagination';
+import { GENRE_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { ItemTableList } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemListTableComponentProps } from '/@/renderer/components/item-list/types';
@@ -71,6 +74,18 @@ export const GenreListPaginatedTable = ({
         itemListKey: ItemListKey.GENRE,
     });
 
+    const columnSort = useItemListColumnSort({
+        defaultSortBy: GenreListSort.NAME,
+        defaultSortOrder: SortOrder.ASC,
+        itemType: LibraryItem.GENRE,
+        listKey: ItemListKey.GENRE,
+    });
+
+    const columnVisibility = useItemListColumnVisibility({
+        itemListKey: ItemListKey.GENRE,
+        tableColumnsData: GENRE_TABLE_COLUMNS,
+    });
+
     const startRowIndex = currentPage * itemsPerPage;
 
     return (
@@ -85,6 +100,8 @@ export const GenreListPaginatedTable = ({
                 autoFitColumns={autoFitColumns}
                 CellComponent={ItemTableListColumn}
                 columns={columns}
+                columnSort={columnSort}
+                columnVisibility={columnVisibility}
                 data={data || []}
                 enableAlternateRowColors={enableAlternateRowColors}
                 enableExpansion={false}

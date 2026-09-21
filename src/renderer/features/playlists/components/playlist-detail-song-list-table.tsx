@@ -3,8 +3,10 @@ import { useEffect } from 'react';
 
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
+import { useItemListColumnVisibility } from '/@/renderer/components/item-list/helpers/use-item-list-column-visibility';
 import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpers/use-item-list-scroll-persist';
 import { ItemListWithPagination } from '/@/renderer/components/item-list/item-list-pagination/item-list-pagination';
+import { PLAYLIST_SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { ItemTableList } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemControls, ItemListTableComponentProps } from '/@/renderer/components/item-list/types';
@@ -63,6 +65,11 @@ export const PlaylistDetailSongListTable = forwardRef<any, PlaylistDetailSongLis
 
         const { handleColumnResized } = useItemListColumnResize({
             itemListKey: ItemListKey.PLAYLIST_SONG,
+        });
+
+        const columnVisibility = useItemListColumnVisibility({
+            itemListKey: ItemListKey.PLAYLIST_SONG,
+            tableColumnsData: PLAYLIST_SONG_TABLE_COLUMNS,
         });
 
         const { searchTerm } = useSearchTermFilter();
@@ -145,6 +152,7 @@ export const PlaylistDetailSongListTable = forwardRef<any, PlaylistDetailSongLis
                 autoFitColumns={autoFitColumns}
                 CellComponent={ItemTableListColumn}
                 columns={effectiveColumns}
+                columnVisibility={columnVisibility}
                 data={dataToRender}
                 enableAlternateRowColors={enableAlternateRowColors}
                 enableExpansion={false}
@@ -215,6 +223,11 @@ export const PlaylistDetailSongListEditTable = forwardRef<any, PlaylistDetailSon
             itemListKey: ItemListKey.PLAYLIST_SONG,
         });
 
+        const columnVisibility = useItemListColumnVisibility({
+            itemListKey: ItemListKey.PLAYLIST_SONG,
+            tableColumnsData: PLAYLIST_SONG_TABLE_COLUMNS,
+        });
+
         const player = usePlayer();
 
         const currentSong = usePlayerSong();
@@ -252,6 +265,7 @@ export const PlaylistDetailSongListEditTable = forwardRef<any, PlaylistDetailSon
                 autoFitColumns={autoFitColumns}
                 CellComponent={ItemTableListColumn}
                 columns={columns}
+                columnVisibility={columnVisibility}
                 data={data.items}
                 enableAlternateRowColors={enableAlternateRowColors}
                 enableDrag

@@ -15,6 +15,7 @@ import React, {
     memo,
     ReactElement,
     ReactNode,
+    useCallback,
     useEffect,
     useRef,
     useState,
@@ -58,6 +59,7 @@ import { TitleCombinedColumn } from '/@/renderer/components/item-list/item-table
 import { YearColumn } from '/@/renderer/components/item-list/item-table-list/columns/year-column';
 import { useItemDragDropState } from '/@/renderer/components/item-list/item-table-list/hooks/use-item-drag-drop-state';
 import { TableItemProps } from '/@/renderer/components/item-list/item-table-list/item-table-list';
+import { useTableColumnMenu } from '/@/renderer/components/item-list/item-table-list/table-column-menu-provider';
 import { ItemControls, ItemListItem } from '/@/renderer/components/item-list/types';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -65,7 +67,7 @@ import { Skeleton } from '/@/shared/components/skeleton/skeleton';
 import { Text } from '/@/shared/components/text/text';
 import { useDoubleClick } from '/@/shared/hooks/use-double-click';
 import { useMergedRef } from '/@/shared/hooks/use-merged-ref';
-import { LibraryItem } from '/@/shared/types/domain-types';
+import { LibraryItem, SortOrder } from '/@/shared/types/domain-types';
 import { dndUtils, DragData, DragOperation, DragTarget } from '/@/shared/types/drag-and-drop';
 import { TableColumn } from '/@/shared/types/types';
 
@@ -361,6 +363,7 @@ export const ItemTableListColumn = memo(ItemTableListColumnBase, (prevProps, nex
         prevProps.enableSelection === nextProps.enableSelection &&
         prevProps.enableColumnResize === nextProps.enableColumnResize &&
         prevProps.enableColumnReorder === nextProps.enableColumnReorder &&
+        prevProps.columnSort === nextProps.columnSort &&
         prevProps.cellPadding === nextProps.cellPadding &&
         prevItem === nextItem
     );
@@ -802,6 +805,44 @@ export const TableColumnHeaderContainer = (
     const [isDragging, setIsDragging] = useState(false);
     const [isDraggedOver, setIsDraggedOver] = useState<Edge | null>(null);
 
+    // A reorder drag ends with a click event on the header; without this the drop
+    // would also re-sort the column that was just dragged.
+    const didDragRef = useRef(false);
+
+    const openColumnMenu = useTableColumnMenu();
+
+    const { columnSort } = props;
+    const sortKey = columnSort?.columnSortKeys.get(props.type);
+    const isSortable = Boolean(sortKey && columnSort);
+    const isSortedBy = Boolean(sortKey && sortKey === columnSort?.sortBy);
+    const sortOrder = columnSort?.sortOrder ?? SortOrder.ASC;
+
+    // mousedown always precedes a drag and the click that follows it, so resetting
+    // here means a drag that ended elsewhere cannot swallow the next real click.
+    const handleHeaderMouseDown = useCallback(() => {
+        didDragRef.current = false;
+    }, []);
+
+    const handleSortClick = useCallback(
+        (event: React.MouseEvent<HTMLDivElement>) => {
+            if (!isSortable || !columnSort) {
+                return;
+            }
+
+            if (didDragRef.current) {
+                return;
+            }
+
+            // The resize grip lives inside the header; dragging it must not sort.
+            if ((event.target as HTMLElement).closest(`.${styles.resizeHandle}`)) {
+                return;
+            }
+
+            columnSort.onSort(props.type);
+        },
+        [columnSort, isSortable, props.type],
+    );
+
     useEffect(() => {
         if (!containerRef.current || !props.enableColumnReorder) {
             return;
@@ -830,6 +871,7 @@ export const TableColumnHeaderContainer = (
                     return data;
                 },
                 onDragStart: () => {
+                    didDragRef.current = true;
                     setIsDragging(true);
                 },
                 onDrop: () => {
@@ -894,10 +936,21 @@ export const TableColumnHeaderContainer = (
 
     return (
         <Flex
+            aria-sort={
+                isSortable
+                    ? isSortedBy
+                        ? sortOrder === SortOrder.ASC
+                            ? 'ascending'
+                            : 'descending'
+                        : 'none'
+                    : undefined
+            }
             className={clsx(styles.container, styles.headerContainer, props.containerClassName, {
                 [styles.headerDraggedOverLeft]: isDraggedOver === 'left',
                 [styles.headerDraggedOverRight]: isDraggedOver === 'right',
                 [styles.headerDragging]: isDragging,
+                [styles.headerSortable]: isSortable,
+                [styles.headerSorted]: isSortedBy,
                 [styles.noHorizontalPadding]: isNoHorizontalPaddingColumn(props.type),
                 [styles.paddingLg]: props.cellPadding === 'lg',
                 [styles.paddingMd]: props.cellPadding === 'md',
@@ -905,7 +958,11 @@ export const TableColumnHeaderContainer = (
                 [styles.paddingXl]: props.cellPadding === 'xl',
                 [styles.paddingXs]: props.cellPadding === 'xs',
             })}
+            onClick={isSortable ? handleSortClick : undefined}
+            onContextMenu={openColumnMenu ?? undefined}
+            onMouseDown={isSortable ? handleHeaderMouseDown : undefined}
             ref={containerRef}
+            role={isSortable ? 'columnheader' : undefined}
             style={props.style}
         >
             <Text
@@ -917,6 +974,20 @@ export const TableColumnHeaderContainer = (
                 isNoSelect
             >
                 {columnLabelMap[props.type]}
+                {isSortable && (
+                    <span
+                        className={clsx(styles.headerSortIndicator, {
+                            [styles.headerSortIndicatorActive]: isSortedBy,
+                        })}
+                    >
+                        <Icon
+                            fill={isSortedBy ? 'primary' : 'muted'}
+                            icon={
+                                isSortedBy && sortOrder === SortOrder.DESC ? 'arrowDown' : 'arrowUp'
+                            }
+                        />
+                    </span>
+                )}
             </Text>
             {!columnConfig.autoSize && props.enableColumnResize && (
                 <ColumnResizeHandle

@@ -31,8 +31,19 @@ export const useListFilterPersistence = (serverId: string, listKey: ItemListKey)
         }));
     };
 
+    const setFilters = (filters: Record<string, string>) => {
+        setPersistedFilters((prev) => ({
+            ...prev,
+            [listKey]: {
+                ...prev[listKey],
+                ...filters,
+            },
+        }));
+    };
+
     return {
         getFilter,
         setFilter,
+        setFilters,
     };
 };

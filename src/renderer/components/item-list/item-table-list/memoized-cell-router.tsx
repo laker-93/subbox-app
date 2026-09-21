@@ -31,6 +31,7 @@ export const MemoizedCellRouter = memo(MemoizedCellRouterBase, (prevProps, nextP
         prevProps.data === nextProps.data &&
         prevProps.columns === nextProps.columns &&
         prevProps.columnCellComponents === nextProps.columnCellComponents &&
+        prevProps.columnSort === nextProps.columnSort &&
         prevProps.size === nextProps.size &&
         prevProps.enableAlternateRowColors === nextProps.enableAlternateRowColors &&
         prevProps.enableHorizontalBorders === nextProps.enableHorizontalBorders &&

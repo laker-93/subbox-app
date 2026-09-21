@@ -5,6 +5,8 @@ import styles from './play-queue.module.css';
 
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
+import { useItemListColumnVisibility } from '/@/renderer/components/item-list/helpers/use-item-list-column-visibility';
+import { PLAYLIST_SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import {
     ItemTableList,
     TableGroupHeader,
@@ -148,6 +150,11 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
             itemListKey: listKey,
         });
 
+        const columnVisibility = useItemListColumnVisibility({
+            itemListKey: listKey,
+            tableColumnsData: PLAYLIST_SONG_TABLE_COLUMNS,
+        });
+
         const currentSong = usePlayerSong();
 
         const currentSongUniqueId = currentSong?._uniqueId;
@@ -181,6 +188,7 @@ export const PlayQueue = forwardRef<ItemListHandle, QueueProps>(
                     autoFitColumns={table.autoFitColumns}
                     CellComponent={ItemTableListColumn}
                     columns={table.columns}
+                    columnVisibility={columnVisibility}
                     data={filteredData}
                     enableAlternateRowColors={table.enableAlternateRowColors}
                     enableDrag

@@ -251,6 +251,42 @@
     white-space: nowrap;
 }
 
+.header-container.header-sortable {
+    cursor: pointer;
+}
+
+.header-container.header-sortable:hover .header-content {
+    color: var(--theme-colors-foreground);
+}
+
+.header-sort-indicator {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    margin-left: var(--theme-spacing-xs);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.header-sort-indicator :global(svg) {
+    width: var(--theme-font-size-xs);
+    height: var(--theme-font-size-xs);
+}
+
+/* The arrow is a hover hint until the column is the one being sorted by. */
+.header-container.header-sortable:hover .header-sort-indicator {
+    opacity: 0.5;
+}
+
+.header-sort-indicator.header-sort-indicator-active,
+.header-container.header-sortable:hover .header-sort-indicator.header-sort-indicator-active {
+    opacity: 1;
+}
+
+.header-container.header-sorted .header-content {
+    color: var(--theme-colors-foreground);
+}
+
 .header-content.center {
     justify-content: center;
     text-align: center;
