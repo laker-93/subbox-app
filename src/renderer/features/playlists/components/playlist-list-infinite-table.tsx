@@ -4,7 +4,10 @@ import { api } from '/@/renderer/api';
 import { useItemListInfiniteLoader } from '/@/renderer/components/item-list/helpers/item-list-infinite-loader';
 import { useItemListColumnReorder } from '/@/renderer/components/item-list/helpers/use-item-list-column-reorder';
 import { useItemListColumnResize } from '/@/renderer/components/item-list/helpers/use-item-list-column-resize';
+import { useItemListColumnSort } from '/@/renderer/components/item-list/helpers/use-item-list-column-sort';
+import { useItemListColumnVisibility } from '/@/renderer/components/item-list/helpers/use-item-list-column-visibility';
 import { useItemListScrollPersist } from '/@/renderer/components/item-list/helpers/use-item-list-scroll-persist';
+import { PLAYLIST_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { ItemTableList } from '/@/renderer/components/item-list/item-table-list/item-table-list';
 import { ItemTableListColumn } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { ItemListTableComponentProps } from '/@/renderer/components/item-list/types';
@@ -67,11 +70,25 @@ export const PlaylistListInfiniteTable = ({
         itemListKey: ItemListKey.PLAYLIST,
     });
 
+    const columnSort = useItemListColumnSort({
+        defaultSortBy: PlaylistListSort.NAME,
+        defaultSortOrder: SortOrder.ASC,
+        itemType: LibraryItem.PLAYLIST,
+        listKey: ItemListKey.PLAYLIST,
+    });
+
+    const columnVisibility = useItemListColumnVisibility({
+        itemListKey: ItemListKey.PLAYLIST,
+        tableColumnsData: PLAYLIST_TABLE_COLUMNS,
+    });
+
     return (
         <ItemTableList
             autoFitColumns={autoFitColumns}
             CellComponent={ItemTableListColumn}
             columns={columns}
+            columnSort={columnSort}
+            columnVisibility={columnVisibility}
             data={loadedItems}
             enableAlternateRowColors={enableAlternateRowColors}
             enableHeader={enableHeader}

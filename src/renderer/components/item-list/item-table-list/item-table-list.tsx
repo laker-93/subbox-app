@@ -50,8 +50,11 @@ import {
     MemoizedCellRouter,
     useColumnCellComponents,
 } from '/@/renderer/components/item-list/item-table-list/memoized-cell-router';
+import { TableColumnMenuProvider } from '/@/renderer/components/item-list/item-table-list/table-column-menu-provider';
 import {
     ItemControls,
+    ItemListColumnSort,
+    ItemListColumnVisibility,
     ItemListHandle,
     ItemTableListColumnConfig,
 } from '/@/renderer/components/item-list/types';
@@ -105,6 +108,7 @@ interface VirtualizedTableGridProps {
     calculatedColumnWidths: number[];
     CellComponent: JSXElementConstructor<CellComponentProps<TableItemProps>>;
     cellPadding: 'lg' | 'md' | 'sm' | 'xl' | 'xs';
+    columnSort?: ItemListColumnSort;
     controls: ItemControls;
     data: unknown[];
     dataWithGroups: (null | unknown)[];
@@ -149,6 +153,7 @@ const VirtualizedTableGrid = ({
     calculatedColumnWidths,
     CellComponent,
     cellPadding,
+    columnSort,
     controls,
     data,
     dataWithGroups,
@@ -349,6 +354,7 @@ const VirtualizedTableGrid = ({
         () => ({
             cellPadding,
             columns: parsedColumns,
+            columnSort,
             controls,
             enableHeader,
             getRowHeight,
@@ -362,6 +368,7 @@ const VirtualizedTableGrid = ({
         [
             cellPadding,
             parsedColumns,
+            columnSort,
             controls,
             enableHeader,
             getRowHeight,
@@ -740,6 +747,7 @@ const MemoizedVirtualizedTableGrid = memo(VirtualizedTableGrid, (prevProps, next
             nextProps.calculatedColumnWidths,
         ) &&
         prevProps.cellPadding === nextProps.cellPadding &&
+        prevProps.columnSort === nextProps.columnSort &&
         prevProps.controls === nextProps.controls &&
         prevProps.data === nextProps.data &&
         prevProps.dataWithGroups === nextProps.dataWithGroups &&
@@ -800,6 +808,7 @@ export interface TableItemProps {
     calculatedColumnWidths?: number[];
     cellPadding?: ItemTableListProps['cellPadding'];
     columns: ItemTableListColumnConfig[];
+    columnSort?: ItemListColumnSort;
     controls: ItemControls;
     data: ItemTableListProps['data'];
     enableAlternateRowColors?: ItemTableListProps['enableAlternateRowColors'];
@@ -839,6 +848,8 @@ interface ItemTableListProps {
     CellComponent?: JSXElementConstructor<CellComponentProps<TableItemProps>>;
     cellPadding?: 'lg' | 'md' | 'sm' | 'xl' | 'xs';
     columns: ItemTableListColumnConfig[];
+    columnSort?: ItemListColumnSort;
+    columnVisibility?: ItemListColumnVisibility;
     data: unknown[];
     enableAlternateRowColors?: boolean;
     enableDrag?: boolean;
@@ -1277,6 +1288,8 @@ const BaseItemTableList = ({
     CellComponent = ItemTableListColumn,
     cellPadding = 'sm',
     columns,
+    columnSort,
+    columnVisibility,
     data,
     enableAlternateRowColors = false,
     enableDrag = true,
@@ -1551,6 +1564,7 @@ const BaseItemTableList = ({
             calculatedColumnWidths,
             cellPadding,
             columns: parsedColumns,
+            columnSort,
             controls,
             data: [null], // Header row
             enableAlternateRowColors,
@@ -1580,6 +1594,7 @@ const BaseItemTableList = ({
         [
             calculatedColumnWidths,
             cellPadding,
+            columnSort,
             controls,
             parsedColumns,
             enableAlternateRowColors,
@@ -1680,73 +1695,76 @@ const BaseItemTableList = ({
                     {...animationProps.fadeIn}
                     transition={{ duration: enableEntranceAnimation ? 0.3 : 0, ease: 'anticipate' }}
                 >
-                    <ItemTableListStickyUI
-                        calculatedColumnWidths={calculatedColumnWidths}
-                        CellComponent={optimizedCellComponent}
-                        containerRef={containerRef}
-                        data={data}
-                        enableHeader={!!enableHeader}
-                        enableStickyGroupRows={!!enableStickyGroupRows}
-                        enableStickyHeader={!!enableStickyHeader}
-                        getRowHeightWrapper={getRowHeightWrapper}
-                        groups={groups}
-                        headerHeight={headerHeight}
-                        internalState={internalState}
-                        parsedColumns={parsedColumns}
-                        pinnedLeftColumnCount={pinnedLeftColumnCount}
-                        pinnedLeftColumnRef={pinnedLeftColumnRef}
-                        pinnedRightColumnCount={pinnedRightColumnCount}
-                        pinnedRightColumnRef={pinnedRightColumnRef}
-                        pinnedRowRef={pinnedRowRef}
-                        rowHeight={rowHeight}
-                        rowRef={rowRef}
-                        size={size}
-                        stickyHeaderItemProps={stickyHeaderItemProps}
-                        totalColumnCount={totalColumnCount}
-                    />
-                    <MemoizedVirtualizedTableGrid
-                        calculatedColumnWidths={calculatedColumnWidths}
-                        CellComponent={optimizedCellComponent}
-                        cellPadding={cellPadding}
-                        controls={controls}
-                        data={data}
-                        dataWithGroups={dataWithGroups}
-                        enableAlternateRowColors={enableAlternateRowColors}
-                        enableColumnReorder={!!onColumnReordered}
-                        enableColumnResize={!!onColumnResized}
-                        enableDrag={enableDrag}
-                        enableExpansion={enableExpansion}
-                        enableHeader={enableHeader}
-                        enableHorizontalBorders={enableHorizontalBorders}
-                        enableRowHoverHighlight={enableRowHoverHighlight}
-                        enableScrollShadow={enableScrollShadow}
-                        enableSelection={enableSelection}
-                        enableVerticalBorders={enableVerticalBorders}
-                        getItem={getItem}
-                        getRowHeight={getRowHeight}
-                        groups={groups}
-                        headerHeight={headerHeight}
-                        internalState={internalState}
-                        itemType={itemType}
-                        mergedRowRef={mergedRowRef}
-                        onRangeChanged={onRangeChanged}
-                        parsedColumns={parsedColumns}
-                        pinnedLeftColumnCount={pinnedLeftColumnCount}
-                        pinnedLeftColumnRef={pinnedLeftColumnRef}
-                        pinnedRightColumnCount={pinnedRightColumnCount}
-                        pinnedRightColumnRef={pinnedRightColumnRef}
-                        pinnedRowCount={pinnedRowCount}
-                        pinnedRowRef={pinnedRowRef}
-                        playerContext={playerContext}
-                        showLeftShadow={showLeftShadow}
-                        showRightShadow={showRightShadow}
-                        showTopShadow={showTopShadow}
-                        size={size}
-                        startRowIndex={startRowIndex}
-                        tableId={tableId}
-                        totalColumnCount={totalColumnCount}
-                        totalRowCount={totalRowCount}
-                    />
+                    <TableColumnMenuProvider columnVisibility={columnVisibility}>
+                        <ItemTableListStickyUI
+                            calculatedColumnWidths={calculatedColumnWidths}
+                            CellComponent={optimizedCellComponent}
+                            containerRef={containerRef}
+                            data={data}
+                            enableHeader={!!enableHeader}
+                            enableStickyGroupRows={!!enableStickyGroupRows}
+                            enableStickyHeader={!!enableStickyHeader}
+                            getRowHeightWrapper={getRowHeightWrapper}
+                            groups={groups}
+                            headerHeight={headerHeight}
+                            internalState={internalState}
+                            parsedColumns={parsedColumns}
+                            pinnedLeftColumnCount={pinnedLeftColumnCount}
+                            pinnedLeftColumnRef={pinnedLeftColumnRef}
+                            pinnedRightColumnCount={pinnedRightColumnCount}
+                            pinnedRightColumnRef={pinnedRightColumnRef}
+                            pinnedRowRef={pinnedRowRef}
+                            rowHeight={rowHeight}
+                            rowRef={rowRef}
+                            size={size}
+                            stickyHeaderItemProps={stickyHeaderItemProps}
+                            totalColumnCount={totalColumnCount}
+                        />
+                        <MemoizedVirtualizedTableGrid
+                            calculatedColumnWidths={calculatedColumnWidths}
+                            CellComponent={optimizedCellComponent}
+                            cellPadding={cellPadding}
+                            columnSort={columnSort}
+                            controls={controls}
+                            data={data}
+                            dataWithGroups={dataWithGroups}
+                            enableAlternateRowColors={enableAlternateRowColors}
+                            enableColumnReorder={!!onColumnReordered}
+                            enableColumnResize={!!onColumnResized}
+                            enableDrag={enableDrag}
+                            enableExpansion={enableExpansion}
+                            enableHeader={enableHeader}
+                            enableHorizontalBorders={enableHorizontalBorders}
+                            enableRowHoverHighlight={enableRowHoverHighlight}
+                            enableScrollShadow={enableScrollShadow}
+                            enableSelection={enableSelection}
+                            enableVerticalBorders={enableVerticalBorders}
+                            getItem={getItem}
+                            getRowHeight={getRowHeight}
+                            groups={groups}
+                            headerHeight={headerHeight}
+                            internalState={internalState}
+                            itemType={itemType}
+                            mergedRowRef={mergedRowRef}
+                            onRangeChanged={onRangeChanged}
+                            parsedColumns={parsedColumns}
+                            pinnedLeftColumnCount={pinnedLeftColumnCount}
+                            pinnedLeftColumnRef={pinnedLeftColumnRef}
+                            pinnedRightColumnCount={pinnedRightColumnCount}
+                            pinnedRightColumnRef={pinnedRightColumnRef}
+                            pinnedRowCount={pinnedRowCount}
+                            pinnedRowRef={pinnedRowRef}
+                            playerContext={playerContext}
+                            showLeftShadow={showLeftShadow}
+                            showRightShadow={showRightShadow}
+                            showTopShadow={showTopShadow}
+                            size={size}
+                            startRowIndex={startRowIndex}
+                            tableId={tableId}
+                            totalColumnCount={totalColumnCount}
+                            totalRowCount={totalRowCount}
+                        />
+                    </TableColumnMenuProvider>
                 </motion.div>
             </ItemTableListConfigProvider>
         </ItemTableListStoreProvider>

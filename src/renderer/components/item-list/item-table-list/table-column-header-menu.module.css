@@ -1,0 +1,19 @@
+.column-item {
+    display: flex;
+    gap: var(--theme-spacing-sm);
+    align-items: center;
+}
+
+.column-check {
+    flex-shrink: 0;
+}
+
+.column-check-hidden {
+    visibility: hidden;
+}
+
+.column-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

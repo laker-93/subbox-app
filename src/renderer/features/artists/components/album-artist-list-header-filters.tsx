@@ -2,26 +2,20 @@ import { ALBUM_ARTIST_TABLE_COLUMNS } from '/@/renderer/components/item-list/ite
 import { ListConfigMenu } from '/@/renderer/features/shared/components/list-config-menu';
 import { ListDisplayTypeToggleButton } from '/@/renderer/features/shared/components/list-display-type-toggle-button';
 import { ListRefreshButton } from '/@/renderer/features/shared/components/list-refresh-button';
-import { ListSortByDropdown } from '/@/renderer/features/shared/components/list-sort-by-dropdown';
-import { ListSortOrderToggleButton } from '/@/renderer/features/shared/components/list-sort-order-toggle-button';
-import { Divider } from '/@/shared/components/divider/divider';
+import { ListSortControls } from '/@/renderer/features/shared/components/list-sort-controls';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
-import { AlbumArtistListSort, LibraryItem, SortOrder } from '/@/shared/types/domain-types';
+import { AlbumArtistListSort, LibraryItem } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
 
 export const AlbumArtistListHeaderFilters = () => {
     return (
         <Flex justify="space-between">
             <Group gap="sm" w="100%">
-                <ListSortByDropdown
+                <ListSortControls
                     defaultSortByValue={AlbumArtistListSort.NAME}
+                    displayKey={ItemListKey.ALBUM_ARTIST}
                     itemType={LibraryItem.ALBUM_ARTIST}
-                    listKey={ItemListKey.ALBUM_ARTIST}
-                />
-                <Divider orientation="vertical" />
-                <ListSortOrderToggleButton
-                    defaultSortOrder={SortOrder.ASC}
                     listKey={ItemListKey.ALBUM_ARTIST}
                 />
                 <ListRefreshButton listKey={ItemListKey.ALBUM_ARTIST} />

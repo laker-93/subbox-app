@@ -1,3 +1,5 @@
+import { useCallback } from 'react';
+
 import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
 import { ItemListKey } from '/@/shared/types/types';
 
@@ -21,18 +23,38 @@ export const useListFilterPersistence = (serverId: string, listKey: ItemListKey)
         return persistedFilters?.[listKey]?.[filterKey];
     };
 
-    const setFilter = (filterKey: string, value: string) => {
-        setPersistedFilters((prev) => ({
-            ...prev,
-            [listKey]: {
-                ...prev[listKey],
-                [filterKey]: value,
-            },
-        }));
-    };
+    // Both setters are memoized: `useItemListColumnSort` carries `setFilters` into the
+    // `columnSort` object the table cells are memoized against, so an identity that
+    // changed every render would defeat those checks on every virtualized cell.
+    const setFilter = useCallback(
+        (filterKey: string, value: string) => {
+            setPersistedFilters((prev) => ({
+                ...prev,
+                [listKey]: {
+                    ...prev[listKey],
+                    [filterKey]: value,
+                },
+            }));
+        },
+        [listKey, setPersistedFilters],
+    );
+
+    const setFilters = useCallback(
+        (filters: Record<string, string>) => {
+            setPersistedFilters((prev) => ({
+                ...prev,
+                [listKey]: {
+                    ...prev[listKey],
+                    ...filters,
+                },
+            }));
+        },
+        [listKey, setPersistedFilters],
+    );
 
     return {
         getFilter,
         setFilter,
+        setFilters,
     };
 };

@@ -6,14 +6,12 @@ import { openCreatePlaylistModal } from '/@/renderer/features/playlists/componen
 import { ListConfigMenu } from '/@/renderer/features/shared/components/list-config-menu';
 import { ListDisplayTypeToggleButton } from '/@/renderer/features/shared/components/list-display-type-toggle-button';
 import { ListRefreshButton } from '/@/renderer/features/shared/components/list-refresh-button';
-import { ListSortByDropdown } from '/@/renderer/features/shared/components/list-sort-by-dropdown';
-import { ListSortOrderToggleButton } from '/@/renderer/features/shared/components/list-sort-order-toggle-button';
+import { ListSortControls } from '/@/renderer/features/shared/components/list-sort-controls';
 import { useCurrentServer } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
-import { Divider } from '/@/shared/components/divider/divider';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
-import { LibraryItem, PlaylistListSort, SortOrder } from '/@/shared/types/domain-types';
+import { LibraryItem, PlaylistListSort } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
 
 export const PlaylistListHeaderFilters = () => {
@@ -28,14 +26,10 @@ export const PlaylistListHeaderFilters = () => {
     return (
         <Flex justify="space-between">
             <Group gap="sm" w="100%">
-                <ListSortByDropdown
+                <ListSortControls
                     defaultSortByValue={PlaylistListSort.NAME}
+                    displayKey={ItemListKey.PLAYLIST}
                     itemType={LibraryItem.PLAYLIST}
-                    listKey={ItemListKey.PLAYLIST}
-                />
-                <Divider orientation="vertical" />
-                <ListSortOrderToggleButton
-                    defaultSortOrder={SortOrder.ASC}
                     listKey={ItemListKey.PLAYLIST}
                 />
                 <ListRefreshButton listKey={ItemListKey.PLAYLIST} />

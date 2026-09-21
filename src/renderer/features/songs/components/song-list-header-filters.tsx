@@ -14,8 +14,7 @@ import {
     ListFiltersModal,
 } from '/@/renderer/features/shared/components/list-filters';
 import { ListRefreshButton } from '/@/renderer/features/shared/components/list-refresh-button';
-import { ListSortByDropdown } from '/@/renderer/features/shared/components/list-sort-by-dropdown';
-import { ListSortOrderToggleButton } from '/@/renderer/features/shared/components/list-sort-order-toggle-button';
+import { ListSortControls } from '/@/renderer/features/shared/components/list-sort-controls';
 import { FILTER_KEYS } from '/@/renderer/features/shared/utils';
 import { useSongListFilters } from '/@/renderer/features/songs/hooks/use-song-list-filters';
 import { GenreTarget, useGenreTarget, useSettingsStoreActions } from '/@/renderer/store';
@@ -24,7 +23,7 @@ import { Divider } from '/@/shared/components/divider/divider';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
-import { LibraryItem, SongListSort, SortOrder } from '/@/shared/types/domain-types';
+import { LibraryItem, SongListSort } from '/@/shared/types/domain-types';
 import { ItemListKey } from '/@/shared/types/types';
 
 export const SongListHeaderFilters = ({ toggleGenreTarget }: { toggleGenreTarget?: boolean }) => {
@@ -79,14 +78,10 @@ export const SongListHeaderFilters = ({ toggleGenreTarget }: { toggleGenreTarget
                         <Divider orientation="vertical" />
                     </>
                 )}
-                <ListSortByDropdown
+                <ListSortControls
                     defaultSortByValue={SongListSort.NAME}
+                    displayKey={ItemListKey.SONG}
                     itemType={LibraryItem.SONG}
-                    listKey={pageKey as ItemListKey}
-                />
-                <Divider orientation="vertical" />
-                <ListSortOrderToggleButton
-                    defaultSortOrder={SortOrder.ASC}
                     listKey={pageKey as ItemListKey}
                 />
                 <ListFiltersModal isActive={hasActiveFilters} itemType={LibraryItem.SONG} />

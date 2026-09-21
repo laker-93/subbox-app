@@ -940,6 +940,22 @@ const RADIO_LIST_FILTERS: Partial<
     ],
 };
 
+export interface ListSortOption {
+    defaultOrder: SortOrder;
+    name: string;
+    value: string;
+}
+
+/**
+ * The sort options a given server actually supports for an item type. Navidrome and
+ * Subsonic expose different sets, so callers must gate on this rather than assume a
+ * sort field exists.
+ */
+export const getListSortOptions = (
+    itemType: LibraryItem,
+    serverType: ServerType,
+): ListSortOption[] => FILTERS[itemType]?.[serverType] ?? [];
+
 const FILTERS: Partial<Record<LibraryItem, any>> = {
     [LibraryItem.ALBUM]: ALBUM_LIST_FILTERS,
     [LibraryItem.ALBUM_ARTIST]: ALBUM_ARTIST_LIST_FILTERS,
