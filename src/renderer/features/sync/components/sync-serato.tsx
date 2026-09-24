@@ -72,6 +72,7 @@ type SyncStep =
     | 'parsing'
     | 'preview'
     | 'storage-exceeded'
+    | 'upload-failed'
     | 'upload-forbidden'
     | 'uploading';
 
@@ -248,6 +249,16 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                 username: currentServer.username,
             });
             setUploadResult(result);
+
+            // Every upload failed, so there is nothing of this run's to import.
+            // pymix's beet import takes the whole uploads/ directory, not just this
+            // run's files, so starting the job here imports whatever an earlier run
+            // left behind (laker-93/subbox-app#138). "Playlists only" uploads no
+            // audio, so `failed` is always empty there and it still imports.
+            if (result.uploaded === 0 && (result.failed?.length ?? 0) > 0) {
+                setStep('upload-failed');
+                return;
+            }
 
             try {
                 // The manifest goes with the import, not with the upload: it is what
@@ -595,6 +606,67 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
         );
     }
 
+    // ── Upload failed (nothing uploaded, import not started) ───────────────
+    if (step === 'upload-failed' && uploadResult) {
+        const failed = uploadResult.failed ?? [];
+        const diagnostics = [
+            'Serato upload failed (import not started)',
+            `failed: ${failed.length}`,
+            ...failed.map((f) => `${f.trackName}: ${f.reason}`),
+        ].join('\n');
+
+        return (
+            <SyncResult
+                actionLabel={t('common.retry', { defaultValue: 'Retry', postProcess: 'titleCase' })}
+                maw={420}
+                onAction={handleUpload}
+                secondaryAction={
+                    <Stack gap="xs">
+                        <CopyButton timeout={2000} value={diagnostics}>
+                            {({ copied, copy }) => (
+                                <Button
+                                    fullWidth
+                                    leftSection={<Icon icon={copied ? 'check' : 'clipboardCopy'} />}
+                                    onClick={copy}
+                                    variant="subtle"
+                                >
+                                    {copied ? 'Copied' : 'Copy details'}
+                                </Button>
+                            )}
+                        </CopyButton>
+                        {/* Back to the crate list, not the start: the library is still
+                            read and the selection is what the user will retry. */}
+                        <Button fullWidth onClick={() => setStep('preview')} variant="default">
+                            {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
+                        </Button>
+                    </Stack>
+                }
+                status="warn"
+                title={t('page.sync.serato.uploadFailed', {
+                    defaultValue: 'Upload Failed',
+                    postProcess: 'titleCase',
+                })}
+            >
+                <Text size="sm" ta="center">
+                    None of the {failed.length} {failed.length === 1 ? 'track' : 'tracks'} could be
+                    uploaded, so nothing was imported and your library has not changed.
+                </Text>
+                <Stack align="center" gap={2}>
+                    {failed.slice(0, MAX_LISTED_DROPPED).map((f) => (
+                        <Text c="dimmed" key={`${f.trackName}:${f.reason}`} size="xs" ta="center">
+                            {f.trackName}: {f.reason}
+                        </Text>
+                    ))}
+                    {failed.length > MAX_LISTED_DROPPED && (
+                        <Text c="dimmed" size="xs" ta="center">
+                            …and {failed.length - MAX_LISTED_DROPPED} more
+                        </Text>
+                    )}
+                </Stack>
+            </SyncResult>
+        );
+    }
+
     // ── Storage exceeded ───────────────────────────────────────────────────
     if (step === 'storage-exceeded') {
         return (
@@ -686,6 +758,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
 
     // ── Done ───────────────────────────────────────────────────────────────
     const dropped = uploadResult?.dropped ?? [];
+    const failedUploads = uploadResult?.failed ?? [];
 
     return (
         <SyncResult
@@ -695,11 +768,18 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
             })}
             maw={420}
             onAction={handleReset}
-            status="success"
-            title={t('page.sync.serato.importComplete', {
-                defaultValue: 'Import Complete',
-                postProcess: 'titleCase',
-            })}
+            status={failedUploads.length > 0 ? 'warn' : 'success'}
+            title={
+                failedUploads.length > 0
+                    ? t('page.sync.serato.importPartialUpload', {
+                          defaultValue: 'Imported, with problems',
+                          postProcess: 'sentenceCase',
+                      })
+                    : t('page.sync.serato.importComplete', {
+                          defaultValue: 'Import Complete',
+                          postProcess: 'titleCase',
+                      })
+            }
         >
             {uploadResult && (
                 <Stack align="center" gap="xs">
@@ -709,7 +789,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                     {uploadResult.uploaded > 0 && (
                         <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
                     )}
-                    {uploadResult.uploaded === 0 && (
+                    {uploadResult.uploaded === 0 && failedUploads.length === 0 && (
                         <Text c="dimmed" size="sm">
                             Everything was already in your library.
                         </Text>
@@ -719,13 +799,29 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                             {importProgress.n_tracks_processed} tracks imported into library
                         </Text>
                     )}
-                    {uploadResult.failed && uploadResult.failed.length > 0 && (
+                    {failedUploads.length > 0 && (
                         <Stack align="center" gap={2}>
-                            {uploadResult.failed.map((f) => (
-                                <Text c="dimmed" key={f.trackName} size="xs" ta="center">
+                            <Text size="sm" ta="center">
+                                {failedUploads.length}{' '}
+                                {failedUploads.length === 1 ? 'track' : 'tracks'} failed to upload.
+                                They are not in your library, so the crates that contain them are
+                                missing those entries. Upload again to retry them.
+                            </Text>
+                            {failedUploads.slice(0, MAX_LISTED_DROPPED).map((f) => (
+                                <Text
+                                    c="dimmed"
+                                    key={`${f.trackName}:${f.reason}`}
+                                    size="xs"
+                                    ta="center"
+                                >
                                     {f.trackName}: {f.reason}
                                 </Text>
                             ))}
+                            {failedUploads.length > MAX_LISTED_DROPPED && (
+                                <Text c="dimmed" size="xs" ta="center">
+                                    …and {failedUploads.length - MAX_LISTED_DROPPED} more
+                                </Text>
+                            )}
                         </Stack>
                     )}
                     {/* The server's own account of what it did and what it left
