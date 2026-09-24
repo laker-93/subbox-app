@@ -5,7 +5,6 @@ import * as fs from 'fs';
 import { parseFile } from 'music-metadata';
 import * as path from 'path';
 import { pipeline } from 'stream/promises';
-import * as tus from 'tus-js-client';
 import * as unzipper from 'unzipper';
 
 import { appConfig } from '/@/main/config/app-config';
@@ -28,6 +27,7 @@ import {
     sanitizePathSegment,
 } from '/@/main/features/core/sync/rekordbox-xml';
 import { getOrCreateSubboxId, readSubboxId } from '/@/main/features/core/sync/subbox-id-tags';
+import { uploadFileViaTus } from '/@/main/features/core/sync/tus-upload';
 
 /** What pymix calls the Rekordbox XML it writes, in the zip and on its own. */
 const XML_FILENAME = 'subbox_rb_export.xml';
@@ -515,9 +515,12 @@ ipcMain.handle(
             // Fetch already-uploaded files from filebrowser and skip them
             let existingPaths = new Set<string>();
             try {
-                const listRes = await axios.get(`${filebrowserUrl}/api/resources/uploads`, {
-                    headers: { 'X-Auth': filebrowserToken },
-                    httpsAgent,
+                // Through fbRequest, not the token the renderer passed in: this is the
+                // first filebrowser request of the upload, so on a user returning after
+                // the ~2h token lifetime it's the one that 401s (subbox-app#137).
+                const listRes = await fbRequest(fbAuth, {
+                    method: 'get',
+                    url: `${filebrowserUrl}/api/resources/uploads`,
                 });
                 const items: Array<{ path: string }> = listRes.data?.items ?? [];
                 existingPaths = new Set(items.map((i) => i.path.replace(/^\//, '')));
@@ -557,57 +560,17 @@ ipcMain.handle(
                 track,
                 trackName,
             }: (typeof tracksToUpload)[number]) => {
-                const fileSize = fs.statSync(track.location).size;
-                // Encode each path segment individually so `/` separators remain real slashes in
-                // the URL. Using encodeURIComponent on the whole path encodes `/` as `%2F` which
-                // causes filebrowser to track the TUS upload state at a different URL than the
-                // one the client uses for HEAD/PATCH, producing 404s on resume.
-                const encodedStagingPath = stagingPath.split('/').map(encodeURIComponent).join('/');
-                const resourcePath = `${filebrowserUrl}/api/tus/uploads/${encodedStagingPath}?override=true`;
-
-                const createResp = await fbRequest(fbAuth, {
-                    data: null,
-                    headers: { 'upload-length': fileSize },
-                    method: 'post',
-                    url: resourcePath,
-                });
-                if (createResp.status !== 201) {
-                    throw new Error(
-                        `Failed to create TUS upload for "${trackName}": ${createResp.status}`,
-                    );
-                }
-
-                // Use the Location header returned by the server as the canonical TUS upload URL.
-                // The creation URL (with ?override=true) is only for creation; HEAD/PATCH must
-                // use the URL the server assigned to the upload. The header is server-root-relative
-                // and already includes filebrowser's own base path (e.g. "/browser/api/tus/..." when
-                // VITE_FILEBROWSER_URL is ".../browser") — resolve it against the origin only, not
-                // the full filebrowserUrl, or that base path gets doubled.
-                const rawLocation = createResp.headers['location'] as string | undefined;
-                const uploadUrl = rawLocation
-                    ? rawLocation.startsWith('http')
-                        ? rawLocation
-                        : `${new URL(filebrowserUrl).origin}${rawLocation}`
-                    : resourcePath;
-
-                await new Promise<void>((resolve, reject) => {
-                    const fileStream = fs.createReadStream(track.location);
-                    const uploader = new tus.Upload(fileStream as unknown as Buffer, {
-                        chunkSize: 20 * 1024 * 1024,
-                        headers: { 'X-Auth': filebrowserToken },
-                        // Pass a custom HTTP stack so TUS respects self-signed certs in dev
-                        httpStack: new tus.DefaultHttpStack({ rejectUnauthorized: false }),
-                        onError: reject,
-                        onProgress: (bytesUploaded, bytesTotal) => {
-                            const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
-                            activeUploads.set(trackName, `${trackName} (${pct}%)`);
-                            emitUploadingProgress();
-                        },
-                        onSuccess: () => resolve(),
-                        uploadSize: fileSize,
-                        uploadUrl: uploadUrl,
-                    });
-                    uploader.start();
+                await uploadFileViaTus({
+                    fbAuth,
+                    filebrowserUrl,
+                    filePath: track.location,
+                    onProgress: (bytesUploaded, bytesTotal) => {
+                        const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
+                        activeUploads.set(trackName, `${trackName} (${pct}%)`);
+                        emitUploadingProgress();
+                    },
+                    stagingPath,
+                    trackName,
                 });
 
                 activeUploads.delete(trackName);
