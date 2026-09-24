@@ -4,7 +4,6 @@ import * as fs from 'fs';
 import { parseFile } from 'music-metadata';
 import * as os from 'os';
 import * as path from 'path';
-import * as tus from 'tus-js-client';
 
 import { getMusicPath } from '/@/main/features/core/sync';
 import {
@@ -37,6 +36,7 @@ import {
     writeTrackGrid,
 } from '/@/main/features/core/sync/serato-crates';
 import { getOrCreateSubboxId } from '/@/main/features/core/sync/subbox-id-tags';
+import { uploadFileViaTus } from '/@/main/features/core/sync/tus-upload';
 import { writeFlatZip } from '/@/main/features/core/sync/write-zip';
 
 // ── Serato import ───────────────────────────────────────────────────────────
@@ -460,49 +460,17 @@ ipcMain.handle(
         emitProgress();
 
         const uploadOne = async (item: (typeof uploads)[number]) => {
-            const fileSize = fs.statSync(item.filePath).size;
-            // Encode each segment separately so the `/`s stay real separators —
-            // encoding the whole path turns them into %2F and filebrowser then
-            // tracks the TUS upload at a different URL than the one we PATCH.
-            const encoded = item.stagingPath.split('/').map(encodeURIComponent).join('/');
-            const resourcePath = `${filebrowserUrl}/api/tus/uploads/${encoded}?override=true`;
-
-            const createResp = await fbRequest(fbAuth, {
-                data: null,
-                headers: { 'upload-length': fileSize },
-                method: 'post',
-                url: resourcePath,
-            });
-            if (createResp.status !== 201) {
-                throw new Error(
-                    `Failed to create TUS upload for "${item.trackName}": ${createResp.status}`,
-                );
-            }
-
-            const rawLocation = createResp.headers['location'] as string | undefined;
-            const uploadUrl = rawLocation
-                ? rawLocation.startsWith('http')
-                    ? rawLocation
-                    : `${new URL(filebrowserUrl).origin}${rawLocation}`
-                : resourcePath;
-
-            await new Promise<void>((resolve, reject) => {
-                const fileStream = fs.createReadStream(item.filePath);
-                const uploader = new tus.Upload(fileStream as unknown as Buffer, {
-                    chunkSize: 20 * 1024 * 1024,
-                    headers: { 'X-Auth': fbAuth.getToken() },
-                    httpStack: new tus.DefaultHttpStack({ rejectUnauthorized: false }),
-                    onError: reject,
-                    onProgress: (bytesUploaded, bytesTotal) => {
-                        const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
-                        activeUploads.set(item.trackName, `${item.trackName} (${pct}%)`);
-                        emitProgress();
-                    },
-                    onSuccess: () => resolve(),
-                    uploadSize: fileSize,
-                    uploadUrl,
-                });
-                uploader.start();
+            await uploadFileViaTus({
+                fbAuth,
+                filebrowserUrl,
+                filePath: item.filePath,
+                onProgress: (bytesUploaded, bytesTotal) => {
+                    const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
+                    activeUploads.set(item.trackName, `${item.trackName} (${pct}%)`);
+                    emitProgress();
+                },
+                stagingPath: item.stagingPath,
+                trackName: item.trackName,
             });
 
             activeUploads.delete(item.trackName);
