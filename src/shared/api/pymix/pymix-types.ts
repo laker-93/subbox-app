@@ -219,6 +219,9 @@ const matchTracksParameters = z.object({
 
 const rbImportParameters = z.object({
     playlistNames: z.array(z.array(z.string())).nullable(),
+    // The name the XML was uploaded under. pymix imports exactly that file; without
+    // it, it takes the newest XML in uploads/, which may be a leftover (pymix#192).
+    xmlName: z.string().optional(),
 });
 
 /**

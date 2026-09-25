@@ -65,6 +65,9 @@ export interface UploadResult {
     skipped: number;
     totalTracksInXml: number;
     uploaded: number;
+    /** The name the XML was uploaded under, for `rbImport`'s `xmlName`. pymix imports
+     *  exactly that file rather than guessing among leftovers (laker-93/pymix#192). */
+    xmlFileName: string;
 }
 
 type LocalTrack = {
@@ -643,6 +646,7 @@ ipcMain.handle(
             skipped: skippedCount,
             totalTracksInXml: totalTracks,
             uploaded: uploadedCount,
+            xmlFileName,
         };
     },
 );
@@ -660,7 +664,7 @@ ipcMain.handle(
             username?: string;
             xmlPath: string;
         },
-    ): Promise<void> => {
+    ): Promise<{ xmlFileName: string }> => {
         const { filebrowserToken, filebrowserUrl, serverId, username, xmlPath } = args;
         const xmlFileName = path.basename(xmlPath);
         const xmlResourcePath = `${filebrowserUrl}/api/resources/uploads/${xmlFileName}?override=true`;
@@ -683,6 +687,8 @@ ipcMain.handle(
             method: 'post',
             url: xmlResourcePath,
         });
+
+        return { xmlFileName };
     },
 );
 
