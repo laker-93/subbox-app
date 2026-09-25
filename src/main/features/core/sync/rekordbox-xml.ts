@@ -56,7 +56,10 @@ export function extractPlaylists(filePath: string): ParsedXmlResult {
     if (!root || !isFolder(root)) throw new Error('Invalid root node');
 
     function parsePlaylist(playlist: Element): ParsedPlaylist {
-        const playlistName = sanitizeName(playlist.getAttribute('Name'));
+        // The raw XML name, not sanitizeName's: pymix matches the selected playlists
+        // against the names in the uploaded XML, so a rewritten name matches nothing and
+        // the playlist is silently never created (subbox-app#142).
+        const playlistName = playlist.getAttribute('Name') || '';
 
         const trackIds = parseNodes(xpath.select('./TRACK', playlist) as Node[], (trackRef) => {
             if (!isTrackReference(trackRef)) throw new Error('Invalid trackReference');
@@ -76,7 +79,7 @@ export function extractPlaylists(filePath: string): ParsedXmlResult {
     }
 
     function parseFolder(folder: Element): ParsedFolder {
-        const folderName = sanitizeName(folder.getAttribute('Name'));
+        const folderName = folder.getAttribute('Name') || '';
 
         return {
             name: folderName,
@@ -111,9 +114,9 @@ export function sanitizeName(name: null | string): string {
  * copied into the staging dir, and are then silently never imported — no beet.log entry,
  * no error, just a completion screen whose imported count is quietly short.
  *
- * Kept separate from sanitizeName rather than folded into it: sanitizeName also names
- * playlists and folders, which are display values passed on to pymix and not paths, and
- * those must not be silently renamed just because they start with a dot.
+ * Neither function is applied to playlist or folder names: those are display values
+ * passed on to pymix, which matches them against the raw names in the uploaded XML, so
+ * they must reach it exactly as Rekordbox wrote them (subbox-app#142).
  *
  * '_' matches the `replace: '^\.': _` rule beets applies to its own output paths, so the
  * staging tree and the library tree agree on what a dot-prefixed name becomes.

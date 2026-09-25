@@ -71,8 +71,10 @@ interface SyncRekordboxProps {
     formatControl?: ReactNode;
 }
 
+// JSON rather than a '/' join: names are the raw Rekordbox names and may contain '/',
+// which would let folder "A" > playlist "B" and a top-level playlist "A/B" share a key.
 function playlistKey(pl: PlaylistPreview): string {
-    return [...pl.path, pl.name].join('/');
+    return JSON.stringify([...pl.path, pl.name]);
 }
 
 export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
