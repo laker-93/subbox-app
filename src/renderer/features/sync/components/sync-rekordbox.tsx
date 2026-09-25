@@ -172,10 +172,14 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
         setError(null);
         setUploadResult(null);
 
+        // The name the XML was uploaded under, so pymix imports this run's XML and
+        // not a leftover of an earlier one beside it (laker-93/pymix#192).
+        let xmlFileName: string;
+
         try {
             if (metadataOnly) {
                 // XML-only path: upload XML file then trigger import without processing tracks
-                await ipc.invoke('sync:upload-xml', {
+                ({ xmlFileName } = await ipc.invoke('sync:upload-xml', {
                     filebrowserToken: currentServer.fbToken,
                     filebrowserUrl: urlConfig.filebrowser,
                     // serverId/username let the main process re-login for a fresh
@@ -183,7 +187,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                     serverId: currentServer.id,
                     username: currentServer.username,
                     xmlPath,
-                });
+                }));
 
                 setUploadResult({ dropped: [], failed: [], skipped: 0, uploaded: 0 });
             } else {
@@ -235,6 +239,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                 });
                 console.log('Upload result:', result);
                 setUploadResult(result);
+                xmlFileName = result.xmlFileName;
 
                 // Every upload failed, so there is nothing of this run's to import.
                 // pymix imports whatever is sitting in the user's uploads/ directory,
@@ -253,6 +258,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                     baseUrl: urlConfig.pymix,
                     body: {
                         playlistNames: selectedPlaylistPaths,
+                        xmlName: xmlFileName,
                     },
                 });
 
