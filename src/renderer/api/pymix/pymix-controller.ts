@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { pymixApiClient } from '/@/renderer/api/pymix/pymix-api';
-import { PlaylistTree, pymixType } from '/@/shared/api/pymix/pymix-types';
+import { PlaylistTree, pymixType, UpdatePlaylistNodeBody } from '/@/shared/api/pymix/pymix-types';
 
 type CreateArgs = {
     body: z.infer<typeof pymixType._parameters.create>;
@@ -167,6 +167,46 @@ export const PymixController = {
         return res.body.data;
     },
 
+    // The user's playlist tree, or null when there definitely isn't one: 403 (demo),
+    // 404 (a pymix without the route) and 409 `tree_not_enabled` (a user not migrated).
+    // Anything else throws, so a caller can tell "no tree" from "couldn't ask" (design
+    // §4.4): only the first may send a playlist delete straight to Navidrome.
+    // The tree's write routes (#148). A refusal (400 bad move, 404 node gone, 409 no
+    // tree) throws: the caller rolls back and the next tree read shows the truth.
+    createPlaylistFolder: async (
+        args: PymixClientArgs & {
+            body: z.infer<typeof pymixType._parameters.createPlaylistFolder>;
+        },
+    ) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).createPlaylistFolder({
+            body,
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to create folder');
+        }
+
+        return res.body.data;
+    },
+
+    createPlaylistInFolder: async (
+        args: PymixClientArgs & {
+            body: z.infer<typeof pymixType._parameters.createPlaylistInFolder>;
+        },
+    ) => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).createPlaylistInFolder({
+            body,
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to create playlist');
+        }
+
+        return res.body.data;
+    },
+
     deleteDuplicates: async (args: PymixClientArgs) => {
         const { baseUrl, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).deleteDuplicates();
@@ -240,10 +280,6 @@ export const PymixController = {
         return res.body.data;
     },
 
-    // The user's playlist tree, or null when there definitely isn't one: 403 (demo),
-    // 404 (a pymix without the route) and 409 `tree_not_enabled` (a user not migrated).
-    // Anything else throws, so a caller can tell "no tree" from "couldn't ask" (design
-    // §4.4): only the first may send a playlist delete straight to Navidrome.
     getPlaylistTree: async (args: PymixClientArgs): Promise<null | PlaylistTree> => {
         const { baseUrl, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).getPlaylistTree();
@@ -430,6 +466,22 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to sync tracks');
+        }
+
+        return res.body.data;
+    },
+
+    updatePlaylistNode: async (
+        args: PymixClientArgs & { body: UpdatePlaylistNodeBody; nodeId: string },
+    ) => {
+        const { baseUrl, body, nodeId, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).updatePlaylistNode({
+            body,
+            params: { id: nodeId },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to update playlist tree');
         }
 
         return res.body.data;

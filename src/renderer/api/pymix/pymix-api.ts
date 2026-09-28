@@ -22,6 +22,24 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    createPlaylistFolder: {
+        body: pymixType._parameters.createPlaylistFolder,
+        method: 'POST',
+        path: 'playlists/folders',
+        responses: {
+            200: resultWithHeaders(pymixType._response.playlistNodeWritten),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    createPlaylistInFolder: {
+        body: pymixType._parameters.createPlaylistInFolder,
+        method: 'POST',
+        path: 'playlists',
+        responses: {
+            200: resultWithHeaders(pymixType._response.playlistNodeWritten),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     deleteDuplicates: {
         body: null,
         method: 'DELETE',
@@ -204,6 +222,15 @@ export const contract = c.router({
         path: 'sync',
         responses: {
             200: resultWithHeaders(pymixType._response.syncTracks),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    updatePlaylistNode: {
+        body: pymixType._parameters.updatePlaylistNode,
+        method: 'PATCH',
+        path: 'playlists/nodes/:id',
+        responses: {
+            200: resultWithHeaders(pymixType._response.playlistNodeWritten),
             500: resultWithHeaders(pymixType._response.error),
         },
     },
