@@ -58,7 +58,7 @@ interface PlaylistRowButtonProps extends Omit<ButtonProps, 'onContextMenu' | 'on
     to: string;
 }
 
-const PlaylistRowButton = memo(
+export const PlaylistRowButton = memo(
     ({ item, name, onContextMenu, onReorder, to }: PlaylistRowButtonProps) => {
         const url = {
             pathname: generatePath(AppRoute.PLAYLISTS_DETAIL_SONGS, { playlistId: to }),

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import isElectron from 'is-electron';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -5,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { isUploadForbidden, PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
+import { refreshPlaylistsAfterImport } from '/@/renderer/features/playlist-tree/hooks/use-playlist-tree';
 import {
     describeJobWork,
     IMPORT_PHASE_LABELS,
@@ -80,6 +82,8 @@ function playlistKey(pl: PlaylistPreview): string {
 export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
     const { t } = useTranslation();
     const currentServer = useCurrentServerWithCredential();
+    const queryClient = useQueryClient();
+    const serverId = currentServer?.id;
 
     const [step, setStep] = useState<SyncStep>('idle');
     const [xmlPath, setXmlPath] = useState<null | string>(null);
@@ -324,6 +328,8 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
 
                     if (!prog.in_progress) {
                         setStep('done');
+                        // The import made playlists (and tree nodes), even if it failed part way.
+                        if (serverId) refreshPlaylistsAfterImport(queryClient, serverId);
                         if (prog.result) {
                             // A metadata-only import lands no tracks, so
                             // "Imported 0 tracks" reads like a failure on the run
@@ -359,7 +365,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
         return () => {
             cancelled = true;
         };
-    }, [step, jobId]);
+    }, [step, jobId, queryClient, serverId]);
 
     const handleReset = useCallback(() => {
         setStep('idle');

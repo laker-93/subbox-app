@@ -66,6 +66,14 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    getPlaylistTree: {
+        method: 'GET',
+        path: 'playlists/tree',
+        responses: {
+            200: resultWithHeaders(pymixType._response.playlistTree),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     import: {
         body: pymixType._parameters.import,
         method: 'POST',
