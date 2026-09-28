@@ -269,6 +269,15 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    trashRestoreProgress: {
+        method: 'GET',
+        path: 'trash/restore/progress',
+        query: pymixType._parameters.trashRestoreProgress,
+        responses: {
+            200: resultWithHeaders(pymixType._response.trashRestoreProgress),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     updatePlaylistNode: {
         body: pymixType._parameters.updatePlaylistNode,
         method: 'PATCH',

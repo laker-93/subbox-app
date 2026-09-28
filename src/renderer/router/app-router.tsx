@@ -79,6 +79,8 @@ const SearchRoute = lazy(() => import('/@/renderer/features/search/routes/search
 const FavoritesRoute = lazy(() => import('/@/renderer/features/favorites/routes/favorites-route'));
 
 const WishlistRoute = lazy(() => import('/@/renderer/features/wishlist/routes/wishlist-route'));
+// Subbox: the trash (#152).
+const TrashRoute = lazy(() => import('/@/renderer/features/trash/routes/trash-route'));
 
 const SettingsRoute = lazy(() => import('/@/renderer/features/settings/routes/settings-route'));
 
@@ -217,6 +219,7 @@ export const AppRouter = () => {
                                             element={<WishlistRoute />}
                                             path={AppRoute.WISHLIST}
                                         />
+                                        <Route element={<TrashRoute />} path={AppRoute.TRASH} />
                                         <Route
                                             element={<SettingsRoute />}
                                             path={AppRoute.SETTINGS}

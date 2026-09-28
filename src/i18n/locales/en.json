@@ -475,7 +475,24 @@
             "restoreFailed": "couldn't restore it. It's still in the trash",
             "restoring": "restoring…",
             "undo": "undo",
-            "unreachable": "couldn't reach the server. Try again"
+            "unreachable": "couldn't reach the server. Try again",
+            "tracks": {
+                "confirm_one": "Delete 1 track? It moves to the trash and still counts against your storage until it's emptied. You can undo this for 7 days.",
+                "confirm_other": "Delete {{count}} tracks? They move to the trash and still count against your storage until it's emptied. You can undo this for 7 days.",
+                "confirmOne": "Delete {{name}}? It moves to the trash and still counts against your storage until it's emptied. You can undo this for 7 days.",
+                "deleted_one": "1 track deleted",
+                "deleted_other": "{{count}} tracks deleted",
+                "phaseChecking": "Checking the trash… {{n}} of {{total}}",
+                "phaseRestoring": "Putting files back… {{n}} of {{total}}",
+                "restored_one": "Restored 1 track",
+                "restored_other": "Restored {{count}} tracks",
+                "restoredSome": "Restored {{n}} of {{count}} tracks",
+                "restoreFailed_one": "Couldn't restore the track. It's still in the trash",
+                "restoreFailed_other": "Couldn't restore the {{count}} tracks. They're still in the trash",
+                "restoring_one": "Restoring 1 track…",
+                "restoring_other": "Restoring {{count}} tracks…",
+                "restoringTitle": "restoring"
+            }
         },
         "editPlaylist": {
             "publicJellyfinNote": "Jellyfin for some reason does not expose whether a playlist is public or not. If you wish for this to remain public, please have the following input selected",
@@ -554,6 +571,28 @@
         }
     },
     "page": {
+        "trash": {
+            "confirmEmpty": "Empty the trash? Everything in it is deleted for good. This can't be undone.",
+            "confirmPurge": "Delete {{label}} for good? This can't be undone.",
+            "confirmReimportRestore_one": "Put the playlist back as it was before the re-import? Any changes you made to it since will be lost.",
+            "confirmReimportRestore_other": "Put the {{count}} playlists back as they were before the re-import? Any changes you made to them since will be lost.",
+            "deleted": "deleted {{when}}",
+            "empty": "empty trash",
+            "expires": "gone for good {{when}}",
+            "explainer": "Deleted tracks, playlists and folders wait here for 7 days before they go for good. Tracks here still count against your storage.",
+            "explainerHeld": "Deleted tracks, playlists and folders wait here for 7 days before they go for good. Tracks here still count against your storage: {{size}}.",
+            "nothing": "Nothing has been deleted.",
+            "open": "open trash",
+            "purge": "delete now",
+            "purgeFailed": "Couldn't delete it. It's still in the trash.",
+            "reimportLabel_one": "1 playlist before a re-import",
+            "reimportLabel_other": "{{count}} playlists before a re-import",
+            "restore": "restore",
+            "storageNote": "Deleted tracks keep using space until the trash is emptied.",
+            "storageNoteHeld": "{{size}} of this is deleted tracks, which keep using space until the trash is emptied.",
+            "title": "recently deleted",
+            "unavailable": "The trash isn't available for this account."
+        },
         "albumArtistDetail": {
             "about": "About {{artist}}",
             "appearsOn": "appears on",

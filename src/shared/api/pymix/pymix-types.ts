@@ -54,6 +54,9 @@ const deleteSongResult = z.object({
 const deleteSong = z.object({
     results: z.array(deleteSongResult),
     success: z.boolean(),
+    // The deleted tracks went to this trash batch (pymix#200): restorable until it's
+    // purged. Absent from an older pymix, null when nothing was deleted.
+    trash_batch_id: z.string().nullish(),
     username: z.string(),
 });
 
@@ -119,10 +122,14 @@ const exportJob = z.object({
 const storageCheck = z.object({
     allowed: z.boolean(),
     currentUsageBytes: z.number(),
+    // The usage split (pymix#200): deleted tracks keep counting until the trash is
+    // emptied. Absent from an older pymix.
+    libraryBytes: z.number().optional(),
     maxStorageBytes: z.number(),
     reason: z.string(),
     remainingBytes: z.number(),
     success: z.boolean(),
+    trashBytes: z.number().optional(),
 });
 
 const syncPlanTrackMissing = z.object({
@@ -656,10 +663,27 @@ const trashRestored = z.object({
     job_id: z.string().optional(),
     lost: z.array(trashRestoreNote).optional(),
     moved: z.array(trashRestoreNote).optional(),
+    // A track batch: the restore is a job (#152).
+    n_tracks: z.number().optional(),
     not_restored: z.array(z.object({ playlist: z.string() })).optional(),
     restored: z.array(z.union([reimportRestored, z.object({ node_id: z.string() })])).optional(),
     shrunk: z.array(trashRestoreNote).optional(),
     success: z.boolean(),
+});
+
+const trashRestoreProgressParameters = z.object({ job_id: z.string() });
+
+// A track restore job (pymix#209): its passes are `checking` and `restoring_files`.
+// `warnings` names each track that came back without something it had.
+const trashRestoreProgress = z.object({
+    in_progress: z.boolean(),
+    phase: z.string().nullish(),
+    phase_n_processed: z.number().optional(),
+    phase_n_total: z.number().optional(),
+    phases: z.array(jobPhase).nullish(),
+    reason: z.string(),
+    result: z.boolean().nullish(),
+    warnings: z.string().nullish(),
 });
 
 const trashBatch = z.object({
@@ -689,6 +713,7 @@ export type PlaylistNodesDeleted = z.infer<typeof playlistNodesDeleted>;
 export type TrashBatch = z.infer<typeof trashBatch>;
 export type TrashList = z.infer<typeof trashList>;
 export type TrashRestored = z.infer<typeof trashRestored>;
+export type TrashRestoreProgress = z.infer<typeof trashRestoreProgress>;
 
 export const pymixType = {
     _parameters: {
@@ -714,6 +739,7 @@ export const pymixType = {
         syncPlan: syncPlanParameters,
         syncPlaylists: syncPlaylistsParameters,
         syncTracks: syncTracksParameters,
+        trashRestoreProgress: trashRestoreProgressParameters,
         updatePlaylistNode: updatePlaylistNodeParameters,
         wishlistBulkCreate: wishlistBulkCreateParameters,
         wishlistCreate: wishlistCreateParameters,
@@ -751,6 +777,7 @@ export const pymixType = {
         trashList,
         trashPurged,
         trashRestored,
+        trashRestoreProgress,
         wishlistBulkCreateResponse,
         wishlistDeleteResponse,
         wishlistItem,

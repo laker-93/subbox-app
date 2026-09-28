@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { urlConfig } from '/@/renderer/config/url-config';
 import { SyncCenteredState } from '/@/renderer/features/sync/components/shared/sync-centered-state';
+import { TrashSpaceNote } from '/@/renderer/features/trash/components/trash-space-note';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
 import { Icon } from '/@/shared/components/icon/icon';
@@ -79,6 +80,8 @@ export const SyncStorageExceeded = ({
                     Current usage: {currentMB} MB / {maxMB} MB
                 </Text>
             )}
+            {/* Deleted tracks keep counting until the trash is emptied (#152). */}
+            <TrashSpaceNote />
             <Button
                 component="a"
                 fullWidth
