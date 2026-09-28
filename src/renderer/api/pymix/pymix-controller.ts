@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { pymixApiClient } from '/@/renderer/api/pymix/pymix-api';
-import { pymixType } from '/@/shared/api/pymix/pymix-types';
+import { PlaylistTree, pymixType } from '/@/shared/api/pymix/pymix-types';
 
 type CreateArgs = {
     body: z.infer<typeof pymixType._parameters.create>;
@@ -235,6 +235,25 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to get library size');
+        }
+
+        return res.body.data;
+    },
+
+    // The user's playlist tree, or null when there definitely isn't one: 403 (demo),
+    // 404 (a pymix without the route) and 409 `tree_not_enabled` (a user not migrated).
+    // Anything else throws, so a caller can tell "no tree" from "couldn't ask" (design
+    // §4.4): only the first may send a playlist delete straight to Navidrome.
+    getPlaylistTree: async (args: PymixClientArgs): Promise<null | PlaylistTree> => {
+        const { baseUrl, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).getPlaylistTree();
+
+        if (res.status === 403 || res.status === 404 || res.status === 409) {
+            return null;
+        }
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get playlist tree');
         }
 
         return res.body.data;

@@ -339,6 +339,11 @@ export const queryKeys: Record<
             return [serverId, 'playlists', 'songList'] as const;
         },
     },
+    // Subbox: pymix's playlist tree (#147). Not under 'playlists': the optimistic
+    // playlist delete rewrites every [serverId, 'playlists', 'list', …] query as a list.
+    playlistTree: {
+        root: (serverId: string) => [serverId, 'playlistTree'] as const,
+    },
     radio: {
         list: (serverId: string) => [serverId, 'radio', 'list'] as const,
         root: (serverId: string) => [serverId, 'radio'] as const,

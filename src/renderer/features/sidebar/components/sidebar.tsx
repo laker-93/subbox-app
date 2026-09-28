@@ -7,6 +7,7 @@ import styles from './sidebar.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import { SidebarPlaylists } from '/@/renderer/features/playlist-tree/components/sidebar-playlists';
 import {
     useIsRadioActive,
     useRadioPlayer,
@@ -15,10 +16,7 @@ import { ActionBar } from '/@/renderer/features/sidebar/components/action-bar';
 import { SidebarCollectionList } from '/@/renderer/features/sidebar/components/sidebar-collection-list';
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
 import { SidebarItem } from '/@/renderer/features/sidebar/components/sidebar-item';
-import {
-    SidebarPlaylistList,
-    SidebarSharedPlaylistList,
-} from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
+import { SidebarSharedPlaylistList } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
 import {
     useAppStore,
     useAppStoreActions,
@@ -145,7 +143,7 @@ export const Sidebar = () => {
                     <SidebarCollectionList />
                     {sidebarPlaylistList && (
                         <>
-                            <SidebarPlaylistList />
+                            <SidebarPlaylists />
                             <SidebarSharedPlaylistList />
                         </>
                     )}

@@ -552,6 +552,31 @@ const wishlistUpdateParameters = z.object({
     youtube_video_id: z.string().nullable().optional(),
 });
 
+// --- Playlist tree (subbox-app#147, pymix#201) ---
+
+// One live node of the user's playlist tree, in tree order (depth-first, siblings by
+// position). A folder's name is pymix's; a playlist's is Navidrome's, read in the same
+// call, so it's null for a playlist Navidrome no longer has.
+const playlistTreeNode = z.object({
+    child_count: z.number(),
+    kind: z.enum(['folder', 'playlist']),
+    name: z.string().nullable(),
+    navidrome_playlist_id: z.string().nullable(),
+    node_id: z.string(),
+    parent_id: z.string().nullable(),
+    position: z.number(),
+});
+
+const playlistTree = z.object({
+    // Navidrome ids of playlists in the user's trash: kept in Navidrome, left out of
+    // every list (#150).
+    hidden_playlist_ids: z.array(z.string()),
+    nodes: z.array(playlistTreeNode),
+});
+
+export type PlaylistTree = z.infer<typeof playlistTree>;
+export type PlaylistTreeNode = z.infer<typeof playlistTreeNode>;
+
 export const pymixType = {
     _parameters: {
         create: createParameters,
@@ -597,6 +622,7 @@ export const pymixType = {
         matchTracks,
         matchYoutubeResponse,
         parseLinkResponse,
+        playlistTree,
         seratoExport,
         storageCheck,
         sync,

@@ -3,13 +3,11 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './mobile-sidebar.module.css';
 
+import { SidebarPlaylists } from '/@/renderer/features/playlist-tree/components/sidebar-playlists';
 import { ActionBar } from '/@/renderer/features/sidebar/components/action-bar';
 import { SidebarIcon } from '/@/renderer/features/sidebar/components/sidebar-icon';
 import { SidebarItem } from '/@/renderer/features/sidebar/components/sidebar-item';
-import {
-    SidebarPlaylistList,
-    SidebarSharedPlaylistList,
-} from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
+import { SidebarSharedPlaylistList } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
 import {
     SidebarItemType,
     useSidebarItems,
@@ -98,7 +96,7 @@ export const MobileSidebar = () => {
                     </Accordion.Item>
                     {sidebarPlaylistList && (
                         <>
-                            <SidebarPlaylistList />
+                            <SidebarPlaylists />
                             <SidebarSharedPlaylistList />
                         </>
                     )}
