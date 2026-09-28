@@ -12,12 +12,13 @@ import { toast } from '/@/shared/components/toast/toast';
 // Subbox-only: pymix's trash (subbox-app#150, design §8, §10). The Trash screen that
 // lists it is #152.
 
-export const useTrash = (options?: { enabled?: boolean }) => {
+export const useTrash = (options?: { enabled?: boolean; refetchOnMount?: 'always' }) => {
     const serverId = useCurrentServerId();
     return useQuery({
         enabled: Boolean(serverId) && (options?.enabled ?? true),
         queryFn: ({ signal }) => PymixController.getTrash({ baseUrl: urlConfig.pymix, signal }),
         queryKey: queryKeys.trash.root(serverId),
+        refetchOnMount: options?.refetchOnMount ?? true,
     });
 };
 

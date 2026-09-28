@@ -778,7 +778,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                 )}
                 {/* A failed job still did whatever it did before it broke, and
                     that is what decides whether to re-upload or just retry. */}
-                <JobOutcome progress={importProgress} />
+                <JobOutcome progress={importProgress} source="Rekordbox" />
                 <Text c="dimmed" size="xs" ta="center">
                     {error}
                 </Text>
@@ -875,7 +875,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         "0 tracks uploaded, 0 tracks imported" is true of a
                         re-import that rewrote the metadata on every track, and
                         this is the only line on the screen that says so (#50). */}
-                    <JobOutcome progress={importProgress} />
+                    <JobOutcome progress={importProgress} source="Rekordbox" />
                     {/* Outside the branch above: a run can upload nothing and still
                         have dropped tracks, and "everything is already up to date"
                         would be wrong without this qualifying it. */}

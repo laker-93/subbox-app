@@ -754,7 +754,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                         )}
                     </Stack>
                 )}
-                <JobOutcome progress={importProgress} />
+                <JobOutcome progress={importProgress} source="Serato" />
                 <Text c="dimmed" size="xs" ta="center">
                     {error}
                 </Text>
@@ -834,7 +834,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                         out. A crate can name a track that is in no state to be
                         placed in a playlist, and the job still succeeds — so this
                         is the only place the shortfall is ever explained. */}
-                    <JobOutcome progress={importProgress} />
+                    <JobOutcome progress={importProgress} source="Serato" />
                     {dropped.length > 0 && (
                         <Stack align="center" gap={2}>
                             <Text c="dimmed" size="sm" ta="center">
