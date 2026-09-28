@@ -565,8 +565,8 @@ const wishlistUpdateParameters = z.object({
 // --- Playlist tree (subbox-app#147, pymix#201) ---
 
 // One live node of the user's playlist tree, in tree order (depth-first, siblings by
-// position). A folder's name is pymix's; a playlist's is Navidrome's, read in the same
-// call, so it's null for a playlist Navidrome no longer has.
+// position). `name` is the node's own, a playlist's leaf too, never a path (pymix#229).
+// Null only from a pymix before #229, for a playlist Navidrome no longer has.
 const playlistTreeNode = z.object({
     child_count: z.number(),
     kind: z.enum(['folder', 'playlist']),
@@ -582,14 +582,18 @@ const playlistTree = z.object({
     // every list (#150).
     hidden_playlist_ids: z.array(z.string()),
     nodes: z.array(playlistTreeNode),
+    // How Navidrome names the user's playlists (pymix#229): 'path' means a name read
+    // from getPlaylists already carries its folders (`House / Deep`). Absent from a
+    // pymix before #229, which is 'leaf'.
+    playlist_names: z.enum(['leaf', 'path']).optional(),
 });
 
 export type PlaylistTree = z.infer<typeof playlistTree>;
 export type PlaylistTreeNode = z.infer<typeof playlistTreeNode>;
 
 // The tree's write routes (#148, pymix#206). Each answers with the node it wrote, as the
-// tree has it minus `child_count`; a playlist's `name` is null from PATCH, since it lives
-// in Navidrome.
+// tree has it minus `child_count`. A playlist's `name` is its leaf (pymix#229); a pymix
+// before #229 answered null from PATCH.
 const playlistNodeWritten = playlistTreeNode.omit({ child_count: true });
 
 const createPlaylistFolderParameters = z.object({

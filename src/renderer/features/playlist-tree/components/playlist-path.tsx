@@ -5,6 +5,7 @@ import styles from './playlist-path.module.css';
 
 import {
     usePlaylistPath,
+    usePlaylistPlace,
     usePlaylistPlaces,
 } from '/@/renderer/features/playlist-tree/hooks/use-playlist-places';
 import { AppRoute } from '/@/renderer/router/routes';
@@ -49,4 +50,14 @@ export const usePlaylistBreadcrumb = (playlistId: string | undefined) => {
             ))}
         </Text>
     );
+};
+
+/**
+ * The playlist page's title. For a `path` user Navidrome's name is the whole path
+ * (`House / 2024`), which the breadcrumb already shows, so the title is the leaf
+ * (subbox-app#173). Otherwise Navidrome's name, as upstream shows it.
+ */
+export const usePlaylistTitle = (playlistId: string | undefined, name: string | undefined) => {
+    const place = usePlaylistPlace(playlistId);
+    return place?.inName && place.leaf ? place.leaf : name;
 };

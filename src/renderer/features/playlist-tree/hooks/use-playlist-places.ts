@@ -5,14 +5,21 @@ import { useCurrentServerId } from '/@/renderer/store';
 import { PlaylistTree } from '/@/shared/api/pymix/pymix-types';
 
 // Subbox-only: where a playlist sits in the tree, for the places that show playlists
-// outside it (subbox-app#149, design §11.3). Names are leaf-only, so two `Deep`s are
-// expected, and those surfaces show the folder path when a name isn't unique.
+// outside it (subbox-app#149, design §11.3). Those surfaces show Navidrome's name. For
+// a `leaf` user that's the leaf, so two `Deep`s are expected, and they show the folder
+// path when a name isn't unique. For a `path` user (pymix#229, subbox-app#173) the name
+// already is the path (`House / Deep`), so they show nothing more.
 
 export interface PlaylistPlace {
     /** Another playlist in the tree has the same name. */
     duplicate: boolean;
     /** Folder names from the root down, empty at the top level. */
     folders: string[];
+    /** Navidrome's name for it is already its path: nothing to add after it. */
+    inName: boolean;
+    /** Its own name in the tree, never a path. */
+    leaf: null | string;
+    nodeId: string;
 }
 
 // Computed once per tree answer, not once per row that asks.
@@ -30,6 +37,7 @@ export const playlistPlaces = (tree: PlaylistTree) => {
         nameCount.set(node.name, (nameCount.get(node.name) ?? 0) + 1);
     }
 
+    const inName = tree.playlist_names === 'path';
     const places = new Map<string, PlaylistPlace>();
     for (const node of tree.nodes) {
         if (node.kind !== 'playlist' || !node.navidrome_playlist_id) continue;
@@ -41,6 +49,9 @@ export const playlistPlaces = (tree: PlaylistTree) => {
         places.set(node.navidrome_playlist_id, {
             duplicate: (nameCount.get(node.name ?? '') ?? 0) > 1,
             folders,
+            inName,
+            leaf: node.name,
+            nodeId: node.node_id,
         });
     }
     cache.set(tree, places);
@@ -62,9 +73,12 @@ export const usePlaylistPlaces = () => {
     return data ? playlistPlaces(data) : null;
 };
 
-/** `House › 2024`, or null when the name is unique or the playlist isn't in the tree. */
+/**
+ * `House › 2024`, or null when the name is unique, already is the path, or the playlist
+ * isn't in the tree.
+ */
 export const formatPlaylistPath = (place: PlaylistPlace | undefined) => {
-    if (!place?.duplicate) return null;
+    if (!place?.duplicate || place.inName) return null;
     return place.folders.length ? place.folders.join(' › ') : null;
 };
 
@@ -72,4 +86,10 @@ export const formatPlaylistPath = (place: PlaylistPlace | undefined) => {
 export const usePlaylistPath = (playlistId: string | undefined) => {
     const places = usePlaylistPlaces();
     return playlistId ? formatPlaylistPath(places?.get(playlistId)) : null;
+};
+
+/** The playlist's place in the tree, or undefined for no tree or a playlist not in it. */
+export const usePlaylistPlace = (playlistId: string | undefined) => {
+    const places = usePlaylistPlaces();
+    return playlistId ? places?.get(playlistId) : undefined;
 };
