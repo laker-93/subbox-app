@@ -14,6 +14,8 @@ export interface SelectableItem {
     label: string;
     /** Dimmed text before the label, for a crate's parent path. */
     prefix?: string;
+    /** Dimmed text after the label, for a playlist's folders when its name repeats. */
+    suffix?: null | string;
 }
 
 interface SelectableListProps {
@@ -103,6 +105,11 @@ export const SelectableList = ({
                             </Text>
                         )}
                         {item.label}
+                        {item.suffix && (
+                            <Text c="dimmed" component="span" size="xs">
+                                {` · ${item.suffix}`}
+                            </Text>
+                        )}
                     </Text>
                     {item.detail != null && (
                         <Text c="dimmed" size="xs">

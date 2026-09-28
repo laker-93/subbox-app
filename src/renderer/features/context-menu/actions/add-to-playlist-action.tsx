@@ -13,6 +13,7 @@ import {
     getPlaylistSongsById,
     getSongsByFolder,
 } from '/@/renderer/features/player/utils';
+import { PlaylistPath } from '/@/renderer/features/playlist-tree/components/playlist-path';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { useRecentPlaylists } from '/@/renderer/features/playlists/hooks/use-recent-playlists';
 import { useAddToPlaylist } from '/@/renderer/features/playlists/mutations/add-to-playlist-mutation';
@@ -416,6 +417,7 @@ export const AddToPlaylistAction = ({ items, itemType }: AddToPlaylistActionProp
                             onSelect={() => handleAddToPlaylist(recentPlaylist.id)}
                         >
                             {recentPlaylist.name}
+                            <PlaylistPath playlistId={recentPlaylist.id} />
                         </ContextMenu.Item>
                         {filteredPlaylists.length > 0 && <ContextMenu.Divider />}
                     </>
@@ -431,6 +433,7 @@ export const AddToPlaylistAction = ({ items, itemType }: AddToPlaylistActionProp
                         onSelect={() => handleAddToPlaylist(playlist.id)}
                     >
                         {playlist.name}
+                        <PlaylistPath playlistId={playlist.id} />
                     </ContextMenu.Item>
                 ))}
             </ContextMenu.SubmenuContent>

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { generatePath, Link } from 'react-router';
 
+import { PlaylistPath } from '/@/renderer/features/playlist-tree/components/playlist-path';
 import { usePlaylistsContainingSong } from '/@/renderer/features/playlists/hooks/use-playlists-containing-song';
 import { AppRoute } from '/@/renderer/router/routes';
 import { Button } from '/@/shared/components/button/button';
@@ -68,6 +69,7 @@ export const SongPlaylistsIndicator = ({ serverId, songId }: SongPlaylistsIndica
                                 })}
                             >
                                 {playlist.name}
+                                <PlaylistPath playlistId={playlist.id} />
                             </Text>
                         ))}
                     </Stack>

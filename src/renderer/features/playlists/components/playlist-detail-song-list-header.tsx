@@ -6,6 +6,7 @@ import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { PageHeader } from '/@/renderer/components/page-header/page-header';
 import { useListContext } from '/@/renderer/context/list-context';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
+import { usePlaylistBreadcrumb } from '/@/renderer/features/playlist-tree/components/playlist-path';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { PlaylistDetailSongListHeaderFilters } from '/@/renderer/features/playlists/components/playlist-detail-song-list-header-filters';
 import { FilterBar } from '/@/renderer/features/shared/components/filter-bar';
@@ -45,6 +46,7 @@ export const PlaylistDetailSongListHeader = ({
     });
 
     const playlistDuration = detailQuery?.data?.duration;
+    const breadcrumb = usePlaylistBreadcrumb(playlistId);
 
     const [collapsed] = useLocalStorage<boolean>({
         defaultValue: false,
@@ -96,6 +98,7 @@ export const PlaylistDetailSongListHeader = ({
                     compact
                     imageUrl={imageUrl}
                     item={{
+                        children: breadcrumb,
                         imageId: detailQuery?.data?.imageId,
                         imageUrl: detailQuery?.data?.imageUrl,
                         route: AppRoute.PLAYLISTS,

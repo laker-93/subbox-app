@@ -1,0 +1,10 @@
+.path {
+    font-size: 0.9em;
+    font-weight: 400;
+}
+
+.breadcrumb {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
