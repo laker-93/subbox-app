@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
 import { useDeletePlaylist } from '/@/renderer/features/playlists/mutations/delete-playlist-mutation';
+import { DeletePlaylistConfirmText } from '/@/renderer/features/trash/components/delete-confirm-text';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServerId } from '/@/renderer/store';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
@@ -27,7 +28,7 @@ export const DeletePlaylistAction = ({ disabled, items }: DeletePlaylistActionPr
         if (items.length === 0 || !serverId) return;
 
         try {
-            await Promise.all(
+            const results = await Promise.all(
                 items.map((playlist) =>
                     deletePlaylistMutation.mutateAsync({
                         apiClientProps: { serverId },
@@ -37,9 +38,12 @@ export const DeletePlaylistAction = ({ disabled, items }: DeletePlaylistActionPr
             );
 
             navigate(AppRoute.PLAYLISTS, { replace: true });
-            toast.success({
-                message: t('action.deletePlaylist', { postProcess: 'sentenceCase' }),
-            });
+            // Subbox: a delete into the trash has already shown its own toast, with Undo.
+            if (!results.some(Boolean)) {
+                toast.success({
+                    message: t('action.deletePlaylist', { postProcess: 'sentenceCase' }),
+                });
+            }
         } catch (err: any) {
             toast.error({
                 message: err.message,
@@ -56,12 +60,14 @@ export const DeletePlaylistAction = ({ disabled, items }: DeletePlaylistActionPr
         openModal({
             children: (
                 <ConfirmModal onConfirm={handleDeletePlaylist}>
-                    <Text>{t('common.areYouSure', { postProcess: 'sentenceCase' })}</Text>
+                    <DeletePlaylistConfirmText playlists={items}>
+                        <Text>{t('common.areYouSure', { postProcess: 'sentenceCase' })}</Text>
+                    </DeletePlaylistConfirmText>
                 </ConfirmModal>
             ),
             title: t('form.deletePlaylist.title', { postProcess: 'sentenceCase' }),
         });
-    }, [handleDeletePlaylist, items.length, t]);
+    }, [handleDeletePlaylist, items, t]);
 
     if (items.length === 0) return null;
 

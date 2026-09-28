@@ -42,6 +42,7 @@ import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-a
 import { openCreatePlaylistModal } from '/@/renderer/features/playlists/components/create-playlist-form';
 import { PlaylistRowButton } from '/@/renderer/features/sidebar/components/sidebar-playlist-list';
 import rowStyles from '/@/renderer/features/sidebar/components/sidebar-playlist-list.module.css';
+import { openDeleteFolderModal } from '/@/renderer/features/trash/components/delete-folder-modal';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServer, useSidebarPlaylistListFilterRegex } from '/@/renderer/store';
 import { PlaylistTree, PlaylistTreeNode } from '/@/shared/api/pymix/pymix-types';
@@ -306,6 +307,13 @@ const FolderRow = ({
                     onSelect={() => openMoveToFolderModal([node.node_id])}
                 >
                     {t('form.playlistTree.moveTo', { postProcess: 'sentenceCase' })}
+                </ContextMenu.Item>
+                <ContextMenu.Divider />
+                <ContextMenu.Item
+                    leftIcon="remove"
+                    onSelect={() => openDeleteFolderModal(node, context.nodes)}
+                >
+                    {t('form.trash.deleteFolder', { postProcess: 'sentenceCase' })}
                 </ContextMenu.Item>
             </ContextMenu.Content>
         </ContextMenu>

@@ -3,6 +3,7 @@ import { JellyfinController } from '/@/renderer/api/jellyfin/jellyfin-controller
 import { NavidromeController } from '/@/renderer/api/navidrome/navidrome-controller';
 import { SubsonicController } from '/@/renderer/api/subsonic/subsonic-controller';
 import { mergeMusicFolderId } from '/@/renderer/api/utils-music-folder';
+import { withoutHiddenPlaylists } from '/@/renderer/features/playlist-tree/utils/hidden-playlists';
 import { getServerById, useAuthStore, useSettingsStore } from '/@/renderer/store';
 import { toast } from '/@/shared/components/toast/toast';
 import {
@@ -544,10 +545,12 @@ export const controller: GeneralController = {
             );
         }
 
-        return apiController(
+        const list = apiController(
             'getPlaylistList',
             server.type,
         )?.(addContext({ ...args, apiClientProps: { ...args.apiClientProps, server } }));
+        // Subbox: leave out playlists hidden in the trash (#150).
+        return list && withoutHiddenPlaylists(server.id, list);
     },
     getPlaylistListCount(args) {
         const server = getServerById(args.apiClientProps.serverId);

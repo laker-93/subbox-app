@@ -167,10 +167,6 @@ export const PymixController = {
         return res.body.data;
     },
 
-    // The user's playlist tree, or null when there definitely isn't one: 403 (demo),
-    // 404 (a pymix without the route) and 409 `tree_not_enabled` (a user not migrated).
-    // Anything else throws, so a caller can tell "no tree" from "couldn't ask" (design
-    // §4.4): only the first may send a playlist delete straight to Navidrome.
     // The tree's write routes (#148). A refusal (400 bad move, 404 node gone, 409 no
     // tree) throws: the caller rolls back and the next tree read shows the truth.
     createPlaylistFolder: async (
@@ -213,6 +209,21 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to delete duplicates');
+        }
+
+        return res.body.data;
+    },
+
+    // Playlists and folders into one trash batch (#150). One transaction, so it either
+    // all happened or none of it did; any refusal throws.
+    deletePlaylistNodes: async (args: PymixClientArgs & { nodeIds: string[] }) => {
+        const { baseUrl, nodeIds, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).deletePlaylistNodes({
+            body: { node_ids: nodeIds },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to delete');
         }
 
         return res.body.data;
@@ -269,6 +280,17 @@ export const PymixController = {
         return res.body.data;
     },
 
+    emptyTrash: async (args: PymixClientArgs) => {
+        const { baseUrl, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).emptyTrash();
+
+        if (res.status !== 200) {
+            throw new Error('Failed to empty the trash');
+        }
+
+        return res.body.data;
+    },
+
     getLibrarySize: async (args: PymixClientArgs) => {
         const { baseUrl, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).getLibrarySize();
@@ -280,6 +302,10 @@ export const PymixController = {
         return res.body.data;
     },
 
+    // The user's playlist tree, or null when there definitely isn't one: 403 (demo),
+    // 404 (a pymix without the route) and 409 `tree_not_enabled` (a user not migrated).
+    // Anything else throws, so a caller can tell "no tree" from "couldn't ask" (design
+    // §4.4): only the first may send a playlist delete straight to Navidrome.
     getPlaylistTree: async (args: PymixClientArgs): Promise<null | PlaylistTree> => {
         const { baseUrl, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).getPlaylistTree();
@@ -290,6 +316,18 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to get playlist tree');
+        }
+
+        return res.body.data;
+    },
+
+    // The restorable batches, newest first (#150; the Trash screen is #152).
+    getTrash: async (args: PymixClientArgs) => {
+        const { baseUrl, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).getTrash();
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get the trash');
         }
 
         return res.body.data;
@@ -347,6 +385,20 @@ export const PymixController = {
         return res.body.data;
     },
 
+    // Destroy one batch now. For playlists, the only place they leave Navidrome.
+    purgeTrashBatch: async (args: PymixClientArgs & { batchId: string }) => {
+        const { baseUrl, batchId, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).purgeTrashBatch({
+            params: { id: batchId },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to purge from the trash');
+        }
+
+        return res.body.data;
+    },
+
     rbDownload: async (args: PymixClientArgs & RbDownloadArgs) => {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).rbDownload({ body });
@@ -396,6 +448,21 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new PymixInviteRequestError('failed');
+        }
+
+        return res.body.data;
+    },
+
+    // Put a batch back. A playlist/folder batch restores synchronously and answers with
+    // what didn't come back as it went; a track batch answers with a job to poll (#151).
+    restoreTrashBatch: async (args: PymixClientArgs & { batchId: string }) => {
+        const { baseUrl, batchId, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).restoreTrashBatch({
+            params: { id: batchId },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to restore from the trash');
         }
 
         return res.body.data;

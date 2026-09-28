@@ -49,6 +49,15 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    deletePlaylistNodes: {
+        body: pymixType._parameters.deletePlaylistNodes,
+        method: 'POST',
+        path: 'playlists/nodes/delete',
+        responses: {
+            200: resultWithHeaders(pymixType._response.playlistNodesDeleted),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     deleteSong: {
         body: pymixType._parameters.deleteSong,
         method: 'DELETE',
@@ -76,6 +85,15 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    emptyTrash: {
+        body: null,
+        method: 'DELETE',
+        path: 'trash',
+        responses: {
+            200: resultWithHeaders(pymixType._response.trashPurged),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     getLibrarySize: {
         method: 'GET',
         path: 'user/library_size',
@@ -89,6 +107,14 @@ export const contract = c.router({
         path: 'playlists/tree',
         responses: {
             200: resultWithHeaders(pymixType._response.playlistTree),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    getTrash: {
+        method: 'GET',
+        path: 'trash',
+        responses: {
+            200: resultWithHeaders(pymixType._response.trashList),
             500: resultWithHeaders(pymixType._response.error),
         },
     },
@@ -143,6 +169,15 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    purgeTrashBatch: {
+        body: null,
+        method: 'DELETE',
+        path: 'trash/:id',
+        responses: {
+            200: resultWithHeaders(pymixType._response.trashPurged),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     rbDownload: {
         body: pymixType._parameters.exportJob,
         method: 'POST',
@@ -158,6 +193,15 @@ export const contract = c.router({
         path: 'rekordbox/import',
         responses: {
             200: resultWithHeaders(pymixType._response.importJob),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    restoreTrashBatch: {
+        body: null,
+        method: 'POST',
+        path: 'trash/:id/restore',
+        responses: {
+            200: resultWithHeaders(pymixType._response.trashRestored),
             500: resultWithHeaders(pymixType._response.error),
         },
     },
