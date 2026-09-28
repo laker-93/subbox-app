@@ -445,6 +445,23 @@
             "success": "$t(entity.playlist, {\"count\": 1}) updated successfully",
             "title": "edit $t(entity.playlist, {\"count\": 1})"
         },
+        "removeFromPlaylist": {
+            "notRepositioned_one": "The track was added back to the end of the playlist, but couldn't be moved to its old place",
+            "notRepositioned_other": "The {{count}} tracks were added back to the end of the playlist, but couldn't be moved to their old places",
+            "removed_one": "Removed 1 track from {{name}}",
+            "removed_other": "Removed {{count}} tracks from {{name}}",
+            "removedUnnamed_one": "Removed 1 track from the playlist",
+            "removedUnnamed_other": "Removed {{count}} tracks from the playlist",
+            "restored_one": "Put 1 track back in {{name}}",
+            "restored_other": "Put {{count}} tracks back in {{name}}",
+            "restoredUnnamed_one": "Put 1 track back in the playlist",
+            "restoredUnnamed_other": "Put {{count}} tracks back in the playlist",
+            "restoreFailed_one": "Couldn't put the track back",
+            "restoreFailed_other": "Couldn't put the {{count}} tracks back",
+            "restoring_one": "Putting the track back…",
+            "restoring_other": "Putting {{count}} tracks back…",
+            "undo": "undo"
+        },
         "lyricsExport": {
             "export": "export lyrics",
             "input_synced": "export synced lyrics",
