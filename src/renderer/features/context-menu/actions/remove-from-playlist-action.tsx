@@ -1,9 +1,16 @@
 import { closeAllModals, openModal } from '@mantine/modals';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 
+import { useIsDemoSession } from '/@/renderer/config/demo-config';
+import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { useRemoveFromPlaylist } from '/@/renderer/features/playlists/mutations/remove-from-playlist-mutation';
+import {
+    showRemovedFromPlaylistToast,
+    snapshotRemoved,
+} from '/@/renderer/features/playlists/undo/remove-from-playlist-undo';
 import { useCurrentServerId } from '/@/renderer/store';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { ConfirmModal } from '/@/shared/components/modal/modal';
@@ -20,6 +27,14 @@ export const RemoveFromPlaylistAction = ({ items }: RemoveFromPlaylistActionProp
     const serverId = useCurrentServerId();
     const { playlistId } = useParams() as { playlistId?: string };
     const removeFromPlaylistMutation = useRemoveFromPlaylist();
+    const queryClient = useQueryClient();
+    const isDemo = useIsDemoSession();
+    // Already loaded by the playlist page this menu opens on: only its name is read.
+    const { data: playlist } = useQuery({
+        ...playlistsQueries.detail({ query: { id: playlistId || '' }, serverId }),
+        enabled: Boolean(playlistId && serverId),
+    });
+    const playlistName = playlist?.name;
 
     const { ids } = useMemo(() => {
         const ids = items.map((item) => item.playlistItemId).filter((id) => id !== undefined);
@@ -28,6 +43,9 @@ export const RemoveFromPlaylistAction = ({ items }: RemoveFromPlaylistActionProp
 
     const handleRemoveFromPlaylist = useCallback(async () => {
         if (ids.length === 0 || !serverId || !playlistId) return;
+
+        // Taken before the call: afterwards the entry ids are renumbered.
+        const removed = snapshotRemoved(items);
 
         try {
             await removeFromPlaylistMutation.mutateAsync({
@@ -38,8 +56,14 @@ export const RemoveFromPlaylistAction = ({ items }: RemoveFromPlaylistActionProp
                 },
             });
 
-            toast.success({
-                message: t('action.removeFromPlaylist', { postProcess: 'sentenceCase' }),
+            showRemovedFromPlaylistToast({
+                playlistId,
+                playlistName,
+                queryClient,
+                removed,
+                serverId,
+                t,
+                withUndo: !isDemo,
             });
         } catch (err: any) {
             toast.error({
@@ -49,7 +73,17 @@ export const RemoveFromPlaylistAction = ({ items }: RemoveFromPlaylistActionProp
         }
 
         closeAllModals();
-    }, [ids, playlistId, removeFromPlaylistMutation, serverId, t]);
+    }, [
+        ids,
+        isDemo,
+        items,
+        playlistId,
+        playlistName,
+        queryClient,
+        removeFromPlaylistMutation,
+        serverId,
+        t,
+    ]);
 
     const openRemoveFromPlaylistModal = useCallback(() => {
         if (ids.length === 0 || !playlistId) return;
