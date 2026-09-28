@@ -1,10 +1,11 @@
 import { QueryClient, queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { useCurrentServerId } from '/@/renderer/store';
+import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
 
 // Subbox-only: pymix's playlist tree (subbox-app#147, design §4.4, §11.1).
 
@@ -83,4 +84,37 @@ export const useFollowPlaylistListInvalidations = () => {
             });
         });
     }, [queryClient, serverId]);
+};
+
+/**
+ * Which folders are open in the sidebar, per device and server. Order and structure
+ * are the server's; this is only a view convenience. Mantine's hook keeps every
+ * instance in the window in step, so a modal can open the folder it moved into.
+ */
+export const useTreeExpanded = () => {
+    const serverId = useCurrentServerId();
+    const [expanded, setExpanded] = useLocalStorage<string[]>({
+        defaultValue: [],
+        key: `playlist_tree_expanded:${serverId || 'local'}`,
+    });
+
+    const toggle = useCallback(
+        (nodeId: string) =>
+            setExpanded((current) =>
+                current.includes(nodeId)
+                    ? current.filter((id) => id !== nodeId)
+                    : [...current, nodeId],
+            ),
+        [setExpanded],
+    );
+
+    const expand = useCallback(
+        (nodeId: null | string) => {
+            if (!nodeId) return;
+            setExpanded((current) => (current.includes(nodeId) ? current : [...current, nodeId]));
+        },
+        [setExpanded],
+    );
+
+    return { expand, expanded, toggle };
 };

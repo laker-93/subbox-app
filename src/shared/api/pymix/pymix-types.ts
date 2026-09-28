@@ -577,9 +577,39 @@ const playlistTree = z.object({
 export type PlaylistTree = z.infer<typeof playlistTree>;
 export type PlaylistTreeNode = z.infer<typeof playlistTreeNode>;
 
+// The tree's write routes (#148, pymix#206). Each answers with the node it wrote, as the
+// tree has it minus `child_count`; a playlist's `name` is null from PATCH, since it lives
+// in Navidrome.
+const playlistNodeWritten = playlistTreeNode.omit({ child_count: true });
+
+const createPlaylistFolderParameters = z.object({
+    name: z.string(),
+    parent_id: z.string().nullable().optional(),
+    position: z.number().optional(),
+});
+
+const createPlaylistInFolderParameters = z.object({
+    name: z.string(),
+    parent_id: z.string().nullable().optional(),
+    song_ids: z.array(z.string()).optional(),
+});
+
+// `parent_id` absent keeps the node's parent; null moves it to the root. `position` is
+// where it ends up among its new siblings, not counting itself.
+const updatePlaylistNodeParameters = z.object({
+    name: z.string().optional(),
+    parent_id: z.string().nullable().optional(),
+    position: z.number().optional(),
+});
+
+export type PlaylistNodeWritten = z.infer<typeof playlistNodeWritten>;
+export type UpdatePlaylistNodeBody = z.infer<typeof updatePlaylistNodeParameters>;
+
 export const pymixType = {
     _parameters: {
         create: createParameters,
+        createPlaylistFolder: createPlaylistFolderParameters,
+        createPlaylistInFolder: createPlaylistInFolderParameters,
         deleteDuplicates: deleteParameters,
         deleteSong: deleteSongParameters,
         download: downloadParameters,
@@ -598,6 +628,7 @@ export const pymixType = {
         syncPlan: syncPlanParameters,
         syncPlaylists: syncPlaylistsParameters,
         syncTracks: syncTracksParameters,
+        updatePlaylistNode: updatePlaylistNodeParameters,
         wishlistBulkCreate: wishlistBulkCreateParameters,
         wishlistCreate: wishlistCreateParameters,
         wishlistMatchMetadata: wishlistMatchMetadataParameters,
@@ -622,6 +653,7 @@ export const pymixType = {
         matchTracks,
         matchYoutubeResponse,
         parseLinkResponse,
+        playlistNodeWritten,
         playlistTree,
         seratoExport,
         storageCheck,

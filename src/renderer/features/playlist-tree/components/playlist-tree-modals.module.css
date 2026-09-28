@@ -1,0 +1,25 @@
+.option {
+    display: flex;
+    gap: var(--theme-spacing-sm);
+    align-items: center;
+    width: 100%;
+    padding: var(--theme-spacing-xs) var(--theme-spacing-sm);
+    padding-left: calc(var(--theme-spacing-sm) + var(--tree-depth, 0) * var(--theme-spacing-md));
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    background: none;
+    border: none;
+    border-radius: var(--theme-radius-sm);
+}
+
+.option:hover:not(:disabled),
+.option:focus-visible {
+    outline: none;
+    background-color: var(--theme-colors-surface);
+}
+
+.option:disabled {
+    cursor: default;
+    opacity: 0.6;
+}

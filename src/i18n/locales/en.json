@@ -420,6 +420,25 @@
             "success": "$t(entity.track, {\"count\": 1}) deleted successfully",
             "title": "delete $t(entity.track, {\"count\": 1})"
         },
+        "playlistTree": {
+            "folderNamePlaceholder": "folder name",
+            "moveFailed": "couldn't move it",
+            "moveTo": "move to…",
+            "moveToTitle": "move to folder",
+            "moveUp": "move up",
+            "moveDown": "move down",
+            "newFolder": "new folder",
+            "newFolderDefaultName": "new folder",
+            "newFolderInside": "new folder inside",
+            "newPlaylist": "new $t(entity.playlist, {\"count\": 1})",
+            "newPlaylistInside": "new $t(entity.playlist, {\"count\": 1}) inside",
+            "newPlaylistTitle": "new $t(entity.playlist, {\"count\": 1}) in {{folder}}",
+            "rename": "rename",
+            "renameFailed": "couldn't rename the folder",
+            "createFailed": "couldn't create it",
+            "currentFolder": "current",
+            "topLevel": "top level"
+        },
         "editPlaylist": {
             "publicJellyfinNote": "Jellyfin for some reason does not expose whether a playlist is public or not. If you wish for this to remain public, please have the following input selected",
             "editNote": "manual edits are not recommended for large playlists. are you sure you accept the risk of data loss incurred by overwriting the existing playlist?",
