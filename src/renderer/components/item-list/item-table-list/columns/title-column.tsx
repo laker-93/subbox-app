@@ -11,6 +11,7 @@ import {
     TableColumnContainer,
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { useIsActiveRow } from '/@/renderer/components/item-list/item-table-list/item-table-list-context';
+import { PlaylistPath } from '/@/renderer/features/playlist-tree/components/playlist-path';
 import { ExplicitIndicator } from '/@/shared/components/explicit-indicator/explicit-indicator';
 import { Text } from '/@/shared/components/text/text';
 import { LibraryItem, QueueSong } from '/@/shared/types/domain-types';
@@ -61,6 +62,9 @@ function DefaultTitleColumn(props: ItemTableListInnerColumn) {
                 >
                     <ExplicitIndicator explicitStatus={item?.explicitStatus} />
                     {row}
+                    {props.itemType === LibraryItem.PLAYLIST && (
+                        <PlaylistPath playlistId={item?.id} />
+                    )}
                 </Text>
             </TableColumnContainer>
         );

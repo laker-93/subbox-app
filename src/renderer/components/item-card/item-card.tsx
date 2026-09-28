@@ -17,6 +17,7 @@ import {
 } from '/@/renderer/components/item-list/helpers/item-list-state';
 import { ItemControls } from '/@/renderer/components/item-list/types';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
+import { PlaylistPath } from '/@/renderer/features/playlist-tree/components/playlist-path';
 import { useDragDrop } from '/@/renderer/hooks/use-drag-drop';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useShowRatings } from '/@/renderer/store';
@@ -1084,6 +1085,7 @@ export const getDataRows = (type?: 'compact' | 'default' | 'poster'): DataRow[] 
                                             })}
                                         >
                                             {data.name}
+                                            <PlaylistPath playlistId={data.id} />
                                         </Link>
                                     );
                                 default:

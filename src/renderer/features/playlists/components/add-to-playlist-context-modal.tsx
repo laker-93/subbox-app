@@ -15,6 +15,7 @@ import {
     getPlaylistSongsById,
     getSongsByFolder,
 } from '/@/renderer/features/player/utils';
+import { PlaylistPath } from '/@/renderer/features/playlist-tree/components/playlist-path';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { useAddToPlaylist } from '/@/renderer/features/playlists/mutations/add-to-playlist-mutation';
 import { queryClient } from '/@/renderer/lib/react-query';
@@ -494,6 +495,7 @@ export const AddToPlaylistContextModal = ({
                                 withRemoveButton
                             >
                                 {playlistMap.get(item)}
+                                <PlaylistPath playlistId={item} />
                             </Pill>
                         ))}
                         {form.values.newPlaylists.map((item, idx) => (
@@ -569,6 +571,7 @@ const PlaylistTableItem = memo(
                         <Stack gap="xs" w="100%">
                             <Text className={styles.labelText} isNoSelect overflow="hidden">
                                 {item.label}
+                                <PlaylistPath playlistId={item.id} />
                             </Text>
                             <Group justify="space-between" wrap="nowrap">
                                 <Group gap="md" wrap="nowrap">

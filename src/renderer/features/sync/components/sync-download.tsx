@@ -5,6 +5,10 @@ import { z } from 'zod';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
+import {
+    formatPlaylistPath,
+    usePlaylistPlaces,
+} from '/@/renderer/features/playlist-tree/hooks/use-playlist-places';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import {
     DestinationPath,
@@ -288,6 +292,7 @@ export const SyncDownload = () => {
         }),
     );
 
+    const playlistPlaces = usePlaylistPlaces();
     const playlists: Playlist[] = useMemo(
         () => playlistQuery.data?.items ?? [],
         [playlistQuery.data?.items],
@@ -549,6 +554,7 @@ export const SyncDownload = () => {
                         detail: `${pl.songCount ?? 0} ${(pl.songCount ?? 0) === 1 ? 'track' : 'tracks'}`,
                         id: pl.id,
                         label: pl.name,
+                        suffix: formatPlaylistPath(playlistPlaces?.get(pl.id)),
                     }))}
                     onSelectAll={handleSelectAll}
                     onSelectNone={handleSelectNone}
