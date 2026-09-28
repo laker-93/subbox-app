@@ -93,6 +93,9 @@ const beetsImportProgress = z.object({
     phases: z.array(jobPhase).nullish(),
     reason: z.string(),
     result: z.boolean(),
+    // The trash batch that undoes the playlists a re-import replaced (pymix#208),
+    // once the job has finished. Null when it replaced none; absent from an older pymix.
+    trash_batch_id: z.string().nullish(),
     // Set on a job that *succeeded* but did not do everything asked of it — a
     // Serato import whose crates named tracks that are not in the library. `reason`
     // only reaches the client on a failed job, so a partial success routed through
@@ -635,11 +638,26 @@ const trashRestoreNote = z.object({
 // `moved` (its folder was deleted separately), `shrunk` (a track was purged while it was
 // hidden), `lost` (deleted outside subbox meanwhile). A track batch answers with a
 // `job_id` instead (#151).
+// A re-import's batch (#151) restores synchronously too: each playlist rewritten to
+// what it was before the import, `edits_discarded` when it had changed since.
+// `not_restored` names entries whose track can't be found any more.
+const reimportRestored = z.object({
+    edits_discarded: z.boolean(),
+    n_entries: z.number(),
+    name: z.string(),
+    playlist_id: z.string(),
+});
+
+const reimportNotRestored = z.object({ name: z.string(), reason: z.string() });
+
 const trashRestored = z.object({
     batch_id: z.string().optional(),
+    failed: z.array(reimportNotRestored).optional(),
     job_id: z.string().optional(),
     lost: z.array(trashRestoreNote).optional(),
     moved: z.array(trashRestoreNote).optional(),
+    not_restored: z.array(z.object({ playlist: z.string() })).optional(),
+    restored: z.array(z.union([reimportRestored, z.object({ node_id: z.string() })])).optional(),
     shrunk: z.array(trashRestoreNote).optional(),
     success: z.boolean(),
 });
@@ -649,6 +667,8 @@ const trashBatch = z.object({
     bytes: z.number(),
     deleted_at: z.number(),
     expires_at: z.number(),
+    // For a re-import's batch, `playlist_name` says which playlist each item is.
+    items: z.array(z.object({ playlist_name: z.string().nullish() })).optional(),
     kind: z.enum(['nodes', 'playlist_entries', 'track']),
     label: z.string(),
     state: z.string(),

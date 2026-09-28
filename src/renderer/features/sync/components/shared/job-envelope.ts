@@ -39,6 +39,11 @@ export interface ImportProgress {
     reason: string;
     result: boolean;
     /**
+     * The trash batch that undoes the playlists a re-import replaced (pymix#208),
+     * once the job has finished. Null or absent when it replaced none.
+     */
+    trash_batch_id?: null | string;
+    /**
      * What a *successful* job could not do. `reason` only reaches the client on a
      * failed job, so a job that finished but left something out has nowhere else
      * to say so (laker-93/pymix#136).

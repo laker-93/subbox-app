@@ -439,6 +439,20 @@
             "currentFolder": "current",
             "topLevel": "top level"
         },
+        "reimportUndo": {
+            "confirm_one": "Put {{names}} back as it was before this {{source}} import? Any changes you made to it since will be lost.",
+            "confirm_other": "Put {{names}} back as they were before this {{source}} import? Any changes you made to them since will be lost.",
+            "failed": "{{name}} wasn't restored: {{reason}}",
+            "notRestored_one": "1 track in {{name}} couldn't be found, so it wasn't put back",
+            "notRestored_other": "{{count}} tracks in {{name}} couldn't be found, so they weren't put back",
+            "restoreFailed": "Couldn't undo the import. Your playlists weren't changed. Try again from the trash",
+            "restored_one": "Restored 1 playlist to how it was before the import",
+            "restored_other": "Restored {{count}} playlists to how they were before the import",
+            "title": "Undo the {{source}} import",
+            "undo": "undo",
+            "updated_one": "1 playlist updated from {{source}}",
+            "updated_other": "{{count}} playlists updated from {{source}}"
+        },
         "trash": {
             "confirmEmptyFolder": "Delete folder {{name}}? You can undo this for 7 days.",
             "confirmFolder_one": "Delete folder {{name}} and the 1 playlist in it? Tracks are not deleted. You can undo this for 7 days.",
