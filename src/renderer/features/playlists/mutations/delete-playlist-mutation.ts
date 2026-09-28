@@ -9,7 +9,12 @@ import {
     PreviousQueryData,
     restorePlaylistQueryData,
 } from '/@/renderer/features/playlists/mutations/playlist-optimistic-updates';
+import {
+    deletePlaylistThroughTree,
+    treeForDelete,
+} from '/@/renderer/features/trash/api/playlist-trash';
 import { MutationHookArgs } from '/@/renderer/lib/react-query';
+import { PlaylistNodesDeleted } from '/@/shared/api/pymix/pymix-types';
 import {
     DeletePlaylistArgs,
     DeletePlaylistResponse,
@@ -20,39 +25,49 @@ export const useDeletePlaylist = (args: MutationHookArgs) => {
     const { options } = args || {};
     const queryClient = useQueryClient();
 
-    return useMutation<DeletePlaylistResponse, AxiosError, DeletePlaylistArgs, PreviousQueryData[]>(
-        {
-            mutationFn: (args) => {
-                return api.controller.deletePlaylist({
-                    ...args,
-                    apiClientProps: { serverId: args.apiClientProps.serverId },
-                });
-            },
-            onError: (_error, _variables, context) => {
-                if (context) {
-                    restorePlaylistQueryData(queryClient, context);
-                }
-            },
-            onMutate: (variables) => {
-                queryClient.cancelQueries({
-                    queryKey: queryKeys.playlists.list(variables.apiClientProps.serverId),
-                });
-                return applyDeletePlaylistOptimisticUpdates(queryClient, variables);
-            },
-            ...options,
-            onSuccess: (data, variables, context) => {
-                const { serverId } = variables.apiClientProps;
-                queryClient.invalidateQueries({
-                    exact: false,
-                    queryKey: queryKeys.playlists.root(serverId),
-                });
+    return useMutation<
+        DeletePlaylistResponse | PlaylistNodesDeleted,
+        AxiosError,
+        DeletePlaylistArgs,
+        PreviousQueryData[]
+    >({
+        mutationFn: async (args) => {
+            // Subbox: into pymix's trash, with Undo, when the user has a tree (#150).
+            const { serverId } = args.apiClientProps;
+            const tree = await treeForDelete(queryClient, serverId);
+            if (tree) {
+                return deletePlaylistThroughTree(queryClient, serverId, tree, args.query.id);
+            }
 
-                queryClient.invalidateQueries({
-                    exact: false,
-                    queryKey: infiniteLoaderDataQueryKey(serverId, LibraryItem.PLAYLIST),
-                });
-                options?.onSuccess?.(data, variables, context);
-            },
+            return api.controller.deletePlaylist({
+                ...args,
+                apiClientProps: { serverId: args.apiClientProps.serverId },
+            });
         },
-    );
+        onError: (_error, _variables, context) => {
+            if (context) {
+                restorePlaylistQueryData(queryClient, context);
+            }
+        },
+        onMutate: (variables) => {
+            queryClient.cancelQueries({
+                queryKey: queryKeys.playlists.list(variables.apiClientProps.serverId),
+            });
+            return applyDeletePlaylistOptimisticUpdates(queryClient, variables);
+        },
+        ...options,
+        onSuccess: (data, variables, context) => {
+            const { serverId } = variables.apiClientProps;
+            queryClient.invalidateQueries({
+                exact: false,
+                queryKey: queryKeys.playlists.root(serverId),
+            });
+
+            queryClient.invalidateQueries({
+                exact: false,
+                queryKey: infiniteLoaderDataQueryKey(serverId, LibraryItem.PLAYLIST),
+            });
+            options?.onSuccess?.(data, variables, context);
+        },
+    });
 };

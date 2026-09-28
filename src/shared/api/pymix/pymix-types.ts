@@ -605,12 +605,78 @@ const updatePlaylistNodeParameters = z.object({
 export type PlaylistNodeWritten = z.infer<typeof playlistNodeWritten>;
 export type UpdatePlaylistNodeBody = z.infer<typeof updatePlaylistNodeParameters>;
 
+// --- Trash (subbox-app#150, pymix#200, #207) ---
+
+// Playlists and folders, each with everything under it, into one trash batch. Nothing
+// leaves Navidrome: the playlists are hidden until the batch is purged.
+const deletePlaylistNodesParameters = z.object({
+    node_ids: z.array(z.string()),
+});
+
+const playlistNodesDeleted = z.object({
+    deleted: z.object({
+        folders: z.number(),
+        node_ids: z.array(z.string()),
+        playlists: z.number(),
+    }),
+    // "Folder House · 6 playlists", "Playlist Deep", "2 folders · 5 playlists".
+    label: z.string(),
+    trash_batch_id: z.string(),
+});
+
+// One thing a restore wants the user to know, already worded by pymix.
+const trashRestoreNote = z.object({
+    message: z.string(),
+    name: z.string().nullable(),
+    node_id: z.string().nullable(),
+});
+
+// A `nodes` batch restores synchronously and says what didn't come back as it went:
+// `moved` (its folder was deleted separately), `shrunk` (a track was purged while it was
+// hidden), `lost` (deleted outside subbox meanwhile). A track batch answers with a
+// `job_id` instead (#151).
+const trashRestored = z.object({
+    batch_id: z.string().optional(),
+    job_id: z.string().optional(),
+    lost: z.array(trashRestoreNote).optional(),
+    moved: z.array(trashRestoreNote).optional(),
+    shrunk: z.array(trashRestoreNote).optional(),
+    success: z.boolean(),
+});
+
+const trashBatch = z.object({
+    batch_id: z.string(),
+    bytes: z.number(),
+    deleted_at: z.number(),
+    expires_at: z.number(),
+    kind: z.enum(['nodes', 'playlist_entries', 'track']),
+    label: z.string(),
+    state: z.string(),
+});
+
+const trashList = z.object({
+    batches: z.array(trashBatch),
+    trash_bytes: z.number(),
+});
+
+const trashPurged = z.object({
+    errors: z.array(z.unknown()),
+    n_purged: z.number(),
+    success: z.boolean(),
+});
+
+export type PlaylistNodesDeleted = z.infer<typeof playlistNodesDeleted>;
+export type TrashBatch = z.infer<typeof trashBatch>;
+export type TrashList = z.infer<typeof trashList>;
+export type TrashRestored = z.infer<typeof trashRestored>;
+
 export const pymixType = {
     _parameters: {
         create: createParameters,
         createPlaylistFolder: createPlaylistFolderParameters,
         createPlaylistInFolder: createPlaylistInFolderParameters,
         deleteDuplicates: deleteParameters,
+        deletePlaylistNodes: deletePlaylistNodesParameters,
         deleteSong: deleteSongParameters,
         download: downloadParameters,
         exportJob: rbExportParameters,
@@ -653,6 +719,7 @@ export const pymixType = {
         matchTracks,
         matchYoutubeResponse,
         parseLinkResponse,
+        playlistNodesDeleted,
         playlistNodeWritten,
         playlistTree,
         seratoExport,
@@ -661,6 +728,9 @@ export const pymixType = {
         syncPlan,
         syncPlaylists,
         syncTracks: syncPlaylists,
+        trashList,
+        trashPurged,
+        trashRestored,
         wishlistBulkCreateResponse,
         wishlistDeleteResponse,
         wishlistItem,

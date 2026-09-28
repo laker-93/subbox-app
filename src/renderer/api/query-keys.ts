@@ -442,6 +442,9 @@ export const queryKeys: Record<
     tags: {
         list: (serverId: string, type: string) => [serverId, 'tags', type] as const,
     },
+    trash: {
+        root: (serverId: string) => [serverId, 'trash'] as const,
+    },
     users: {
         list: (serverId: string, query?: UserListQuery) => {
             if (query) return [serverId, 'users', 'list', query] as const;
