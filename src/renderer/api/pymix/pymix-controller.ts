@@ -538,6 +538,20 @@ export const PymixController = {
         return res.body.data;
     },
 
+    // A track restore job's progress (#152).
+    trashRestoreProgress: async (args: PymixClientArgs & { jobId: string }) => {
+        const { baseUrl, jobId, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).trashRestoreProgress({
+            query: { job_id: jobId },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get restore progress');
+        }
+
+        return res.body.data;
+    },
+
     updatePlaylistNode: async (
         args: PymixClientArgs & { body: UpdatePlaylistNodeBody; nodeId: string },
     ) => {

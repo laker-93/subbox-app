@@ -36,7 +36,7 @@ const deletedMessage = ({ deleted }: PlaylistNodesDeleted, name: null | string) 
         : t('form.trash.playlistsDeleted', { count: playlists });
 };
 
-const restoredToast = (restored: TrashRestored) => {
+export const showNodesRestoredToast = (restored: TrashRestored) => {
     const notes = [
         ...(restored.moved ?? []),
         ...(restored.shrunk ?? []),
@@ -88,7 +88,7 @@ export const showNodesDeletedToast = ({
             });
             await refreshAfterTrashChange(queryClient, serverId);
             toast.hide(id);
-            restoredToast(restored);
+            showNodesRestoredToast(restored);
         } catch {
             toast.hide(id);
             toast.error({

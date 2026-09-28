@@ -1,9 +1,11 @@
 import { closeAllModals, openModal } from '@mantine/modals';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useIsDemoSession } from '/@/renderer/config/demo-config';
 import { useDeleteSong } from '/@/renderer/features/songs/mutations/delete-song-mutation';
+import { showTracksDeletedToast } from '/@/renderer/features/trash/api/track-trash';
 import { useCurrentServerId } from '/@/renderer/store';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { ConfirmModal } from '/@/shared/components/modal/modal';
@@ -28,6 +30,7 @@ interface DeleteSongConfirmProps {
 const DeleteSongConfirm = ({ items, serverId }: DeleteSongConfirmProps) => {
     const { t } = useTranslation();
     const deleteSongMutation = useDeleteSong({});
+    const queryClient = useQueryClient();
 
     const handleDeleteSong = useCallback(async () => {
         const subboxIds = items
@@ -59,17 +62,28 @@ const DeleteSongConfirm = ({ items, serverId }: DeleteSongConfirmProps) => {
         }
 
         try {
-            await deleteSongMutation.mutateAsync({
+            const result = await deleteSongMutation.mutateAsync({
                 ids: subboxIds,
                 serverId,
+                songIds: items.map((song) => song.id),
             });
 
-            toast.success({
-                message:
-                    subboxIds.length > 1
-                        ? `${subboxIds.length} tracks deleted`
-                        : t('form.deleteSong.success', { postProcess: 'sentenceCase' }),
-            });
+            // Into the trash (#152): the toast carries an Undo.
+            if (result.trash_batch_id) {
+                showTracksDeletedToast({
+                    batchId: result.trash_batch_id,
+                    count: subboxIds.length,
+                    queryClient,
+                    serverId,
+                });
+            } else {
+                toast.success({
+                    message:
+                        subboxIds.length > 1
+                            ? `${subboxIds.length} tracks deleted`
+                            : t('form.deleteSong.success', { postProcess: 'sentenceCase' }),
+                });
+            }
         } catch (err: any) {
             // A partial failure still deleted some tracks (and the mutation's
             // onSettled already invalidated the list). Tell the user how many
@@ -94,14 +108,16 @@ const DeleteSongConfirm = ({ items, serverId }: DeleteSongConfirmProps) => {
         }
 
         closeAllModals();
-    }, [deleteSongMutation, items, serverId, t]);
+    }, [deleteSongMutation, items, queryClient, serverId, t]);
 
     return (
         <ConfirmModal loading={deleteSongMutation.isPending} onConfirm={handleDeleteSong}>
+            {/* Names what goes and where it goes (design §11.4). Play counts survive
+                a restore (PurgeMissing = "never", pymix#210), so nothing warns of them. */}
             <Text>
                 {items.length > 1
-                    ? `${t('common.areYouSure', { postProcess: 'sentenceCase' })} (${items.length} tracks)`
-                    : t('common.areYouSure', { postProcess: 'sentenceCase' })}
+                    ? t('form.trash.tracks.confirm', { count: items.length })
+                    : t('form.trash.tracks.confirmOne', { name: items[0]?.name })}
             </Text>
         </ConfirmModal>
     );

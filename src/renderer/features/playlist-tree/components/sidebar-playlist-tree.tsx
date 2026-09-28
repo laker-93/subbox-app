@@ -628,6 +628,22 @@ export const SidebarPlaylistTree = ({ tree }: { tree: PlaylistTree }) => {
                             }}
                             variant="subtle"
                         />
+                        {/* Subbox: deleted playlists, folders and tracks (#152). */}
+                        <ActionIcon
+                            aria-label={t('page.trash.title', { postProcess: 'sentenceCase' })}
+                            component={Link}
+                            icon="trash"
+                            iconProps={{
+                                size: 'lg',
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            size="xs"
+                            to={AppRoute.TRASH}
+                            tooltip={{
+                                label: t('page.trash.title', { postProcess: 'sentenceCase' }),
+                            }}
+                            variant="subtle"
+                        />
                     </Group>
                 </Group>
             </Accordion.Control>

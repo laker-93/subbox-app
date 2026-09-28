@@ -9,6 +9,7 @@ import { QueryBuilderSettings } from '/@/renderer/features/settings/components/g
 import { ScrobbleSettings } from '/@/renderer/features/settings/components/general/scrobble-settings';
 import { SidebarSettings } from '/@/renderer/features/settings/components/general/sidebar-settings';
 import { ThemeSettings } from '/@/renderer/features/settings/components/general/theme-settings';
+import { TrashSettings } from '/@/renderer/features/trash/components/trash-settings';
 import { useCurrentServer } from '/@/renderer/store';
 import { hasFeature } from '/@/shared/api/utils';
 import { Divider } from '/@/shared/components/divider/divider';
@@ -28,6 +29,8 @@ export const GeneralTab = memo(() => {
             { component: SidebarSettings, key: 'sidebar' },
             { component: ScrobbleSettings, key: 'scrobble' },
             { component: LyricSettings, key: 'lyrics' },
+            // Subbox: the trash (#152).
+            { component: TrashSettings, key: 'trash' },
         ];
 
         if (supportsSmartPlaylists) {

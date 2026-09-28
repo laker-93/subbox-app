@@ -17,7 +17,7 @@ import { Text } from '/@/shared/components/text/text';
 type Done = { error: true } | { error?: false; result: TrashRestored };
 
 /** What the restore did, in lines: what came back, and anything that didn't. */
-const restoredLines = (
+export const restoredLines = (
     t: (key: string, o?: Record<string, unknown>) => string,
     result: TrashRestored,
 ) => {
