@@ -5,6 +5,7 @@ import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { infiniteLoaderDataQueryKey } from '/@/renderer/components/item-list/helpers/item-list-infinite-loader';
 import { urlConfig } from '/@/renderer/config/url-config';
+import { usePlaylistPlace } from '/@/renderer/features/playlist-tree/hooks/use-playlist-places';
 import { invalidatePlaylistTree } from '/@/renderer/features/playlist-tree/hooks/use-playlist-tree';
 import {
     applyInsert,
@@ -131,4 +132,35 @@ export const useCreatePlaylistInFolder = () => {
             refetchWhenIdle(queryClient, serverId);
         },
     });
+};
+
+/**
+ * A playlist rename, for upstream's edit modal (subbox-app#173). For a playlist in the
+ * tree, pymix writes Navidrome's name from the tree (pymix#229): the leaf, or for a
+ * `path` user the full path. So the modal edits the leaf and renames through pymix;
+ * sending the leaf to Navidrome itself would drop the folders from the name.
+ *
+ * Null with no tree, or for a playlist not in it: the modal renames in Navidrome as
+ * upstream does, and pymix takes a bare name as the leaf anyway.
+ */
+export const useTreePlaylistRename = (playlistId: string | undefined) => {
+    const queryClient = useQueryClient();
+    const serverId = useCurrentServerId();
+    const place = usePlaylistPlace(playlistId);
+    const { mutateAsync } = useUpdatePlaylistNode();
+
+    if (!place || place.leaf === null) return null;
+    const { leaf, nodeId } = place;
+    return {
+        leaf,
+        rename: async (name: string) => {
+            if (name === leaf) return;
+            await mutateAsync({ nodeId, update: { name } });
+            // Navidrome's name changed too: the flat lists and the playlist page show it.
+            queryClient.invalidateQueries({
+                exact: false,
+                queryKey: queryKeys.playlists.root(serverId),
+            });
+        },
+    };
 };

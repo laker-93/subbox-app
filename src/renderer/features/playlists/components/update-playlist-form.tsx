@@ -1,8 +1,10 @@
 import { closeModal, ContextModalProps } from '@mantine/modals';
 import { useQuery } from '@tanstack/react-query';
 import { t } from 'i18next';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useTreePlaylistRename } from '/@/renderer/features/playlist-tree/mutations/playlist-tree-mutations';
 import { useUpdatePlaylist } from '/@/renderer/features/playlists/mutations/update-playlist-mutation';
 import { sharedQueries } from '/@/renderer/features/shared/api/shared-api';
 import { useCurrentServer, useCurrentServerId, usePermissions } from '/@/renderer/store';
@@ -35,11 +37,13 @@ export const UpdatePlaylistContextModal = ({
     const mutation = useUpdatePlaylist({});
     const server = useCurrentServer();
     const { body, query } = innerProps;
+    // Subbox: a playlist in the tree is renamed through pymix (subbox-app#173).
+    const treeRename = useTreePlaylistRename(query.id);
 
     const form = useForm<UpdatePlaylistBody>({
         initialValues: {
             comment: body?.comment || '',
-            name: body?.name || '',
+            name: (treeRename?.leaf ?? body?.name) || '',
             ownerId: body.ownerId,
             public: body.public,
             queryBuilderRules: body.queryBuilderRules,
@@ -47,11 +51,20 @@ export const UpdatePlaylistContextModal = ({
         },
     });
 
+    // The tree can answer after the form opened with Navidrome's name, which for a
+    // `path` user is the whole path: swap in the leaf unless it's been edited.
+    const leaf = treeRename?.leaf;
+    useEffect(() => {
+        if (leaf !== undefined && !form.isDirty('name')) form.setFieldValue('name', leaf);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [leaf]);
+
     const handleSubmit = form.onSubmit((values) => {
         mutation.mutate(
             {
                 apiClientProps: { serverId: server?.id || '' },
-                body: values,
+                // Navidrome's own name goes back unchanged; pymix renames it after.
+                body: treeRename ? { ...values, name: body?.name || values.name } : values,
                 query,
             },
             {
@@ -61,7 +74,15 @@ export const UpdatePlaylistContextModal = ({
                         title: t('error.genericError', { postProcess: 'sentenceCase' }),
                     });
                 },
-                onSuccess: () => {
+                onSuccess: async () => {
+                    if (treeRename) {
+                        try {
+                            await treeRename.rename(values.name);
+                        } catch {
+                            // useUpdatePlaylistNode has said so; the modal stays open.
+                            return;
+                        }
+                    }
                     toast.success({
                         message: t('form.editPlaylist.success', { postProcess: 'sentenceCase' }),
                     });
