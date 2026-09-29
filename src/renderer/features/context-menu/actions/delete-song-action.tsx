@@ -5,7 +5,10 @@ import { useTranslation } from 'react-i18next';
 
 import { useIsDemoSession } from '/@/renderer/config/demo-config';
 import { useDeleteSong } from '/@/renderer/features/songs/mutations/delete-song-mutation';
-import { showTracksDeletedToast } from '/@/renderer/features/trash/api/track-trash';
+import {
+    showTracksDeletedToast,
+    showTracksDeletingToast,
+} from '/@/renderer/features/trash/api/track-trash';
 import { useCurrentServerId } from '/@/renderer/store';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { ConfirmModal } from '/@/shared/components/modal/modal';
@@ -23,16 +26,15 @@ interface DeleteSongConfirmProps {
     serverId: string;
 }
 
-// Rendered *inside* the modal so it re-renders on the mutation's pending state —
-// that drives the ConfirmModal spinner / disabled buttons while pymix works
-// through the batch (which can take a moment for many tracks). The imperatively
-// opened modal in `openDeleteSongModal` can't observe hook state on its own.
+// The modal closes on Confirm; a toast says what's being deleted while pymix works
+// through the batch, which takes a few seconds even for one track (#183).
 const DeleteSongConfirm = ({ items, serverId }: DeleteSongConfirmProps) => {
     const { t } = useTranslation();
     const deleteSongMutation = useDeleteSong({});
     const queryClient = useQueryClient();
 
     const handleDeleteSong = useCallback(async () => {
+        closeAllModals();
         const subboxIds = items
             .map((song) => {
                 const id = song.tags?.subboxid?.[0] || song.tags?.subbox_id?.[0];
@@ -57,22 +59,27 @@ const DeleteSongConfirm = ({ items, serverId }: DeleteSongConfirmProps) => {
                 message: 'No subboxid found for the selected tracks',
                 title: t('error.genericError', { postProcess: 'sentenceCase' }),
             });
-            closeAllModals();
             return;
         }
 
+        // Named when it's one track, in the toasts as in the confirm.
+        const name = items.length === 1 && subboxIds.length === 1 ? items[0].name : undefined;
+        const hideDeleting = showTracksDeletingToast({ count: subboxIds.length, name });
         try {
-            const result = await deleteSongMutation.mutateAsync({
-                ids: subboxIds,
-                serverId,
-                songIds: items.map((song) => song.id),
-            });
+            const result = await deleteSongMutation
+                .mutateAsync({
+                    ids: subboxIds,
+                    serverId,
+                    songIds: items.map((song) => song.id),
+                })
+                .finally(hideDeleting);
 
             // Into the trash (#152): the toast carries an Undo.
             if (result.trash_batch_id) {
                 showTracksDeletedToast({
                     batchId: result.trash_batch_id,
                     count: subboxIds.length,
+                    name,
                     queryClient,
                     serverId,
                 });
@@ -106,12 +113,10 @@ const DeleteSongConfirm = ({ items, serverId }: DeleteSongConfirmProps) => {
                 });
             }
         }
-
-        closeAllModals();
     }, [deleteSongMutation, items, queryClient, serverId, t]);
 
     return (
-        <ConfirmModal loading={deleteSongMutation.isPending} onConfirm={handleDeleteSong}>
+        <ConfirmModal onConfirm={handleDeleteSong}>
             {/* Names what goes and where it goes (design §11.4). Play counts survive
                 a restore (PurgeMissing = "never", pymix#210), so nothing warns of them. */}
             <Text>
