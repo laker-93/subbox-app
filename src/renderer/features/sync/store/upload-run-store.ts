@@ -215,6 +215,14 @@ const checkStorageFull = async (): Promise<UploadRunBase['storageInfo']> => {
             query: { uploadSizeBytes: 0 },
         });
         if (storage.allowed) return null;
+        // `success: false` means pymix couldn't answer (an older pymix says so with a
+        // 200 when the session cookie is missing, as it is after an app restart), not
+        // that the account is full. Read as full, it stopped the first upload after a
+        // restart on "0 MB / 0 MB" (laker-93/subbox-app#202).
+        if (!storage.success) {
+            console.warn('[storage-check] pre-flight failed — proceeding anyway:', storage);
+            return null;
+        }
         console.warn('[storage-check] pre-flight blocked:', storage);
         return {
             currentUsageBytes: storage.currentUsageBytes,
