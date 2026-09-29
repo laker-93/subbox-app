@@ -12,6 +12,7 @@ import {
     FbAuth,
     fbRequest,
     httpsAgent,
+    PymixAuth,
     withPymixAuth,
 } from '/@/main/features/core/sync/pymix-auth';
 import { sanitizePathSegment } from '/@/main/features/core/sync/rekordbox-xml';
@@ -35,7 +36,7 @@ import {
     writeTrackCues,
     writeTrackGrid,
 } from '/@/main/features/core/sync/serato-crates';
-import { getOrCreateSubboxId } from '/@/main/features/core/sync/subbox-id-tags';
+import { getOrCreateSubboxId, writeSubboxId } from '/@/main/features/core/sync/subbox-id-tags';
 import { uploadFileViaTus } from '/@/main/features/core/sync/tus-upload';
 import { writeFlatZip } from '/@/main/features/core/sync/write-zip';
 
@@ -84,9 +85,52 @@ export interface SeratoUploadResult {
     uploaded: number;
 }
 
+function* chunked<T>(items: T[]): Generator<T[]> {
+    for (let i = 0; i < items.length; i += PRESENCE_CHUNK_SIZE) {
+        yield items.slice(i, i + PRESENCE_CHUNK_SIZE);
+    }
+}
+
 /** Best name for a track we can only refer to by its path — its filename. */
 function describeCrateTrack(trackPath: string): string {
     return path.basename(trackPath);
+}
+
+/**
+ * For each path on this machine, the subbox_id of the library track an earlier
+ * upload of that file became (pymix's POST /tracks/by_location), when there is one.
+ *
+ * An empty answer when pymix can't say, so the upload goes ahead as it did before
+ * the endpoint existed: a pymix older than laker-93/pymix#231 404s it.
+ */
+async function libraryIdsByLocation(
+    pymixAuth: PymixAuth,
+    pymixUrl: string,
+    paths: string[],
+): Promise<Record<string, null | string>> {
+    const result: Record<string, null | string> = {};
+    try {
+        for (const chunk of chunked(Array.from(new Set(paths)))) {
+            const res = await withPymixAuth<{ subbox_ids: Record<string, null | string> }>(
+                pymixAuth,
+                (cookie) =>
+                    axios.post(
+                        `${pymixUrl}/tracks/by_location`,
+                        { user_locations: chunk },
+                        { headers: { Cookie: cookie }, httpsAgent },
+                    ),
+            );
+            Object.assign(result, res.data.subbox_ids);
+        }
+    } catch (err) {
+        console.warn(
+            '[serato] could not look up tracks by location; tracks with no id the library ' +
+                'knows will be uploaded:',
+            err,
+        );
+        return {};
+    }
+    return result;
 }
 
 /** A crate's identity for selection: its full ancestry, as pymix names the playlist. */
@@ -307,11 +351,8 @@ ipcMain.handle(
             uploaded: 0,
         };
 
-        if (cratesOnly || trackIdentities.length === 0) {
-            console.log(
-                `[serato] ${trackIdentities.length} crate entries identified` +
-                    `${cratesOnly ? ', uploading no audio (playlists only)' : ''}`,
-            );
+        if (trackIdentities.length === 0) {
+            console.log('[serato] 0 crate entries identified');
             sendProgress({ currentTrack: '', phase: 'done', total: 0, uploaded: 0 });
             return result;
         }
@@ -327,9 +368,7 @@ ipcMain.handle(
         });
 
         const present = new Set<string>();
-        const ids = Array.from(pathById.keys());
-        for (let i = 0; i < ids.length; i += PRESENCE_CHUNK_SIZE) {
-            const chunk = ids.slice(i, i + PRESENCE_CHUNK_SIZE);
+        for (const chunk of chunked(Array.from(pathById.keys()))) {
             const res = await withPymixAuth<{ presence: Record<string, boolean> }>(
                 pymixAuth,
                 (cookie) =>
@@ -344,6 +383,63 @@ ipcMain.handle(
             }
         }
 
+        // Step 3b: an id the library doesn't know may still be a file it has. A
+        // Rekordbox upload tags only the server's copy, so the user's own file has
+        // no SUBBOX_ID and step 2 has just minted one; uploading it would make a
+        // second copy of a track already there (laker-93/pymix#231). The path that
+        // upload recorded identifies it. Both modes need this: "Playlists only"
+        // would otherwise send an id the library can't find and lose the track.
+        const libraryIdByPath = await libraryIdsByLocation(
+            pymixAuth,
+            pymixUrl,
+            trackIdentities.filter((t) => !present.has(t.subbox_id)).map((t) => t.crate_path),
+        );
+        /** The id step 2 read or minted → the library's id for the same file. */
+        const adopted = new Map<string, string>();
+        for (const identity of trackIdentities) {
+            const libraryId = libraryIdByPath[identity.crate_path];
+            if (libraryId && !present.has(identity.subbox_id)) {
+                adopted.set(identity.subbox_id, libraryId);
+            }
+        }
+        for (const identity of trackIdentities) {
+            const libraryId = adopted.get(identity.subbox_id);
+            if (!libraryId) continue;
+            // The library's id goes on the file too, so the next upload reads it
+            // straight off the tag, and the file carries the identity the library
+            // uses. The id replaced is one nothing in the library refers to.
+            try {
+                writeSubboxId(identity.crate_path, libraryId);
+            } catch (err) {
+                console.warn(
+                    `[serato] could not write SUBBOX_ID to ${identity.crate_path}; ` +
+                        `using the library's id for this upload only:`,
+                    err,
+                );
+            }
+            identity.subbox_id = libraryId;
+        }
+        for (const [localId, libraryId] of adopted) {
+            pathById.set(libraryId, pathById.get(localId)!);
+            pathById.delete(localId);
+            present.add(libraryId);
+        }
+        if (adopted.size > 0) {
+            console.log(
+                `[serato] ${adopted.size} track(s) with no id the library knows are already ` +
+                    `in it, from an earlier upload of the same file`,
+            );
+        }
+
+        if (cratesOnly) {
+            console.log(
+                `[serato] ${trackIdentities.length} crate entries identified, uploading no audio (playlists only)`,
+            );
+            sendProgress({ currentTrack: '', phase: 'done', total: 0, uploaded: 0 });
+            return result;
+        }
+
+        const ids = Array.from(pathById.keys());
         const missingIds = ids.filter((id) => !present.has(id));
         result.skipped = ids.length - missingIds.length;
         console.log(
