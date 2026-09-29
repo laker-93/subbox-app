@@ -8,9 +8,17 @@ import { pipeline } from 'stream/promises';
 import * as unzipper from 'unzipper';
 
 import { appConfig } from '/@/main/config/app-config';
-import { getStoredPassword } from '/@/main/features/core/settings';
+import { getStoredPassword, store } from '/@/main/features/core/settings';
 import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip-layout';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
+import {
+    AUDIO_EXTENSIONS,
+    findCloudOnlyFiles,
+    LIBRARY_ROOTS_SETTING,
+    type LibraryRootScan,
+    pathKey,
+    scanLibraryRoot,
+} from '/@/main/features/core/sync/library-root';
 import {
     createFbAuth,
     createPymixAuth,
@@ -799,6 +807,16 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
     const tracks: LocalTrack[] = [];
     const subboxIdCache = loadSubboxIdCache();
     let subboxIdCacheChanged = false;
+    // Files the scan must not open: a cloud-only placeholder is downloaded by the
+    // open. This folder is subbox's own, in AppData, which no cloud drive syncs by
+    // default -- so if the check itself fails, carry on as before rather than break
+    // every download preview over a folder that almost never has placeholders.
+    let cloudOnly = new Set<string>();
+    try {
+        cloudOnly = await findCloudOnlyFiles(musicDir);
+    } catch (error) {
+        console.warn('[sync] placeholder check failed; scanning as before', error);
+    }
     // Every audio file we visit this scan; anything left in the cache that we didn't
     // visit is a deleted/moved file, pruned below so the cache can't grow unbounded.
     const seenPaths = new Set<string>();
@@ -813,6 +831,27 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
         fallbackArtist: string,
         fallbackAlbum: string | undefined,
     ): Promise<void> => {
+        const ext = path.extname(fileName);
+        if (!AUDIO_EXTENSIONS.has(ext.toLowerCase())) return;
+        const nameWithoutExt = path.basename(fileName, ext);
+
+        // Cloud-only: the track is here, it just isn't downloaded, so it still
+        // counts -- but identified only from what needs no open: a SUBBOX_ID
+        // cached from when it was local, and the file and folder names. Its cache
+        // entry is kept (seen), not pruned as if the file had gone.
+        if (cloudOnly.has(pathKey(filePath))) {
+            seenPaths.add(filePath);
+            const fromFilename = parseFilename(nameWithoutExt);
+            tracks.push({
+                album: fallbackAlbum,
+                artist: fromFilename?.artist ?? fallbackArtist,
+                fromTag: false,
+                subboxId: subboxIdCache[filePath]?.subboxId,
+                title: fromFilename?.title ?? nameWithoutExt,
+            });
+            return;
+        }
+
         let fileStat: fs.Stats;
         try {
             fileStat = fs.statSync(filePath);
@@ -820,14 +859,6 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
         } catch {
             return;
         }
-
-        const ext = path.extname(fileName);
-        if (
-            !['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', '.wma'].includes(
-                ext.toLowerCase(),
-            )
-        )
-            return;
 
         // SUBBOX_ID survives independently of how title/artist get resolved
         // below (filename vs tag), so resolve it once regardless of which path
@@ -840,7 +871,6 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
         const subboxId = subboxIdResult.subboxId ?? undefined;
 
         // Fast path: parse artist/title directly from the filename
-        const nameWithoutExt = path.basename(fileName, ext);
         const fromFilename = parseFilename(nameWithoutExt);
         if (fromFilename) {
             tracks.push({
@@ -1210,17 +1240,6 @@ ipcMain.handle('sync:reveal-file', async (_event, filePath: string): Promise<voi
 });
 
 // ── Watch directory for auto-upload ────────────────────────────────────────
-
-const AUDIO_EXTENSIONS = new Set([
-    '.aac',
-    '.flac',
-    '.m4a',
-    '.mp3',
-    '.ogg',
-    '.opus',
-    '.wav',
-    '.wma',
-]);
 
 export interface WatchProgress {
     currentFile: string;
@@ -1806,15 +1825,51 @@ ipcMain.handle('sync:stop-watch', async (): Promise<void> => {
     inFlightUploadIds.clear();
 });
 
+// ── Library root ───────────────────────────────────────────────────────────
+// The folder of the user's own library on this device (design-library-roots.md).
+// Stored in the main-process settings store, which is per device and never synced:
+// the same library has a different root on every OS. A list, so the data model
+// doesn't preclude several, though the UI sets one.
+
+ipcMain.handle('sync:get-library-roots', async (): Promise<string[]> => {
+    const roots = store.get(LIBRARY_ROOTS_SETTING);
+    return Array.isArray(roots) ? roots.filter((r) => typeof r === 'string') : [];
+});
+
+ipcMain.handle('sync:set-library-roots', async (_event, roots: string[]): Promise<void> => {
+    store.set(LIBRARY_ROOTS_SETTING, roots);
+});
+
+ipcMain.handle('sync:select-library-root', async (): Promise<null | string> => {
+    const { dialog: electronDialog } = await import('electron');
+    const result = await electronDialog.showOpenDialog({
+        buttonLabel: 'Select Folder',
+        properties: ['openDirectory'],
+        title: 'Select Your Music Library Folder',
+    });
+    return result.filePaths[0] || null;
+});
+
+ipcMain.handle(
+    'sync:scan-library-root',
+    async (_event, root: string): Promise<LibraryRootScan> => scanLibraryRoot(root),
+);
+
 // ── External drive comparison ───────────────────────────────────────────────
 
 /**
  * Recursively scan any directory for audio tracks, reading ID3/metadata tags
  * first and falling back to path-derived values when tags are unavailable.
+ *
+ * Cloud-only files are never opened -- they are named from their path alone. The
+ * folder is whatever the user picked, which can be a OneDrive folder, so unlike
+ * scanLocalTracks a failed placeholder check stops the scan: reading tags blind
+ * could download the user's whole library onto this machine.
  */
 async function scanDirectoryTracks(
     rootDir: string,
 ): Promise<Array<{ album?: string; artist: string; fromTag: boolean; title: string }>> {
+    const cloudOnly = await findCloudOnlyFiles(rootDir);
     const audioFiles = getAudioFiles(rootDir);
 
     const readTrack = async (
@@ -1842,6 +1897,15 @@ async function scanDirectoryTracks(
                 artist: fromFilename.artist,
                 fromTag: false,
                 title: fromFilename.title,
+            };
+        }
+
+        if (cloudOnly.has(pathKey(filePath))) {
+            return {
+                album: pathAlbum,
+                artist: pathArtist || 'Unknown',
+                fromTag: false,
+                title: nameWithoutExt,
             };
         }
 

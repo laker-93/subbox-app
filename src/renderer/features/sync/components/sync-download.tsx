@@ -15,6 +15,7 @@ import {
     formatBytes,
     formatDuration,
     FormatSelect,
+    LibraryRootSetting,
     RekordboxImportSteps,
     SelectableList,
     SeratoOverwriteOptions,
@@ -1072,6 +1073,11 @@ export const SyncDownload = () => {
                         tooltip="Where the Rekordbox XML is saved. By default it goes alongside your downloaded tracks."
                     />
                 )}
+
+                {/* This device's own library folder (library roots, subbox-app#172).
+                    Per device, stored in main-process settings; the download plan does
+                    not use it yet -- that is stage 3. */}
+                <LibraryRootSetting />
 
                 {/* Where the tracks will end up (web only): the browser can't tell us
                     this, so the Rekordbox XML's track locations depend on the user
