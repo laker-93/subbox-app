@@ -1,6 +1,11 @@
 import axios, { isAxiosError } from 'axios';
 import * as fs from 'fs';
 
+import {
+    CONNECTION_WAIT_MS,
+    waitForServer,
+    withNetworkRetry,
+} from '/@/main/features/core/sync/network-retry';
 import { httpsAgent, PymixAuth, withPymixAuth } from '/@/main/features/core/sync/pymix-auth';
 
 /**
@@ -63,14 +68,16 @@ export async function findWhollyStaged(args: {
     try {
         for (let i = 0; i < items.length; i += STAGED_SIZES_CHUNK) {
             const chunk = items.slice(i, i + STAGED_SIZES_CHUNK);
-            const res = await withPymixAuth<{ sizes: Record<string, null | number> }>(
-                pymixAuth,
-                (cookie) =>
+            // Retried through a dropped connection: giving up here re-sends the
+            // whole library.
+            const res = await withNetworkRetry(() =>
+                withPymixAuth<{ sizes: Record<string, null | number> }>(pymixAuth, (cookie) =>
                     axios.post(
                         `${pymixUrl}/sync/staged_sizes`,
                         { paths: chunk.map((c) => c.stagingPath) },
                         { headers: { Cookie: cookie }, httpsAgent },
                     ),
+                ),
             );
             for (const { localPath, stagingPath } of chunk) {
                 const serverSize = res.data.sizes[stagingPath];
@@ -106,13 +113,25 @@ export async function runMapMeta(args: {
 }): Promise<void> {
     const { onProgress, pymixAuth, pymixUrl, tracks } = args;
 
+    // Not while the server is unreachable: the upload before this may have just
+    // ridden out a dropped connection, and a map_meta sent into it can only fail
+    // (subbox-app#203).
+    if (!(await waitForServer(pymixUrl))) {
+        throw mapMetaFailed(
+            `couldn't reach the server for ${CONNECTION_WAIT_MS / 60_000} minutes. ` +
+                'Check your connection, then finish the import.',
+        );
+    }
+
     let jobId: string;
     try {
-        const res = await withPymixAuth<{ job_id: string; n_tracks: number }>(pymixAuth, (cookie) =>
-            axios.post(
-                `${pymixUrl}/sync/map_meta`,
-                { tracks },
-                { headers: { Cookie: cookie }, httpsAgent },
+        const res = await withNetworkRetry(() =>
+            withPymixAuth<{ job_id: string; n_tracks: number }>(pymixAuth, (cookie) =>
+                axios.post(
+                    `${pymixUrl}/sync/map_meta`,
+                    { tracks },
+                    { headers: { Cookie: cookie }, httpsAgent },
+                ),
             ),
         );
         jobId = res.data.job_id;
@@ -130,12 +149,14 @@ export async function runMapMeta(args: {
         await sleep(POLL_INTERVAL_MS);
         let prog: MapMetaProgress;
         try {
-            const res = await withPymixAuth<MapMetaProgress>(pymixAuth, (cookie) =>
-                axios.get(`${pymixUrl}/sync/map_meta/progress`, {
-                    headers: { Cookie: cookie },
-                    httpsAgent,
-                    params: { job_id: jobId },
-                }),
+            const res = await withNetworkRetry(() =>
+                withPymixAuth<MapMetaProgress>(pymixAuth, (cookie) =>
+                    axios.get(`${pymixUrl}/sync/map_meta/progress`, {
+                        headers: { Cookie: cookie },
+                        httpsAgent,
+                        params: { job_id: jobId },
+                    }),
+                ),
             );
             prog = res.data;
             consecutiveErrors = 0;

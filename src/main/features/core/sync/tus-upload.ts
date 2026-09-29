@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as tus from 'tus-js-client';
 
+import { TUS_RETRY_DELAYS_MS } from '/@/main/features/core/sync/network-retry';
 import { FbAuth, fbRequest } from '/@/main/features/core/sync/pymix-auth';
 
 // ── TUS upload to filebrowser ───────────────────────────────────────────────
@@ -129,6 +130,8 @@ export async function uploadFileViaTus(args: {
                 onError: reject,
                 onProgress,
                 onSuccess: () => resolve(),
+                // Ride out a dropped connection mid-file (subbox-app#203).
+                retryDelays: TUS_RETRY_DELAYS_MS,
                 uploadSize: fileSize,
                 uploadUrl,
             });
