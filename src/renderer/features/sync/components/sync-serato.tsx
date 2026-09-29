@@ -74,6 +74,7 @@ type SyncStep =
     | 'parsing'
     | 'preview'
     | 'storage-exceeded'
+    | 'tagging-failed'
     | 'upload-failed'
     | 'upload-forbidden'
     | 'uploading';
@@ -203,108 +204,125 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
 
     const handleSelectAll = useCallback(() => selectAll(crates.map(crateKey)), [crates, selectAll]);
 
-    const handleUpload = useCallback(async () => {
-        if (!ipc || !seratoFolder || !currentServer) return;
+    // `playlistsOnly` sends the crates and no audio. It is also how a run whose tagging
+    // failed is finished: the import stages what the tagging did record.
+    const runUpload = useCallback(
+        async (playlistsOnly: boolean) => {
+            if (!ipc || !seratoFolder || !currentServer) return;
 
-        setStep('uploading');
-        setError(null);
-        setUploadResult(null);
-        setProgress(null);
-
-        try {
-            // Ask before reading tags off a few thousand files. This is the cheap,
-            // approximate check — the main process does an exact one once it knows
-            // how many of those tracks the library is actually missing.
-            if (!cratesOnly) {
-                try {
-                    const storage = await PymixController.checkStorage({
-                        baseUrl: urlConfig.pymix,
-                        query: { uploadSizeBytes: 0 },
-                    });
-                    if (!storage.allowed) {
-                        setStorageInfo({
-                            currentUsageBytes: storage.currentUsageBytes,
-                            maxStorageBytes: storage.maxStorageBytes,
-                        });
-                        setStep('storage-exceeded');
-                        return;
-                    }
-                } catch (storageErr) {
-                    // The main process checks again with a real figure; don't block on this.
-                    console.warn(
-                        '[storage-check] pre-flight threw — proceeding anyway:',
-                        storageErr,
-                    );
-                }
-            }
-
-            const result: SeratoUploadResult = await ipc.invoke('sync:upload-from-crates', {
-                crateKeys: crates
-                    .filter((c) => selectedCrates.has(crateKey(c)))
-                    .map((c) => [...c.path, c.name]),
-                cratesOnly,
-                filebrowserToken: currentServer.fbToken,
-                filebrowserUrl: urlConfig.filebrowser,
-                pymixUrl: urlConfig.pymix,
-                seratoFolder,
-                // serverId/username let the main process re-login for a fresh
-                // filebrowser token or pymix cookie if this outlives the current one.
-                serverId: currentServer.id,
-                username: currentServer.username,
-            });
-            setUploadResult(result);
-
-            // Every upload failed, so there is nothing of this run's to import.
-            // pymix's beet import takes the whole uploads/ directory, not just this
-            // run's files, so starting the job here imports whatever an earlier run
-            // left behind (laker-93/subbox-app#138). "Playlists only" uploads no
-            // audio, so `failed` is always empty there and it still imports.
-            if (result.uploaded === 0 && (result.failed?.length ?? 0) > 0) {
-                setStep('upload-failed');
-                return;
-            }
+            setStep('uploading');
+            setError(null);
+            setUploadResult(null);
+            setProgress(null);
 
             try {
-                // The manifest goes with the import, not with the upload: it is what
-                // tells pymix which subbox track each crate entry means, and it covers
-                // tracks that were already in the library as well as ones just sent.
-                const importResult = await PymixController.seratoImport({
-                    baseUrl: urlConfig.pymix,
-                    body: { track_identities: result.trackIdentities },
-                });
-
-                const newJobId = importResult?.job_id;
-                if (!newJobId) {
-                    throw new Error(`Import failed: ${importResult?.reason || 'Unknown error'}`);
+                // Ask before reading tags off a few thousand files. This is the cheap,
+                // approximate check — the main process does an exact one once it knows
+                // how many of those tracks the library is actually missing.
+                if (!playlistsOnly) {
+                    try {
+                        const storage = await PymixController.checkStorage({
+                            baseUrl: urlConfig.pymix,
+                            query: { uploadSizeBytes: 0 },
+                        });
+                        if (!storage.allowed) {
+                            setStorageInfo({
+                                currentUsageBytes: storage.currentUsageBytes,
+                                maxStorageBytes: storage.maxStorageBytes,
+                            });
+                            setStep('storage-exceeded');
+                            return;
+                        }
+                    } catch (storageErr) {
+                        // The main process checks again with a real figure; don't block on this.
+                        console.warn(
+                            '[storage-check] pre-flight threw — proceeding anyway:',
+                            storageErr,
+                        );
+                    }
                 }
-                setJobId(newJobId);
-                setStep('importing');
-                setImportProgress(null);
-            } catch (importErr: any) {
-                if (isUploadForbidden(importErr)) {
+
+                const result: SeratoUploadResult = await ipc.invoke('sync:upload-from-crates', {
+                    crateKeys: crates
+                        .filter((c) => selectedCrates.has(crateKey(c)))
+                        .map((c) => [...c.path, c.name]),
+                    cratesOnly: playlistsOnly,
+                    filebrowserToken: currentServer.fbToken,
+                    filebrowserUrl: urlConfig.filebrowser,
+                    pymixUrl: urlConfig.pymix,
+                    seratoFolder,
+                    // serverId/username let the main process re-login for a fresh
+                    // filebrowser token or pymix cookie if this outlives the current one.
+                    serverId: currentServer.id,
+                    username: currentServer.username,
+                });
+                setUploadResult(result);
+
+                // Every upload failed, so there is nothing of this run's to import.
+                // pymix's beet import takes the whole uploads/ directory, not just this
+                // run's files, so starting the job here imports whatever an earlier run
+                // left behind (laker-93/subbox-app#138). "Playlists only" uploads no
+                // audio, so `failed` is always empty there and it still imports.
+                if (result.uploaded === 0 && (result.failed?.length ?? 0) > 0) {
+                    setStep('upload-failed');
+                    return;
+                }
+
+                try {
+                    // The manifest goes with the import, not with the upload: it is what
+                    // tells pymix which subbox track each crate entry means, and it covers
+                    // tracks that were already in the library as well as ones just sent.
+                    const importResult = await PymixController.seratoImport({
+                        baseUrl: urlConfig.pymix,
+                        body: { track_identities: result.trackIdentities },
+                    });
+
+                    const newJobId = importResult?.job_id;
+                    if (!newJobId) {
+                        throw new Error(
+                            `Import failed: ${importResult?.reason || 'Unknown error'}`,
+                        );
+                    }
+                    setJobId(newJobId);
+                    setStep('importing');
+                    setImportProgress(null);
+                } catch (importErr: any) {
+                    if (isUploadForbidden(importErr)) {
+                        setStep('upload-forbidden');
+                        return;
+                    }
+                    setError(importErr?.message || 'Import failed');
+                    setStep('done');
+                }
+            } catch (err: any) {
+                if (isUploadForbidden(err)) {
                     setStep('upload-forbidden');
                     return;
                 }
-                setError(importErr?.message || 'Import failed');
-                setStep('done');
+                const msg = err?.message || 'Upload failed';
+                // Tracks uploaded, tagging unfinished: finish the import rather than
+                // upload again (laker-93/pymix#237).
+                const mapMetaPrefix = 'MAP_META_FAILED:';
+                const mapMetaIdx = msg.indexOf(mapMetaPrefix);
+                const storagePrefix = 'STORAGE_LIMIT_EXCEEDED:';
+                const idx = msg.indexOf(storagePrefix);
+                if (mapMetaIdx !== -1) {
+                    setError(msg.slice(mapMetaIdx + mapMetaPrefix.length));
+                    setStep('tagging-failed');
+                } else if (idx !== -1) {
+                    setError(msg.slice(idx + storagePrefix.length));
+                    setStep('storage-exceeded');
+                } else {
+                    setError(msg);
+                    setStep('preview');
+                }
             }
-        } catch (err: any) {
-            if (isUploadForbidden(err)) {
-                setStep('upload-forbidden');
-                return;
-            }
-            const msg = err?.message || 'Upload failed';
-            const storagePrefix = 'STORAGE_LIMIT_EXCEEDED:';
-            const idx = msg.indexOf(storagePrefix);
-            if (idx !== -1) {
-                setError(msg.slice(idx + storagePrefix.length));
-                setStep('storage-exceeded');
-            } else {
-                setError(msg);
-                setStep('preview');
-            }
-        }
-    }, [crates, cratesOnly, currentServer, selectedCrates, seratoFolder]);
+        },
+        [crates, currentServer, selectedCrates, seratoFolder],
+    );
+
+    const handleUpload = useCallback(() => runUpload(cratesOnly), [cratesOnly, runUpload]);
+    const handleFinishImport = useCallback(() => runUpload(true), [runUpload]);
 
     // Poll import progress. Same contract as the Rekordbox flow: the POST only
     // starts a job, so the job is the only thing that can say it finished.
@@ -556,7 +574,9 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                   done: 'Complete!',
                   error: 'Error',
                   identifying: `Identifying tracks (${progress.total})...`,
-                  'mapping-metadata': 'Mapping metadata...',
+                  'mapping-metadata': progress.total
+                      ? `Tagging tracks (${progress.uploaded}/${progress.total})...`
+                      : 'Tagging tracks...',
                   uploading: `Uploading tracks (${Math.floor(progress.uploaded)}/${progress.total})...`,
               }[progress.phase]
             : 'Reading your crates...';
@@ -613,6 +633,47 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
     }
 
     // ── Upload failed (nothing uploaded, import not started) ───────────────
+    if (step === 'tagging-failed') {
+        return (
+            <SyncResult
+                actionLabel="Finish Import"
+                onAction={handleFinishImport}
+                secondaryAction={
+                    <Stack gap="xs">
+                        <CopyButton
+                            timeout={2000}
+                            value={`Serato upload: tagging failed (import not started)\n${error ?? ''}`}
+                        >
+                            {({ copied, copy }) => (
+                                <Button
+                                    fullWidth
+                                    leftSection={<Icon icon={copied ? 'check' : 'clipboardCopy'} />}
+                                    onClick={copy}
+                                    variant="subtle"
+                                >
+                                    {copied ? 'Copied' : 'Copy details'}
+                                </Button>
+                            )}
+                        </CopyButton>
+                        <Button fullWidth onClick={() => setStep('preview')} variant="default">
+                            {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
+                        </Button>
+                    </Stack>
+                }
+                status="warn"
+                title="Tagging Failed"
+            >
+                <Text size="sm" ta="center">
+                    Your tracks were uploaded, but the server couldn&apos;t finish preparing them
+                    for import: {error}
+                </Text>
+                <Text c="dimmed" size="xs" ta="center">
+                    Finish Import brings in what was prepared without uploading anything again.
+                </Text>
+            </SyncResult>
+        );
+    }
+
     if (step === 'upload-failed' && uploadResult) {
         const failed = uploadResult.failed ?? [];
         const diagnostics = [

@@ -48,6 +48,7 @@ type SyncStep =
     | 'parsing'
     | 'preview'
     | 'storage-exceeded'
+    | 'tagging-failed'
     | 'upload-failed'
     | 'upload-forbidden'
     | 'uploading';
@@ -161,153 +162,169 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
         [playlists, selectAll],
     );
 
-    const handleUpload = useCallback(async () => {
-        if (!ipc || !xmlPath || !currentServer) return;
+    // `xmlOnly` is the metadata-only path: upload the XML and import against the tracks
+    // already on the server. It is also how a run whose tagging failed is finished.
+    const runUpload = useCallback(
+        async (xmlOnly: boolean) => {
+            if (!ipc || !xmlPath || !currentServer) return;
 
-        // In metadata-only mode with nothing selected, null tells the backend to process all tracks
-        const selectedPlaylistPaths =
-            metadataOnly && selectedPlaylists.size === 0
-                ? null
-                : playlists
-                      .filter((p) => selectedPlaylists.has(playlistKey(p)))
-                      .map((p) => [...p.path, p.name]);
+            // In metadata-only mode with nothing selected, null tells the backend to process all tracks
+            const selectedPlaylistPaths =
+                xmlOnly && selectedPlaylists.size === 0
+                    ? null
+                    : playlists
+                          .filter((p) => selectedPlaylists.has(playlistKey(p)))
+                          .map((p) => [...p.path, p.name]);
 
-        setStep('uploading');
-        setError(null);
-        setUploadResult(null);
+            setStep('uploading');
+            setError(null);
+            setUploadResult(null);
 
-        // The name the XML was uploaded under, so pymix imports this run's XML and
-        // not a leftover of an earlier one beside it (laker-93/pymix#192).
-        let xmlFileName: string;
+            // The name the XML was uploaded under, so pymix imports this run's XML and
+            // not a leftover of an earlier one beside it (laker-93/pymix#192).
+            let xmlFileName: string;
 
-        try {
-            if (metadataOnly) {
-                // XML-only path: upload XML file then trigger import without processing tracks
-                ({ xmlFileName } = await ipc.invoke('sync:upload-xml', {
-                    filebrowserToken: currentServer.fbToken,
-                    filebrowserUrl: urlConfig.filebrowser,
-                    // serverId/username let the main process re-login for a fresh
-                    // filebrowser token if this upload outlives the current one.
-                    serverId: currentServer.id,
-                    username: currentServer.username,
-                    xmlPath,
-                }));
+            try {
+                if (xmlOnly) {
+                    // XML-only path: upload XML file then trigger import without processing tracks
+                    ({ xmlFileName } = await ipc.invoke('sync:upload-xml', {
+                        filebrowserToken: currentServer.fbToken,
+                        filebrowserUrl: urlConfig.filebrowser,
+                        // serverId/username let the main process re-login for a fresh
+                        // filebrowser token if this upload outlives the current one.
+                        serverId: currentServer.id,
+                        username: currentServer.username,
+                        xmlPath,
+                    }));
 
-                setUploadResult({ dropped: [], failed: [], skipped: 0, uploaded: 0 });
-            } else {
-                // Pre-flight storage check (renderer-side, works for both Electron and web)
-                try {
-                    const storage = await PymixController.checkStorage({
-                        baseUrl: urlConfig.pymix,
-                        query: { uploadSizeBytes: 0 },
+                    setUploadResult({ dropped: [], failed: [], skipped: 0, uploaded: 0 });
+                } else {
+                    // Pre-flight storage check (renderer-side, works for both Electron and web)
+                    try {
+                        const storage = await PymixController.checkStorage({
+                            baseUrl: urlConfig.pymix,
+                            query: { uploadSizeBytes: 0 },
+                        });
+
+                        console.log('[storage-check] pre-flight response:', storage);
+
+                        if (!storage.allowed) {
+                            console.warn('[storage-check] pre-flight blocked:', {
+                                allowed: storage.allowed,
+                                currentUsageBytes: storage.currentUsageBytes,
+                                maxStorageBytes: storage.maxStorageBytes,
+                                reason: storage.reason,
+                                remainingBytes: storage.remainingBytes,
+                            });
+                            setStorageInfo({
+                                currentUsageBytes: storage.currentUsageBytes,
+                                maxStorageBytes: storage.maxStorageBytes,
+                                remainingBytes: storage.remainingBytes,
+                            });
+                            setStep('storage-exceeded');
+                            return;
+                        }
+                    } catch (storageErr) {
+                        console.warn(
+                            '[storage-check] pre-flight threw — proceeding anyway:',
+                            storageErr,
+                        );
+                        // If the check fails, proceed anyway — the main process will do a precise check
+                    }
+
+                    const result = await ipc.invoke('sync:upload-from-xml', {
+                        filebrowserToken: currentServer.fbToken,
+                        filebrowserUrl: urlConfig.filebrowser,
+                        playlistNames: playlists
+                            .filter((p) => selectedPlaylists.has(playlistKey(p)))
+                            .map((p) => p.name),
+                        pymixUrl: urlConfig.pymix,
+                        // serverId lets the main process re-login for a fresh pymix session
+                        // cookie if this upload outlives the current one.
+                        serverId: currentServer.id,
+                        username: currentServer.username,
+                        xmlPath,
                     });
+                    console.log('Upload result:', result);
+                    setUploadResult(result);
+                    xmlFileName = result.xmlFileName;
 
-                    console.log('[storage-check] pre-flight response:', storage);
-
-                    if (!storage.allowed) {
-                        console.warn('[storage-check] pre-flight blocked:', {
-                            allowed: storage.allowed,
-                            currentUsageBytes: storage.currentUsageBytes,
-                            maxStorageBytes: storage.maxStorageBytes,
-                            reason: storage.reason,
-                            remainingBytes: storage.remainingBytes,
-                        });
-                        setStorageInfo({
-                            currentUsageBytes: storage.currentUsageBytes,
-                            maxStorageBytes: storage.maxStorageBytes,
-                            remainingBytes: storage.remainingBytes,
-                        });
-                        setStep('storage-exceeded');
+                    // Every upload failed, so there is nothing of this run's to import.
+                    // pymix imports whatever is sitting in the user's uploads/ directory,
+                    // not just this run's files, so triggering it here imported leftovers
+                    // of an earlier run — untagged, with no subbox_id — into the library
+                    // while this run's playlists matched nothing (laker-93/subbox-app#138).
+                    if (result.uploaded === 0 && result.failed.length > 0) {
+                        setStep('upload-failed');
                         return;
                     }
-                } catch (storageErr) {
-                    console.warn(
-                        '[storage-check] pre-flight threw — proceeding anyway:',
-                        storageErr,
-                    );
-                    // If the check fails, proceed anyway — the main process will do a precise check
                 }
 
-                const result = await ipc.invoke('sync:upload-from-xml', {
-                    filebrowserToken: currentServer.fbToken,
-                    filebrowserUrl: urlConfig.filebrowser,
-                    playlistNames: playlists
-                        .filter((p) => selectedPlaylists.has(playlistKey(p)))
-                        .map((p) => p.name),
-                    pymixUrl: urlConfig.pymix,
-                    // serverId lets the main process re-login for a fresh pymix session
-                    // cookie if this upload outlives the current one.
-                    serverId: currentServer.id,
-                    username: currentServer.username,
-                    xmlPath,
-                });
-                console.log('Upload result:', result);
-                setUploadResult(result);
-                xmlFileName = result.xmlFileName;
+                // Trigger rekordbox import via pymix API
+                try {
+                    const importResult = await PymixController.rbImport({
+                        baseUrl: urlConfig.pymix,
+                        body: {
+                            playlistNames: selectedPlaylistPaths,
+                            xmlName: xmlFileName,
+                        },
+                    });
 
-                // Every upload failed, so there is nothing of this run's to import.
-                // pymix imports whatever is sitting in the user's uploads/ directory,
-                // not just this run's files, so triggering it here imported leftovers
-                // of an earlier run — untagged, with no subbox_id — into the library
-                // while this run's playlists matched nothing (laker-93/subbox-app#138).
-                if (result.uploaded === 0 && result.failed.length > 0) {
-                    setStep('upload-failed');
-                    return;
+                    const jobId = importResult?.job_id;
+                    if (!jobId) {
+                        const reason = importResult?.reason || 'Unknown error';
+                        throw new Error(`Import failed: ${reason}`);
+                    }
+
+                    // No tracks to import does NOT mean nothing left to do: pymix runs the
+                    // playlist and metadata passes for a metadata-only import too, and this
+                    // used to return "Success" the moment the upload came back — before the
+                    // server had created a single playlist (laker-93/subbox-app#55). Poll the
+                    // job either way; it is the only thing that can tell us it finished.
+                    setJobId(jobId);
+                    setStep('importing');
+                    setImportProgress(null);
+                } catch (importErr: any) {
+                    // A refused write is an account limit, not a failure — say so instead of
+                    // showing "Import Failed" over something that was never going to work.
+                    if (isUploadForbidden(importErr)) {
+                        setStep('upload-forbidden');
+                        return;
+                    }
+                    setError(importErr?.message || 'Import failed');
+                    setStep('done');
                 }
-            }
-
-            // Trigger rekordbox import via pymix API
-            try {
-                const importResult = await PymixController.rbImport({
-                    baseUrl: urlConfig.pymix,
-                    body: {
-                        playlistNames: selectedPlaylistPaths,
-                        xmlName: xmlFileName,
-                    },
-                });
-
-                const jobId = importResult?.job_id;
-                if (!jobId) {
-                    const reason = importResult?.reason || 'Unknown error';
-                    throw new Error(`Import failed: ${reason}`);
-                }
-
-                // No tracks to import does NOT mean nothing left to do: pymix runs the
-                // playlist and metadata passes for a metadata-only import too, and this
-                // used to return "Success" the moment the upload came back — before the
-                // server had created a single playlist (laker-93/subbox-app#55). Poll the
-                // job either way; it is the only thing that can tell us it finished.
-                setJobId(jobId);
-                setStep('importing');
-                setImportProgress(null);
-            } catch (importErr: any) {
-                // A refused write is an account limit, not a failure — say so instead of
-                // showing "Import Failed" over something that was never going to work.
-                if (isUploadForbidden(importErr)) {
+            } catch (err: any) {
+                if (isUploadForbidden(err)) {
                     setStep('upload-forbidden');
                     return;
                 }
-                setError(importErr?.message || 'Import failed');
-                setStep('done');
-            }
-        } catch (err: any) {
-            if (isUploadForbidden(err)) {
-                setStep('upload-forbidden');
-                return;
-            }
 
-            const msg = err?.message || 'Upload failed';
-            const storagePrefix = 'STORAGE_LIMIT_EXCEEDED:';
-            const storagePrefixIdx = msg.indexOf(storagePrefix);
-            if (storagePrefixIdx !== -1) {
-                setError(msg.slice(storagePrefixIdx + storagePrefix.length));
-                setStep('storage-exceeded');
-            } else {
-                setError(msg);
-                setStep('preview');
+                const msg = err?.message || 'Upload failed';
+                // The tracks are on the server but tagging them didn't finish, so the way
+                // on is finishing the import, not uploading again (laker-93/pymix#237).
+                // Matched as a prefix for the same reason as the storage one below.
+                const mapMetaPrefix = 'MAP_META_FAILED:';
+                const mapMetaPrefixIdx = msg.indexOf(mapMetaPrefix);
+                const storagePrefix = 'STORAGE_LIMIT_EXCEEDED:';
+                const storagePrefixIdx = msg.indexOf(storagePrefix);
+                if (mapMetaPrefixIdx !== -1) {
+                    setError(msg.slice(mapMetaPrefixIdx + mapMetaPrefix.length));
+                    setStep('tagging-failed');
+                } else if (storagePrefixIdx !== -1) {
+                    setError(msg.slice(storagePrefixIdx + storagePrefix.length));
+                    setStep('storage-exceeded');
+                } else {
+                    setError(msg);
+                    setStep('preview');
+                }
             }
-        }
-    }, [currentServer, metadataOnly, playlists, selectedPlaylists, xmlPath]);
+        },
+        [currentServer, playlists, selectedPlaylists, xmlPath],
+    );
+
+    const handleUpload = useCallback(() => runUpload(metadataOnly), [metadataOnly, runUpload]);
+    const handleFinishImport = useCallback(() => runUpload(true), [runUpload]);
 
     // Poll import progress when in importing step
     useEffect(() => {
@@ -547,7 +564,9 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                   done: 'Complete!',
                   error: 'Error',
                   importing: 'Starting import...',
-                  'mapping-metadata': 'Mapping metadata...',
+                  'mapping-metadata': progress.total
+                      ? `Tagging tracks (${progress.uploaded}/${progress.total})...`
+                      : 'Tagging tracks...',
                   matching: 'Matching tracks with cloud library...',
                   uploading: `Uploading tracks (${Math.floor(progress.uploaded)}/${progress.total})...`,
               }[progress.phase]
@@ -606,6 +625,48 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                 description="Uploading a Rekordbox library writes to your collection, and this account can't. Your own Sub-box library imports your playlists, cue points and all."
                 title="Rekordbox upload needs your own library"
             />
+        );
+    }
+
+    // ── Tagging failed (tracks uploaded, import not started) ───────────────
+    if (step === 'tagging-failed') {
+        return (
+            <SyncResult
+                actionLabel="Finish Import"
+                onAction={handleFinishImport}
+                secondaryAction={
+                    <Stack gap="xs">
+                        <CopyButton
+                            timeout={2000}
+                            value={`Rekordbox upload: tagging failed (import not started)\n${error ?? ''}`}
+                        >
+                            {({ copied, copy }) => (
+                                <Button
+                                    fullWidth
+                                    leftSection={<Icon icon={copied ? 'check' : 'clipboardCopy'} />}
+                                    onClick={copy}
+                                    variant="subtle"
+                                >
+                                    {copied ? 'Copied' : 'Copy details'}
+                                </Button>
+                            )}
+                        </CopyButton>
+                        <Button fullWidth onClick={() => setStep('preview')} variant="default">
+                            {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
+                        </Button>
+                    </Stack>
+                }
+                status="warn"
+                title="Tagging Failed"
+            >
+                <Text size="sm" ta="center">
+                    Your tracks were uploaded, but the server couldn&apos;t finish preparing them
+                    for import: {error}
+                </Text>
+                <Text c="dimmed" size="xs" ta="center">
+                    Finish Import brings in what was prepared without uploading anything again.
+                </Text>
+            </SyncResult>
         );
     }
 
