@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './mode-toggle.module.css';
 
+import { useUploadRunActive } from '/@/renderer/features/sync/store/upload-run-store';
 import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import { useAppMode, useAppStoreActions } from '/@/renderer/store';
 import { AppMode } from '/@/renderer/store/app.store';
@@ -9,6 +10,7 @@ import { Button } from '/@/shared/components/button/button';
 import { DropdownMenu } from '/@/shared/components/dropdown-menu/dropdown-menu';
 import { Icon } from '/@/shared/components/icon/icon';
 import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
+import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 
 interface ModeToggleProps {
@@ -19,6 +21,9 @@ export const ModeToggle = ({ withAppMenu = true }: ModeToggleProps) => {
     const { t } = useTranslation();
     const appMode = useAppMode();
     const { setAppMode } = useAppStoreActions();
+    // An upload keeps going while the user is in the library; this is how they can
+    // tell without opening Sync.
+    const uploadRunning = useUploadRunActive();
 
     return (
         <div className={styles.modeToggleBar}>
@@ -60,15 +65,25 @@ export const ModeToggle = ({ withAppMenu = true }: ModeToggleProps) => {
                     {
                         label: (
                             <Tooltip
-                                label={t('page.modeToggle.syncTooltip', {
-                                    defaultValue:
-                                        'Move music between your DJ software and Sub-box. Upload tracks from Rekordbox or Serato, or download playlists back out as a Rekordbox XML or Serato crates.',
-                                })}
+                                label={
+                                    uploadRunning
+                                        ? t('page.modeToggle.syncRunningTooltip', {
+                                              defaultValue:
+                                                  'An upload is running. Open Sync to see how it is getting on.',
+                                          })
+                                        : t('page.modeToggle.syncTooltip', {
+                                              defaultValue:
+                                                  'Move music between your DJ software and Sub-box. Upload tracks from Rekordbox or Serato, or download playlists back out as a Rekordbox XML or Serato crates.',
+                                          })
+                                }
                                 multiline
                                 openDelay={300}
                                 w={260}
                             >
-                                <span>
+                                <span
+                                    style={{ alignItems: 'center', display: 'inline-flex', gap: 4 }}
+                                >
+                                    {uploadRunning && <Spinner size={10} />}
                                     {t('page.sidebar.sync', {
                                         defaultValue: 'Sync',
                                         postProcess: 'titleCase',

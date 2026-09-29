@@ -8,6 +8,7 @@ import { SyncDownload } from '/@/renderer/features/sync/components/sync-download
 import { SyncExternalDrive } from '/@/renderer/features/sync/components/sync-external-drive';
 import { SyncUpload } from '/@/renderer/features/sync/components/sync-upload';
 import { SyncWatch } from '/@/renderer/features/sync/components/sync-watch';
+import { useUploadRunActive } from '/@/renderer/features/sync/store/upload-run-store';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
@@ -20,6 +21,7 @@ export const SyncModePlaceholder = () => {
     const electron = isElectron();
     const isDemo = useIsDemoSession();
     const [tab, setTab] = useState<SyncTab>('upload');
+    const uploadRunning = useUploadRunActive();
 
     // Upload and Watch both write to the library, which pymix blocks for `demo`
     // (`require_uploader`). Marking the tabs up front is the point: the user should see
@@ -31,13 +33,21 @@ export const SyncModePlaceholder = () => {
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <Group gap="xs" p="sm" style={{ borderBottom: '1px solid var(--theme-border-color)' }}>
                 <Button
-                    leftSection={isDemo ? <Icon icon="lock" size="sm" /> : undefined}
+                    leftSection={
+                        isDemo ? (
+                            <Icon icon="lock" size="sm" />
+                        ) : uploadRunning ? (
+                            <Spinner size={12} />
+                        ) : undefined
+                    }
                     onClick={() => setTab('upload')}
                     size="sm"
                     tooltip={{
                         label: isDemo
                             ? lockedTooltip
-                            : 'Add music to Sub-box from Rekordbox or Serato. Pick the playlists or crates you want and upload their tracks, cue points and all.',
+                            : uploadRunning
+                              ? 'An upload is running. It carries on while you use the rest of the app; come back here to see how it is getting on.'
+                              : 'Add music to Sub-box from Rekordbox or Serato. Pick the playlists or crates you want and upload their tracks, cue points and all.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
