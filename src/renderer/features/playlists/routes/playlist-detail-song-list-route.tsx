@@ -18,7 +18,7 @@ import { useUpdatePlaylist } from '/@/renderer/features/playlists/mutations/upda
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { ListWithSidebarContainer } from '/@/renderer/features/shared/components/list-with-sidebar-container';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
-import { DeletePlaylistConfirmText } from '/@/renderer/features/trash/components/delete-confirm-text';
+import { useDeletesToTrash } from '/@/renderer/features/trash/components/delete-confirm-text';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
     PlaylistTarget,
@@ -165,39 +165,36 @@ const PlaylistDetailSongListRoute = () => {
         });
     };
 
+    const deletesToTrash = useDeletesToTrash();
+    const deletePlaylist = () => {
+        if (!detailQuery?.data) return;
+        deletePlaylistMutation?.mutate(
+            {
+                apiClientProps: { serverId: detailQuery.data._serverId },
+                query: { id: detailQuery.data.id },
+            },
+            {
+                onError: (err) => {
+                    toast.error({
+                        message: err.message,
+                        title: t('error.genericError', {
+                            postProcess: 'sentenceCase',
+                        }),
+                    });
+                },
+                onSuccess: () => {
+                    navigate(AppRoute.PLAYLISTS, { replace: true });
+                },
+            },
+        );
+        closeAllModals();
+    };
+
     const openDeletePlaylistModal = () => {
         openModal({
             children: (
-                <ConfirmModal
-                    onConfirm={() => {
-                        if (!detailQuery?.data) return;
-                        deletePlaylistMutation?.mutate(
-                            {
-                                apiClientProps: { serverId: detailQuery.data._serverId },
-                                query: { id: detailQuery.data.id },
-                            },
-                            {
-                                onError: (err) => {
-                                    toast.error({
-                                        message: err.message,
-                                        title: t('error.genericError', {
-                                            postProcess: 'sentenceCase',
-                                        }),
-                                    });
-                                },
-                                onSuccess: () => {
-                                    navigate(AppRoute.PLAYLISTS, { replace: true });
-                                },
-                            },
-                        );
-                        closeAllModals();
-                    }}
-                >
-                    <DeletePlaylistConfirmText
-                        playlists={detailQuery?.data ? [detailQuery.data] : []}
-                    >
-                        <Text>Are you sure you want to delete this playlist?</Text>
-                    </DeletePlaylistConfirmText>
+                <ConfirmModal onConfirm={deletePlaylist}>
+                    <Text>Are you sure you want to delete this playlist?</Text>
                 </ConfirmModal>
             ),
             title: t('form.deletePlaylist.title', { postProcess: 'sentenceCase' }),
@@ -274,7 +271,8 @@ const PlaylistDetailSongListRoute = () => {
                             setIsQueryBuilderExpanded(true);
                         }
                     }}
-                    onDelete={() => openDeletePlaylistModal()}
+                    // Subbox: straight to the trash, with Undo; no confirm (#182).
+                    onDelete={() => (deletesToTrash ? deletePlaylist() : openDeletePlaylistModal())}
                     onToggleQueryBuilder={handleToggleShowQueryBuilder}
                 />
 
