@@ -233,6 +233,9 @@ const FolderRow = ({
         isOpen,
         node,
     });
+    // Radix hands focus back to the row when the menu closes, which is after Rename
+    // has mounted the name input; steal it back, or keys go to global hotkeys (#180).
+    const renameChosen = useRef(false);
 
     const row = (
         <div
@@ -288,7 +291,14 @@ const FolderRow = ({
     return (
         <ContextMenu>
             <ContextMenu.Target>{row}</ContextMenu.Target>
-            <ContextMenu.Content>
+            <ContextMenu.Content
+                onCloseAutoFocus={(e) => {
+                    if (!renameChosen.current) return;
+                    renameChosen.current = false;
+                    e.preventDefault();
+                    ref.current?.querySelector('input')?.focus();
+                }}
+            >
                 <ContextMenu.Item leftIcon="add" onSelect={() => onNewFolder(node.node_id)}>
                     {t('form.playlistTree.newFolderInside', { postProcess: 'sentenceCase' })}
                 </ContextMenu.Item>
@@ -299,7 +309,13 @@ const FolderRow = ({
                     {t('form.playlistTree.newPlaylistInside', { postProcess: 'sentenceCase' })}
                 </ContextMenu.Item>
                 <ContextMenu.Divider />
-                <ContextMenu.Item leftIcon="edit" onSelect={() => onRenameStart(node.node_id)}>
+                <ContextMenu.Item
+                    leftIcon="edit"
+                    onSelect={() => {
+                        renameChosen.current = true;
+                        onRenameStart(node.node_id);
+                    }}
+                >
                     {t('form.playlistTree.rename', { postProcess: 'sentenceCase' })}
                 </ContextMenu.Item>
                 <ContextMenu.Item

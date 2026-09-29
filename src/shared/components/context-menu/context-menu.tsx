@@ -30,7 +30,7 @@ export const ContextMenuContext = createContext<ContextMenuContext | null>(null)
 interface ContentProps {
     bottomStickyContent?: ReactNode;
     children: ReactNode;
-    onCloseAutoFocus?: (event: FocusEvent) => void;
+    onCloseAutoFocus?: (event: Event) => void;
     onEscapeKeyDown?: (event: KeyboardEvent) => void;
     onFocusOutside?: (event: FocusEvent) => void;
     onPointerDownOutside?: (event: PointerEvent) => void;
@@ -84,14 +84,18 @@ export function ContextMenu(props: ContextMenuProps) {
 }
 
 function Content(props: ContentProps) {
-    const { bottomStickyContent, children, stickyContent } = props;
+    const { bottomStickyContent, children, onCloseAutoFocus, stickyContent } = props;
     const { open } = useContext(ContextMenuContext) as ContextMenuContext;
 
     return (
         <AnimatePresence>
             {open && (
                 <RadixContextMenu.Portal forceMount>
-                    <RadixContextMenu.Content asChild className={styles.content}>
+                    <RadixContextMenu.Content
+                        asChild
+                        className={styles.content}
+                        onCloseAutoFocus={onCloseAutoFocus}
+                    >
                         <motion.div
                             animate="show"
                             className={styles.content}
