@@ -13,6 +13,7 @@ import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 import {
     AUDIO_EXTENSIONS,
+    findCloudOnlyAmong,
     findCloudOnlyFiles,
     LIBRARY_ROOTS_SETTING,
     type LibraryRootScan,
@@ -1242,6 +1243,13 @@ ipcMain.handle('sync:reveal-file', async (_event, filePath: string): Promise<voi
 // ── Watch directory for auto-upload ────────────────────────────────────────
 
 export interface WatchProgress {
+    /**
+     * Basenames of files in the watch dir that are only in the cloud (OneDrive
+     * Files On-Demand and the like). Tagging one would download it, so they are
+     * left alone until the user makes them available offline. Like skippedFiles,
+     * re-reported on every pass they remain.
+     */
+    cloudOnlyFiles?: string[];
     currentFile: string;
     phase: 'error' | 'idle' | 'scanning' | 'uploading';
     /**
@@ -1487,9 +1495,14 @@ ipcMain.handle(
 
         const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
 
+        // Set once per pass, and carried on every progress event of that pass.
+        let passCloudOnlyFiles: string[] = [];
         const sendProgress = (progress: WatchProgress) => {
             if (!isCurrent()) return;
-            event.sender.send('sync:watch-progress', progress);
+            event.sender.send('sync:watch-progress', {
+                ...progress,
+                cloudOnlyFiles: passCloudOnlyFiles,
+            });
         };
 
         // The filebrowser token (~2h) outlives by far less than this long-running
@@ -1546,6 +1559,7 @@ ipcMain.handle(
             // mid-transfer. The next tick resumes once the download clears the flag.
             if (watchPaused) return;
             if (!isCurrent()) return;
+            passCloudOnlyFiles = [];
             try {
                 sendProgress({
                     currentFile: '',
@@ -1600,9 +1614,19 @@ ipcMain.handle(
                 // filtered out above). Such a file can never be uploaded, so name it in
                 // every progress event for the rest of this pass rather than letting it
                 // vanish from the counts.
+                //
+                // Never a cloud-only file: opening it to tag it downloads it, and the
+                // tag write is a changed file the cloud drive syncs to every device
+                // (design-library-roots.md §10 Q5). If the check itself fails, the
+                // pass fails rather than tag blind.
+                const cloudOnly = await findCloudOnlyAmong(stableFiles);
+                passCloudOnlyFiles = stableFiles
+                    .filter((f) => cloudOnly.has(pathKey(f)))
+                    .map((f) => path.basename(f));
                 const fileIdMap = new Map<string, string>(); // filePath → subboxId
                 const skippedFiles: string[] = [];
                 for (const filePath of stableFiles) {
+                    if (cloudOnly.has(pathKey(filePath))) continue;
                     const id = getOrCreateSubboxId(filePath);
                     if (id !== null) fileIdMap.set(filePath, id);
                     else skippedFiles.push(path.basename(filePath));

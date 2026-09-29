@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { getMusicPath } from '/@/main/features/core/sync';
+import { findCloudOnlyAmong, pathKey } from '/@/main/features/core/sync/library-root';
 import {
     createFbAuth,
     createPymixAuth,
@@ -132,6 +133,9 @@ async function libraryIdsByLocation(
     }
     return result;
 }
+
+const CLOUD_ONLY_REASON =
+    'only in the cloud and not in your library yet; make it available offline to upload it';
 
 /** A crate's identity for selection: its full ancestry, as pymix names the playlist. */
 
@@ -269,6 +273,14 @@ ipcMain.handle(
         /** subbox_id → absolute local path, for the upload pass below. */
         const pathById = new Map<string, string>();
 
+        // Cloud-only entries (OneDrive Files On-Demand and the like) are never
+        // opened: reading the tag, cues or grid downloads the file, and writing a
+        // tag is a changed file synced to every device (design-library-roots.md
+        // §10 Q5). They are identified by the path an earlier upload recorded, or
+        // left out. If this check fails the import fails, rather than open blind.
+        const cloudOnly = await findCloudOnlyAmong(allTrackPaths);
+        const cloudOnlyPaths: string[] = [];
+
         for (const [index, trackPath] of allTrackPaths.entries()) {
             // Reading (and where needed writing) a tag opens every file in the
             // selection, which on a real library is thousands of them. Report as we
@@ -290,6 +302,10 @@ ipcMain.handle(
                     reason: 'file is not on this computer any more',
                     trackName: describeCrateTrack(trackPath),
                 });
+                continue;
+            }
+            if (cloudOnly.has(pathKey(trackPath))) {
+                cloudOnlyPaths.push(trackPath);
                 continue;
             }
             const subboxId = getOrCreateSubboxId(trackPath);
@@ -333,6 +349,26 @@ ipcMain.handle(
                 );
             }
             pathById.set(subboxId, trackPath);
+        }
+
+        if (cloudOnlyPaths.length > 0) {
+            const known = await libraryIdsByLocation(pymixAuth, pymixUrl, cloudOnlyPaths);
+            for (const trackPath of cloudOnlyPaths) {
+                const libraryId = known[trackPath];
+                if (!libraryId) {
+                    dropped.push({
+                        reason: CLOUD_ONLY_REASON,
+                        trackName: describeCrateTrack(trackPath),
+                    });
+                    continue;
+                }
+                trackIdentities.push({ crate_path: trackPath, subbox_id: libraryId });
+                if (!pathById.has(libraryId)) pathById.set(libraryId, trackPath);
+            }
+            console.log(
+                `[serato] ${cloudOnlyPaths.length} crate entry/entries only in the cloud; ` +
+                    `identified by path, not opened`,
+            );
         }
 
         if (dropped.length > 0) {
@@ -380,6 +416,22 @@ ipcMain.handle(
             );
             for (const [id, isPresent] of Object.entries(res.data.presence)) {
                 if (isPresent) present.add(id);
+            }
+        }
+
+        // A cloud-only entry whose recorded id the library no longer has can't be
+        // uploaded: uploading reads the file, which downloads it.
+        const cloudOnlyKeys = new Set(cloudOnlyPaths.map(pathKey));
+        for (let i = trackIdentities.length - 1; i >= 0; i -= 1) {
+            const identity = trackIdentities[i];
+            if (present.has(identity.subbox_id) || !cloudOnlyKeys.has(pathKey(identity.crate_path)))
+                continue;
+            trackIdentities.splice(i, 1);
+            const trackName = describeCrateTrack(identity.crate_path);
+            dropped.push({ reason: CLOUD_ONLY_REASON, trackName });
+            console.warn(`[serato]   ${trackName} — ${CLOUD_ONLY_REASON}`);
+            if (pathById.get(identity.subbox_id) === identity.crate_path) {
+                pathById.delete(identity.subbox_id);
             }
         }
 

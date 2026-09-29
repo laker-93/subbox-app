@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 /**
@@ -111,6 +112,25 @@ const PS_SCRIPT = [
     '}',
     '$w.Flush()',
 ].join('\n');
+
+/**
+ * Which of `filePaths` are cloud-only, as pathKey()s -- for a caller holding a list
+ * of files rather than a folder (Serato crate entries, a watch folder's pass). Stat
+ * only, as findCloudOnlyFiles. A path that isn't there is simply not in the result.
+ * Throws if the check fails.
+ */
+export async function findCloudOnlyAmong(filePaths: string[]): Promise<Set<string>> {
+    const cloudOnly = new Set<string>();
+    if (filePaths.length === 0) return cloudOnly;
+    if (process.platform !== 'darwin' && process.platform !== 'win32') return cloudOnly;
+    const resolved = Array.from(new Set(filePaths.map((p) => path.resolve(p))));
+    const states =
+        process.platform === 'win32' ? await statWindows(resolved) : await statMac(resolved);
+    for (const [filePath, state] of states) {
+        if (state === 'cloud-only') cloudOnly.add(pathKey(filePath));
+    }
+    return cloudOnly;
+}
 
 /**
  * The files under `dir` that must not be opened, as pathKey()s. For guarding the
@@ -302,4 +322,55 @@ function runChild(
             });
         });
     });
+}
+
+async function statMac(filePaths: string[]): Promise<Map<string, PlaceholderState>> {
+    const states = new Map<string, PlaceholderState>();
+    // Chunked to stay far below ARG_MAX however long the paths are.
+    for (let i = 0; i < filePaths.length; i += 200) {
+        const { code, stderr, stdout } = await runChild('/usr/bin/stat', [
+            '-f',
+            '%Xf%t%N',
+            ...filePaths.slice(i, i + 200),
+        ]);
+        // 1 = some path wasn't there; the rest are still printed.
+        if (code !== 0 && code !== 1) {
+            throw new Error(`placeholder check failed (${code}): ${stderr.slice(0, 500)}`);
+        }
+        for (const [filePath, state] of parseTabLines(stdout)) states.set(filePath, state);
+    }
+    return states;
+}
+
+// The list goes in a UTF-8 file rather than on the command line (length) or stdin
+// (Windows PowerShell's console input encoding). GetAttributes reads metadata only.
+const PS_STAT_SCRIPT = [
+    "$ProgressPreference = 'SilentlyContinue'",
+    '$w = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput(), (New-Object System.Text.UTF8Encoding $false), 65536)',
+    'foreach ($p in [System.IO.File]::ReadAllLines($env:SUBBOX_STAT_LIST, [System.Text.Encoding]::UTF8)) {',
+    '  try {',
+    '    $a = [int][System.IO.File]::GetAttributes($p)',
+    "    $w.Write($a.ToString('x')); $w.Write([char]9); $w.Write($p); $w.Write([char]10)",
+    '  } catch { }',
+    '}',
+    '$w.Flush()',
+].join('\n');
+
+async function statWindows(filePaths: string[]): Promise<Map<string, PlaceholderState>> {
+    const listFile = path.join(os.tmpdir(), `subbox-stat-${process.pid}-${Date.now()}.txt`);
+    fs.writeFileSync(listFile, filePaths.join('\n'), 'utf8');
+    try {
+        const encoded = Buffer.from(PS_STAT_SCRIPT, 'utf16le').toString('base64');
+        const { code, stderr, stdout } = await runChild(
+            'powershell.exe',
+            ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+            { ...process.env, SUBBOX_STAT_LIST: listFile },
+        );
+        if (code !== 0) {
+            throw new Error(`placeholder check failed (${code}): ${stderr.slice(0, 500)}`);
+        }
+        return parseTabLines(stdout);
+    } finally {
+        fs.rmSync(listFile, { force: true });
+    }
 }

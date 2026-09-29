@@ -13,6 +13,8 @@ const ipc = isElectron() ? window.api.ipc : null;
 const localSettings = isElectron() ? window.api.localSettings : null;
 
 interface WatchProgress {
+    /** Files only in the cloud, left alone rather than downloaded to tag. Absent on older payloads. */
+    cloudOnlyFiles?: string[];
     currentFile: string;
     phase: 'error' | 'idle' | 'scanning' | 'uploading';
     /** Files the watcher could not tag, and so could not upload. Absent on older payloads. */
@@ -198,6 +200,15 @@ export const SyncWatch = () => {
                             {progress.skippedFiles.length === 1 ? '' : 's'} could not be read and
                             {progress.skippedFiles.length === 1 ? ' was' : ' were'} not uploaded:{' '}
                             {progress.skippedFiles.join(', ')}
+                        </Text>
+                    )}
+                    {progress.cloudOnlyFiles && progress.cloudOnlyFiles.length > 0 && (
+                        <Text c="yellow" size="sm">
+                            {progress.cloudOnlyFiles.length} file
+                            {progress.cloudOnlyFiles.length === 1 ? ' is' : 's are'} only in the
+                            cloud and {progress.cloudOnlyFiles.length === 1 ? 'was' : 'were'} not
+                            uploaded. Make {progress.cloudOnlyFiles.length === 1 ? 'it' : 'them'}{' '}
+                            available offline to upload: {progress.cloudOnlyFiles.join(', ')}
                         </Text>
                     )}
                 </Stack>
