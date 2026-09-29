@@ -361,6 +361,11 @@ ipcMain.handle(
             fileExtension: t.fileExtension,
             fromTag: true,
             title: t.cleanName,
+            // The same path sent to /sync/map_meta as userLocation below. pymix answers
+            // `matched` for a file an earlier upload already put in the library, so a
+            // retry doesn't re-send one whose tags differ from its Rekordbox name
+            // (pymix#239). A pymix without the field ignores it.
+            userLocation: t.location,
         }));
 
         // Chunk the match request so no single call can exceed Cloudflare's ~100s edge
