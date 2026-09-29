@@ -13,6 +13,11 @@ import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 import { findWhollyStaged, runMapMeta, TrackMetaToMap } from '/@/main/features/core/sync/map-meta';
 import {
+    connectionLostError,
+    handleKeepingAwake,
+    runUploadQueue,
+} from '/@/main/features/core/sync/network-retry';
+import {
     createFbAuth,
     createPymixAuth,
     FbAuth,
@@ -266,7 +271,7 @@ function collectTracksNotInAnyPlaylist(result: ReturnType<typeof extractPlaylist
     return result.tracks.filter((t) => !inPlaylist.has(t.location));
 }
 
-ipcMain.handle(
+handleKeepingAwake(
     'sync:upload-from-xml',
     async (
         event,
@@ -592,31 +597,30 @@ ipcMain.handle(
             };
 
             // Run with bounded concurrency. A single track's upload failure must not
-            // sink the whole batch: it's caught here, counted as skipped, and recorded
-            // with its reason, instead of rejecting Promise.all(workers) below and
-            // aborting every other in-flight and queued track.
-            const queue = [...tracksToUpload];
-            const workers = Array.from({ length: CONCURRENCY }, async () => {
-                while (queue.length > 0) {
-                    const item = queue.shift()!;
-                    try {
-                        await uploadTrack(item);
-                    } catch (err) {
-                        activeUploads.delete(item.trackName);
-                        completedCount++;
-                        skippedCount++;
-                        const reason = err instanceof Error ? err.message : String(err);
-                        failedTracks.push({
-                            reason,
-                            stagingPath: item.stagingPath,
-                            trackName: item.trackName,
-                        });
-                        console.warn(`Upload failed for "${item.trackName}", skipping:`, err);
-                        emitUploadingProgress();
-                    }
-                }
+            // sink the whole batch: it's recorded with its reason and counted as
+            // skipped, instead of aborting every other in-flight and queued track. A
+            // dropped connection pauses the queue instead of failing it (#203).
+            const { connectionLost, unsent } = await runUploadQueue({
+                concurrency: CONCURRENCY,
+                items: tracksToUpload,
+                onFailed: (item, reason) => {
+                    activeUploads.delete(item.trackName);
+                    completedCount++;
+                    skippedCount++;
+                    failedTracks.push({
+                        reason,
+                        stagingPath: item.stagingPath,
+                        trackName: item.trackName,
+                    });
+                    console.warn(`Upload failed for "${item.trackName}", skipping: ${reason}`);
+                    emitUploadingProgress();
+                },
+                probeUrl: filebrowserUrl,
+                uploadOne: uploadTrack,
             });
-            await Promise.all(workers);
+            if (connectionLost) {
+                throw connectionLostError(uploadedCount, unsent.length);
+            }
         }
 
         // Step 4: Map metadata. Tracks whose upload failed above never landed on the
@@ -1017,7 +1021,7 @@ async function unzipAndMerge(
     });
 }
 
-ipcMain.handle(
+handleKeepingAwake(
     'sync:download-playlists',
     async (
         event,
@@ -1931,7 +1935,7 @@ ipcMain.handle(
     },
 );
 
-ipcMain.handle(
+handleKeepingAwake(
     'sync:download-missing-tracks',
     async (
         event,

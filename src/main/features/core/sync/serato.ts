@@ -8,6 +8,11 @@ import * as path from 'path';
 import { getMusicPath } from '/@/main/features/core/sync';
 import { findWhollyStaged, runMapMeta } from '/@/main/features/core/sync/map-meta';
 import {
+    connectionLostError,
+    handleKeepingAwake,
+    runUploadQueue,
+} from '/@/main/features/core/sync/network-retry';
+import {
     createFbAuth,
     createPymixAuth,
     FbAuth,
@@ -175,7 +180,7 @@ ipcMain.handle(
     },
 );
 
-ipcMain.handle(
+handleKeepingAwake(
     'sync:upload-from-crates',
     async (
         event,
@@ -587,30 +592,28 @@ ipcMain.handle(
             emitProgress(item.trackName);
         };
 
-        const queue = [...toSend];
         const failedStagingPaths = new Set<string>();
-        const workers = Array.from({ length: UPLOAD_CONCURRENCY }, async () => {
-            while (queue.length > 0) {
-                const item = queue.shift()!;
-                try {
-                    await uploadOne(item);
-                } catch (err) {
-                    // One track's failure must not sink the batch — the user has
-                    // dozens of other tracks in flight behind it.
-                    activeUploads.delete(item.trackName);
-                    completed++;
-                    result.skipped++;
-                    failedStagingPaths.add(item.stagingPath);
-                    result.failed.push({
-                        reason: err instanceof Error ? err.message : String(err),
-                        trackName: item.trackName,
-                    });
-                    console.warn(`[serato] upload failed for "${item.trackName}":`, err);
-                    emitProgress();
-                }
-            }
+        // One track's failure must not sink the batch — the user has dozens of
+        // other tracks in flight behind it. A dropped connection pauses the queue
+        // instead of failing it (subbox-app#203).
+        const { connectionLost, unsent } = await runUploadQueue({
+            concurrency: UPLOAD_CONCURRENCY,
+            items: toSend,
+            onFailed: (item, reason) => {
+                activeUploads.delete(item.trackName);
+                completed++;
+                result.skipped++;
+                failedStagingPaths.add(item.stagingPath);
+                result.failed.push({ reason, trackName: item.trackName });
+                console.warn(`[serato] upload failed for "${item.trackName}": ${reason}`);
+                emitProgress();
+            },
+            probeUrl: filebrowserUrl,
+            uploadOne,
         });
-        await Promise.all(workers);
+        if (connectionLost) {
+            throw connectionLostError(result.uploaded, unsent.length);
+        }
 
         // Step 7: map the staged files to their identities. The server re-reads the
         // SUBBOX_ID we wrote above rather than minting a new one, so this records

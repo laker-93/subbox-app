@@ -3,6 +3,7 @@ import { session } from 'electron';
 import * as https from 'https';
 
 import { getStoredPassword } from '/@/main/features/core/settings';
+import { withNetworkRetry } from '/@/main/features/core/sync/network-retry';
 
 // ── Auth for the two servers the main process talks to ──────────────────────
 //
@@ -141,7 +142,9 @@ export function createPymixAuth(args: {
 
 /**
  * Issue a filebrowser request that refreshes the token once on a 401 and retries —
- * the same self-healing behaviour `createFbAuth`'s doc comment promises.
+ * the same self-healing behaviour `createFbAuth`'s doc comment promises. A network
+ * error is retried with backoff first, so a dropped connection is waited out rather
+ * than failing the track (subbox-app#203).
  */
 export async function fbRequest<T = any>(
     fbAuth: FbAuth,
@@ -149,11 +152,13 @@ export async function fbRequest<T = any>(
     retried = false,
 ): Promise<AxiosResponse<T>> {
     try {
-        return await axios.request<T>({
-            ...config,
-            headers: { ...config.headers, 'X-Auth': fbAuth.getToken() },
-            httpsAgent,
-        });
+        return await withNetworkRetry(() =>
+            axios.request<T>({
+                ...config,
+                headers: { ...config.headers, 'X-Auth': fbAuth.getToken() },
+                httpsAgent,
+            }),
+        );
     } catch (err) {
         if (!retried && isAxiosError(err) && err.response?.status === 401) {
             const token = await fbAuth.refresh();
