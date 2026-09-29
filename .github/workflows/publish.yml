@@ -30,9 +30,12 @@ jobs:
                       --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -1)
                   if [ -z "$ID" ]; then
                       # Named as electron-builder names one: the bare version, no notes.
-                      gh release create "$TAG" --draft --verify-tag --title "$VERSION" --notes ""
-                      ID=$(gh api "repos/$GH_REPO/releases" \
-                          --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -1)
+                      # The id comes from the create itself: the release list can lag a
+                      # new draft by a second or more, and 1.10.38's first run read it
+                      # back empty. Fails if the tag hasn't been pushed.
+                      gh api "repos/$GH_REPO/git/ref/tags/$TAG" --silent
+                      ID=$(gh api -X POST "repos/$GH_REPO/releases" \
+                          -f tag_name="$TAG" -f name="$VERSION" -F draft=true --jq .id)
                   fi
                   test -n "$ID"
                   echo "Release $ID for $TAG"
