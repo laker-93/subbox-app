@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { getMusicPath } from '/@/main/features/core/sync';
+import { findWhollyStaged, runMapMeta } from '/@/main/features/core/sync/map-meta';
 import {
     createFbAuth,
     createPymixAuth,
@@ -516,8 +517,19 @@ ipcMain.handle(
             });
         }
 
+        // Skip what an earlier attempt already uploaded whole: a retry after a late
+        // failure re-sends nothing the server has (laker-93/pymix#237). They are
+        // still mapped below, since this attempt's import has to stage them.
+        const alreadyStaged = await findWhollyStaged({
+            items: uploads.map((u) => ({ localPath: u.filePath, stagingPath: u.stagingPath })),
+            pymixAuth,
+            pymixUrl,
+        });
+        const toSend = uploads.filter((u) => !alreadyStaged.has(u.stagingPath));
+        result.skipped += uploads.length - toSend.length;
+
         // Step 5: does it fit? Ask before spending the transfer, not after.
-        const totalUploadBytes = uploads.reduce((sum, u) => sum + fs.statSync(u.filePath).size, 0);
+        const totalUploadBytes = toSend.reduce((sum, u) => sum + fs.statSync(u.filePath).size, 0);
         if (totalUploadBytes > 0) {
             const storageRes = await withPymixAuth<{
                 allowed?: boolean;
@@ -549,7 +561,7 @@ ipcMain.handle(
                 activeTracks: Array.from(activeUploads.values()),
                 currentTrack,
                 phase: 'uploading',
-                total: uploads.length,
+                total: toSend.length,
                 uploaded: completed,
             });
         };
@@ -575,7 +587,7 @@ ipcMain.handle(
             emitProgress(item.trackName);
         };
 
-        const queue = [...uploads];
+        const queue = [...toSend];
         const failedStagingPaths = new Set<string>();
         const workers = Array.from({ length: UPLOAD_CONCURRENCY }, async () => {
             while (queue.length > 0) {
@@ -623,13 +635,18 @@ ipcMain.handle(
             }));
 
         if (tracksToMap.length > 0) {
-            await withPymixAuth(pymixAuth, (cookie) =>
-                axios.post(
-                    `${pymixUrl}/sync/map_meta`,
-                    { tracks: tracksToMap },
-                    { headers: { Cookie: cookie }, httpsAgent },
-                ),
-            );
+            await runMapMeta({
+                onProgress: (processed, total) =>
+                    sendProgress({
+                        currentTrack: '',
+                        phase: 'mapping-metadata',
+                        total,
+                        uploaded: processed,
+                    }),
+                pymixAuth,
+                pymixUrl,
+                tracks: tracksToMap,
+            });
         }
 
         sendProgress({

@@ -11,6 +11,7 @@ import { appConfig } from '/@/main/config/app-config';
 import { getStoredPassword } from '/@/main/features/core/settings';
 import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip-layout';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
+import { findWhollyStaged, runMapMeta, TrackMetaToMap } from '/@/main/features/core/sync/map-meta';
 import {
     createFbAuth,
     createPymixAuth,
@@ -455,13 +456,7 @@ ipcMain.handle(
         // Per-track TUS create/upload failures (e.g. a transient filebrowser error)
         // land here instead of aborting the whole batch — see the worker loop below.
         const failedTracks: Array<{ reason: string; stagingPath: string; trackName: string }> = [];
-        const originalTrackMetaData: Array<{
-            originalAlbum: null | string;
-            originalArtist: null | string;
-            originalName: null | string;
-            stagingLocation: string;
-            userLocation: string;
-        }> = [];
+        const originalTrackMetaData: TrackMetaToMap[] = [];
 
         // Build list of tracks that can actually be uploaded
         const uploadableTracks: Array<{
@@ -515,24 +510,21 @@ ipcMain.handle(
         }
 
         if (uploadableTracks.length > 0) {
-            // Fetch already-uploaded files from filebrowser and skip them
-            let existingPaths = new Set<string>();
-            try {
-                // Through fbRequest, not the token the renderer passed in: this is the
-                // first filebrowser request of the upload, so on a user returning after
-                // the ~2h token lifetime it's the one that 401s (subbox-app#137).
-                const listRes = await fbRequest(fbAuth, {
-                    method: 'get',
-                    url: `${filebrowserUrl}/api/resources/uploads`,
-                });
-                const items: Array<{ path: string }> = listRes.data?.items ?? [];
-                existingPaths = new Set(items.map((i) => i.path.replace(/^\//, '')));
-            } catch (err) {
-                console.warn('Failed to list existing uploads, proceeding without dedup:', err);
-            }
+            // Skip what an earlier attempt already uploaded whole, so a retry after a
+            // late failure doesn't re-send the library. Filebrowser's listing of
+            // uploads/ is one level deep and never matched an Artist/Album/Title
+            // staging path, so this used to skip nothing (laker-93/pymix#237).
+            const alreadyStaged = await findWhollyStaged({
+                items: uploadableTracks.map(({ stagingPath, track }) => ({
+                    localPath: track.location,
+                    stagingPath,
+                })),
+                pymixAuth,
+                pymixUrl,
+            });
 
             const tracksToUpload = uploadableTracks.filter(
-                ({ stagingPath }) => !existingPaths.has(stagingPath),
+                ({ stagingPath }) => !alreadyStaged.has(stagingPath),
             );
             skippedCount += uploadableTracks.length - tracksToUpload.length;
 
@@ -625,13 +617,18 @@ ipcMain.handle(
             (m) => !failedStagingPaths.has(m.stagingLocation),
         );
 
-        await withPymixAuth(pymixAuth, (cookie) =>
-            axios.post(
-                `${pymixUrl}/sync/map_meta`,
-                { tracks: trackMetaDataToMap },
-                { headers: { Cookie: cookie }, httpsAgent },
-            ),
-        );
+        await runMapMeta({
+            onProgress: (processed, total) =>
+                sendProgress({
+                    currentTrack: '',
+                    phase: 'mapping-metadata',
+                    total,
+                    uploaded: processed,
+                }),
+            pymixAuth,
+            pymixUrl,
+            tracks: trackMetaDataToMap,
+        });
 
         sendProgress({
             currentTrack: '',
