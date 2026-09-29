@@ -432,7 +432,7 @@
             "newFolderInside": "new folder inside",
             "newPlaylist": "new $t(entity.playlist, {\"count\": 1})",
             "newPlaylistInside": "new $t(entity.playlist, {\"count\": 1}) inside",
-            "newPlaylistTitle": "new $t(entity.playlist, {\"count\": 1}) in {{folder}}",
+            "newPlaylistTitle": "New $t(entity.playlist, {\"count\": 1}) in {{folder}}",
             "rename": "rename",
             "renameFailed": "couldn't rename the folder",
             "createFailed": "couldn't create it",
