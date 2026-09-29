@@ -399,7 +399,9 @@ const PlaylistRow = ({
             <Disclosure isOpen={isOpen} node={node} onToggle={onToggle} />
             <PlaylistRowButton
                 item={playlist}
-                name={playlist.name}
+                // The node's own name, not Navidrome's: for a `path` user that is the
+                // whole path (`House / Deep`), and the tree already draws the folders.
+                name={node.name ?? playlist.name}
                 onContextMenu={onContextMenu}
                 onReorder={ignoreReorder}
                 to={playlist.id}
