@@ -81,7 +81,7 @@ type LocalTrack = {
 };
 
 type TrackEligibility =
-    | { cleanName: string; key: string; uploadable: true }
+    | { artist: string; cleanName: string; key: string; uploadable: true }
     | { reason: string; uploadable: false };
 
 /**
@@ -116,11 +116,21 @@ function trackEligibility(track: ParsedTrack): TrackEligibility {
     // plain falsy check, then extractTrackName reduces it to null — which we'd send
     // as title:null and pymix's /sync/match_tracks rejects with a 422 that fails the
     // *whole* batch.
-    if (!track.name?.trim() || !track.artist?.trim()) {
-        return { reason: 'no title or artist in the XML', uploadable: false };
+    if (!track.name?.trim()) {
+        return { reason: 'no title in the XML', uploadable: false };
     }
 
-    const cleanName = extractTrackName(track.name, track.artist, track.album ?? undefined);
+    // A blank Artist is allowed: untagged WAVs have none, and pymix finds an uploaded
+    // track by its file (userLocation → subbox_id), not its name (pymix#239), so the
+    // artist isn't needed to place it in a playlist or apply its cues (#201). The XML
+    // parser gives a blank Artist as null; send '' instead, because pymix echoes a
+    // null back from /sync/match_tracks as '' (the key rebuilt from that echo has to
+    // match this one) and /sync/map_meta's originalArtist is a required string. It
+    // stays '' on the wire rather than a placeholder so pymix's name match can't pair
+    // it with some other artist-less track of the same title.
+    const artist = track.artist?.trim() ? track.artist : '';
+
+    const cleanName = extractTrackName(track.name, artist, track.album ?? undefined);
     // extractTrackName can still return null when the title is entirely the
     // artist/album text; such a track has nothing to match on, so drop it rather
     // than poison the batch.
@@ -131,7 +141,7 @@ function trackEligibility(track: ParsedTrack): TrackEligibility {
     // Keyed on the raw artist rather than the trimmed one: pymix echoes back the artist
     // we send to /sync/match_tracks verbatim, and `trackKeyToTrack` below is rebuilt
     // from that echo, so the two spellings have to agree.
-    return { cleanName, key: `${track.artist} - ${cleanName}`, uploadable: true };
+    return { artist, cleanName, key: `${artist} - ${cleanName}`, uploadable: true };
 }
 
 function trackKeysForPlaylist(pl: { tracks: ParsedTrack[] }): string[] {
@@ -317,6 +327,7 @@ ipcMain.handle(
                     continue;
                 }
 
+                track.artist = eligibility.artist;
                 track.cleanName = eligibility.cleanName;
                 if (!trackMap.has(eligibility.key)) {
                     trackMap.set(eligibility.key, track);
@@ -497,9 +508,10 @@ ipcMain.handle(
             // still matches. Album is optional in Rekordbox exports (white labels,
             // promos, single-track downloads) — sanitizePathSegment(undefined) is '',
             // which would otherwise collapse to an empty path component
-            // ("Artist//Title.mp3") that filebrowser 404s on.
+            // ("Artist//Title.mp3") that filebrowser 404s on. A blank artist (#201)
+            // needs the same fallback.
             const stagingPath = [
-                sanitizePathSegment(track.artist),
+                sanitizePathSegment(track.artist) || 'Unknown Artist',
                 sanitizePathSegment(track.album) || 'Unknown Album',
                 `${sanitizePathSegment(track.cleanName)}${track.fileExtension}`,
             ].join('/');
