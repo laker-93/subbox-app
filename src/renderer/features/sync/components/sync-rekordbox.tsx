@@ -1,16 +1,11 @@
-import { useQueryClient } from '@tanstack/react-query';
 import isElectron from 'is-electron';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { isUploadForbidden, PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
-import { refreshPlaylistsAfterImport } from '/@/renderer/features/playlist-tree/hooks/use-playlist-tree';
 import {
-    describeJobWork,
     IMPORT_PHASE_LABELS,
-    type ImportProgress,
     JobOutcome,
     SelectableList,
     SyncFlow,
@@ -22,6 +17,11 @@ import {
     SyncSummary,
     useSelection,
 } from '/@/renderer/features/sync/components/shared';
+import {
+    clearUploadRun,
+    startRekordboxUpload,
+    useUploadRun,
+} from '/@/renderer/features/sync/store/upload-run-store';
 import { useCurrentServerWithCredential } from '/@/renderer/store';
 import { Button } from '/@/shared/components/button/button';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
@@ -29,7 +29,6 @@ import { CopyButton } from '/@/shared/components/copy-button/copy-button';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
-import { toast } from '/@/shared/components/toast/toast';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
 
 const ipc = isElectron() ? window.api.ipc : null;
@@ -41,25 +40,8 @@ interface PlaylistPreview {
     trackKeys: string[];
 }
 
-type SyncStep =
-    | 'done'
-    | 'idle'
-    | 'importing'
-    | 'parsing'
-    | 'preview'
-    | 'storage-exceeded'
-    | 'tagging-failed'
-    | 'upload-failed'
-    | 'upload-forbidden'
-    | 'uploading';
-
-interface UploadProgress {
-    activeTracks?: string[];
-    currentTrack: string;
-    phase: 'done' | 'error' | 'mapping-metadata' | 'matching' | 'uploading';
-    total: number;
-    uploaded: number;
-}
+/** The screens before a run exists. Once one starts, the run store owns the step. */
+type PreRunStep = 'idle' | 'parsing' | 'preview';
 
 /** The completion screen is a narrow column; beyond this the full list is in the
  *  main-process log rather than pushing the "Sync Another Library" button off-screen. */
@@ -83,10 +65,15 @@ function playlistKey(pl: PlaylistPreview): string {
 export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
     const { t } = useTranslation();
     const currentServer = useCurrentServerWithCredential();
-    const queryClient = useQueryClient();
     const serverId = currentServer?.id;
 
-    const [step, setStep] = useState<SyncStep>('idle');
+    // The upload itself, once started, lives in the run store so that it survives the
+    // user leaving this screen (#195). Everything below it is the run's; everything
+    // local here is the XML and the selection that come before one.
+    const anyRun = useUploadRun(serverId);
+    const run = anyRun?.format === 'rekordbox' ? anyRun : null;
+
+    const [localStep, setLocalStep] = useState<PreRunStep>('idle');
     const [xmlPath, setXmlPath] = useState<null | string>(null);
     const [playlists, setPlaylists] = useState<PlaylistPreview[]>([]);
     const {
@@ -97,38 +84,26 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
         toggle: handleTogglePlaylist,
     } = useSelection();
     const [metadataOnly, setMetadataOnly] = useState(false);
-    const [progress, setProgress] = useState<null | UploadProgress>(null);
-    const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
-    const [jobId, setJobId] = useState<null | string>(null);
-    // `dropped` holds tracks the XML lists that could never be uploaded — their tags
-    // leave nothing to match on. They are counted in neither totalTracksInXml nor the
-    // preview badge, so the completion screen names them rather than letting them
-    // vanish into a gap between two numbers.
-    const [uploadResult, setUploadResult] = useState<null | {
-        dropped?: Array<{ reason: string; trackName: string }>;
-        failed?: Array<{ reason: string; trackName: string }>;
-        skipped: number;
-        totalTracksInXml?: number;
-        uploaded: number;
-    }>(null);
-    const [error, setError] = useState<null | string>(null);
-    const [storageInfo, setStorageInfo] = useState<null | {
-        currentUsageBytes: number;
-        maxStorageBytes: number;
-        remainingBytes: number;
-    }>(null);
+    const [localError, setLocalError] = useState<null | string>(null);
 
-    // Listen for upload progress events
+    // An upload that threw before anything was imported ends the run, and its error
+    // goes back on the preview screen to be retried from there. If this component was
+    // remounted since, the XML is no longer loaded, so it lands on the first screen.
+    const hasPreview = playlists.length > 0;
     useEffect(() => {
-        if (!ipc) return;
-        const handler = (_event: any, prog: UploadProgress) => {
-            setProgress(prog);
-        };
-        ipc.on('sync:upload-progress', handler);
-        return () => {
-            ipc.removeListener('sync:upload-progress', handler);
-        };
-    }, []);
+        if (run?.step !== 'upload-error') return;
+        setLocalError(run.error);
+        setLocalStep(hasPreview ? 'preview' : 'idle');
+        clearUploadRun();
+    }, [hasPreview, run]);
+
+    const step = run && run.step !== 'upload-error' ? run.step : localStep;
+    const error = run ? run.error : localError;
+    const progress = run?.progress ?? null;
+    const importProgress = run?.importProgress ?? null;
+    const jobId = run?.jobId ?? null;
+    const uploadResult = run?.uploadResult ?? null;
+    const storageInfo = run?.storageInfo ?? null;
 
     const handleSelectXml = useCallback(async () => {
         if (!ipc) return;
@@ -141,8 +116,8 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
             if (!filePath) return;
 
             setXmlPath(filePath);
-            setStep('parsing');
-            setError(null);
+            setLocalStep('parsing');
+            setLocalError(null);
 
             const previews: PlaylistPreview[] = await ipc.invoke(
                 'sync:parse-rekordbox-xml',
@@ -150,10 +125,10 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
             );
             setPlaylists(previews);
             selectAll(previews.map((p) => playlistKey(p)));
-            setStep('preview');
+            setLocalStep('preview');
         } catch (err: any) {
-            setError(err?.message || 'Failed to parse XML');
-            setStep('idle');
+            setLocalError(err?.message || 'Failed to parse XML');
+            setLocalStep('idle');
         }
     }, [selectAll]);
 
@@ -162,239 +137,55 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
         [playlists, selectAll],
     );
 
-    // `xmlOnly` is the metadata-only path: upload the XML and import against the tracks
-    // already on the server. It is also how a run whose tagging failed is finished.
-    const runUpload = useCallback(
-        async (xmlOnly: boolean) => {
-            if (!ipc || !xmlPath || !currentServer) return;
+    const handleUpload = useCallback(() => {
+        if (!xmlPath || !currentServer) return;
+        setLocalError(null);
+        startRekordboxUpload(
+            {
+                metadataOnly,
+                playlistNames: playlists
+                    .filter((p) => selectedPlaylists.has(playlistKey(p)))
+                    .map((p) => p.name),
+                // In metadata-only mode with nothing selected, null tells the backend
+                // to process all tracks.
+                selectedPlaylistPaths:
+                    metadataOnly && selectedPlaylists.size === 0
+                        ? null
+                        : playlists
+                              .filter((p) => selectedPlaylists.has(playlistKey(p)))
+                              .map((p) => [...p.path, p.name]),
+                xmlPath,
+            },
+            currentServer,
+        );
+    }, [currentServer, metadataOnly, playlists, selectedPlaylists, xmlPath]);
 
-            // In metadata-only mode with nothing selected, null tells the backend to process all tracks
-            const selectedPlaylistPaths =
-                xmlOnly && selectedPlaylists.size === 0
-                    ? null
-                    : playlists
-                          .filter((p) => selectedPlaylists.has(playlistKey(p)))
-                          .map((p) => [...p.path, p.name]);
+    // The run carries what it was started with, so a retry doesn't need the preview
+    // to still be loaded: the user may have left and come back since.
+    const handleRetry = useCallback(() => {
+        if (!run || !currentServer) return;
+        startRekordboxUpload(run.request, currentServer);
+    }, [currentServer, run]);
 
-            setStep('uploading');
-            setError(null);
-            setUploadResult(null);
+    // The metadata-only path imports what the tagging recorded, so it is how a run
+    // whose tagging failed is finished, without sending the audio again.
+    const handleFinishImport = useCallback(() => {
+        if (!run || !currentServer) return;
+        startRekordboxUpload({ ...run.request, metadataOnly: true }, currentServer);
+    }, [currentServer, run]);
 
-            // The name the XML was uploaded under, so pymix imports this run's XML and
-            // not a leftover of an earlier one beside it (laker-93/pymix#192).
-            let xmlFileName: string;
-
-            try {
-                if (xmlOnly) {
-                    // XML-only path: upload XML file then trigger import without processing tracks
-                    ({ xmlFileName } = await ipc.invoke('sync:upload-xml', {
-                        filebrowserToken: currentServer.fbToken,
-                        filebrowserUrl: urlConfig.filebrowser,
-                        // serverId/username let the main process re-login for a fresh
-                        // filebrowser token if this upload outlives the current one.
-                        serverId: currentServer.id,
-                        username: currentServer.username,
-                        xmlPath,
-                    }));
-
-                    setUploadResult({ dropped: [], failed: [], skipped: 0, uploaded: 0 });
-                } else {
-                    // Pre-flight storage check (renderer-side, works for both Electron and web)
-                    try {
-                        const storage = await PymixController.checkStorage({
-                            baseUrl: urlConfig.pymix,
-                            query: { uploadSizeBytes: 0 },
-                        });
-
-                        console.log('[storage-check] pre-flight response:', storage);
-
-                        if (!storage.allowed) {
-                            console.warn('[storage-check] pre-flight blocked:', {
-                                allowed: storage.allowed,
-                                currentUsageBytes: storage.currentUsageBytes,
-                                maxStorageBytes: storage.maxStorageBytes,
-                                reason: storage.reason,
-                                remainingBytes: storage.remainingBytes,
-                            });
-                            setStorageInfo({
-                                currentUsageBytes: storage.currentUsageBytes,
-                                maxStorageBytes: storage.maxStorageBytes,
-                                remainingBytes: storage.remainingBytes,
-                            });
-                            setStep('storage-exceeded');
-                            return;
-                        }
-                    } catch (storageErr) {
-                        console.warn(
-                            '[storage-check] pre-flight threw — proceeding anyway:',
-                            storageErr,
-                        );
-                        // If the check fails, proceed anyway — the main process will do a precise check
-                    }
-
-                    const result = await ipc.invoke('sync:upload-from-xml', {
-                        filebrowserToken: currentServer.fbToken,
-                        filebrowserUrl: urlConfig.filebrowser,
-                        playlistNames: playlists
-                            .filter((p) => selectedPlaylists.has(playlistKey(p)))
-                            .map((p) => p.name),
-                        pymixUrl: urlConfig.pymix,
-                        // serverId lets the main process re-login for a fresh pymix session
-                        // cookie if this upload outlives the current one.
-                        serverId: currentServer.id,
-                        username: currentServer.username,
-                        xmlPath,
-                    });
-                    console.log('Upload result:', result);
-                    setUploadResult(result);
-                    xmlFileName = result.xmlFileName;
-
-                    // Every upload failed, so there is nothing of this run's to import.
-                    // pymix imports whatever is sitting in the user's uploads/ directory,
-                    // not just this run's files, so triggering it here imported leftovers
-                    // of an earlier run — untagged, with no subbox_id — into the library
-                    // while this run's playlists matched nothing (laker-93/subbox-app#138).
-                    if (result.uploaded === 0 && result.failed.length > 0) {
-                        setStep('upload-failed');
-                        return;
-                    }
-                }
-
-                // Trigger rekordbox import via pymix API
-                try {
-                    const importResult = await PymixController.rbImport({
-                        baseUrl: urlConfig.pymix,
-                        body: {
-                            playlistNames: selectedPlaylistPaths,
-                            xmlName: xmlFileName,
-                        },
-                    });
-
-                    const jobId = importResult?.job_id;
-                    if (!jobId) {
-                        const reason = importResult?.reason || 'Unknown error';
-                        throw new Error(`Import failed: ${reason}`);
-                    }
-
-                    // No tracks to import does NOT mean nothing left to do: pymix runs the
-                    // playlist and metadata passes for a metadata-only import too, and this
-                    // used to return "Success" the moment the upload came back — before the
-                    // server had created a single playlist (laker-93/subbox-app#55). Poll the
-                    // job either way; it is the only thing that can tell us it finished.
-                    setJobId(jobId);
-                    setStep('importing');
-                    setImportProgress(null);
-                } catch (importErr: any) {
-                    // A refused write is an account limit, not a failure — say so instead of
-                    // showing "Import Failed" over something that was never going to work.
-                    if (isUploadForbidden(importErr)) {
-                        setStep('upload-forbidden');
-                        return;
-                    }
-                    setError(importErr?.message || 'Import failed');
-                    setStep('done');
-                }
-            } catch (err: any) {
-                if (isUploadForbidden(err)) {
-                    setStep('upload-forbidden');
-                    return;
-                }
-
-                const msg = err?.message || 'Upload failed';
-                // The tracks are on the server but tagging them didn't finish, so the way
-                // on is finishing the import, not uploading again (laker-93/pymix#237).
-                // Matched as a prefix for the same reason as the storage one below.
-                const mapMetaPrefix = 'MAP_META_FAILED:';
-                const mapMetaPrefixIdx = msg.indexOf(mapMetaPrefix);
-                const storagePrefix = 'STORAGE_LIMIT_EXCEEDED:';
-                const storagePrefixIdx = msg.indexOf(storagePrefix);
-                if (mapMetaPrefixIdx !== -1) {
-                    setError(msg.slice(mapMetaPrefixIdx + mapMetaPrefix.length));
-                    setStep('tagging-failed');
-                } else if (storagePrefixIdx !== -1) {
-                    setError(msg.slice(storagePrefixIdx + storagePrefix.length));
-                    setStep('storage-exceeded');
-                } else {
-                    setError(msg);
-                    setStep('preview');
-                }
-            }
-        },
-        [currentServer, playlists, selectedPlaylists, xmlPath],
-    );
-
-    const handleUpload = useCallback(() => runUpload(metadataOnly), [metadataOnly, runUpload]);
-    const handleFinishImport = useCallback(() => runUpload(true), [runUpload]);
-
-    // Poll import progress when in importing step
-    useEffect(() => {
-        if (step !== 'importing' || !jobId) return;
-
-        let cancelled = false;
-
-        const poll = async () => {
-            while (!cancelled) {
-                try {
-                    const prog = await PymixController.importProgress({
-                        baseUrl: urlConfig.pymix,
-                        query: { job_id: jobId, public: false },
-                    });
-
-                    if (cancelled) break;
-                    setImportProgress(prog as ImportProgress);
-
-                    if (!prog.in_progress) {
-                        setStep('done');
-                        // The import made playlists (and tree nodes), even if it failed part way.
-                        if (serverId) refreshPlaylistsAfterImport(queryClient, serverId);
-                        if (prog.result) {
-                            // A metadata-only import lands no tracks, so
-                            // "Imported 0 tracks" reads like a failure on the run
-                            // that is most often the point of re-importing an XML.
-                            // The server now says what it did instead of leaving us
-                            // to infer it from a count of new audio (#50).
-                            const [work] = describeJobWork(prog as ImportProgress);
-                            toast.success({
-                                message:
-                                    prog.n_tracks_processed > 0
-                                        ? `Imported ${prog.n_tracks_processed} tracks`
-                                        : (work ?? 'Library updated from your Rekordbox XML'),
-                            });
-                        } else {
-                            setError(prog.reason || 'Import failed');
-                        }
-                        break;
-                    }
-                } catch (err: any) {
-                    if (cancelled) break;
-                    setError(err?.message || 'Failed to check import progress');
-                    setStep('done');
-                    break;
-                }
-
-                // Wait 3 seconds between polls
-                await new Promise((resolve) => setTimeout(resolve, 3000));
-            }
-        };
-
-        poll();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [step, jobId, queryClient, serverId]);
+    const handleBackToPreview = useCallback(() => {
+        clearUploadRun();
+        setLocalStep(hasPreview ? 'preview' : 'idle');
+    }, [hasPreview]);
 
     const handleReset = useCallback(() => {
-        setStep('idle');
+        clearUploadRun();
+        setLocalStep('idle');
         setXmlPath(null);
         setPlaylists([]);
         setSelectedPlaylists(new Set());
-        setProgress(null);
-        setImportProgress(null);
-        setJobId(null);
-        setUploadResult(null);
-        setError(null);
-        setStorageInfo(null);
+        setLocalError(null);
         setMetadataOnly(false);
     }, [setSelectedPlaylists]);
 
@@ -628,48 +419,6 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
         );
     }
 
-    // ── Tagging failed (tracks uploaded, import not started) ───────────────
-    if (step === 'tagging-failed') {
-        return (
-            <SyncResult
-                actionLabel="Finish Import"
-                onAction={handleFinishImport}
-                secondaryAction={
-                    <Stack gap="xs">
-                        <CopyButton
-                            timeout={2000}
-                            value={`Rekordbox upload: tagging failed (import not started)\n${error ?? ''}`}
-                        >
-                            {({ copied, copy }) => (
-                                <Button
-                                    fullWidth
-                                    leftSection={<Icon icon={copied ? 'check' : 'clipboardCopy'} />}
-                                    onClick={copy}
-                                    variant="subtle"
-                                >
-                                    {copied ? 'Copied' : 'Copy details'}
-                                </Button>
-                            )}
-                        </CopyButton>
-                        <Button fullWidth onClick={() => setStep('preview')} variant="default">
-                            {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
-                        </Button>
-                    </Stack>
-                }
-                status="warn"
-                title="Tagging Failed"
-            >
-                <Text size="sm" ta="center">
-                    Your tracks were uploaded, but the server couldn&apos;t finish preparing them
-                    for import: {error}
-                </Text>
-                <Text c="dimmed" size="xs" ta="center">
-                    Finish Import brings in what was prepared without uploading anything again.
-                </Text>
-            </SyncResult>
-        );
-    }
-
     // ── Upload failed (nothing uploaded, import not started) ───────────────
     if (step === 'upload-failed' && uploadResult) {
         const failed = uploadResult.failed ?? [];
@@ -682,7 +431,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
         return (
             <SyncResult
                 actionLabel={t('common.retry', { defaultValue: 'Retry', postProcess: 'titleCase' })}
-                onAction={handleUpload}
+                onAction={handleRetry}
                 secondaryAction={
                     <Stack gap="xs">
                         <CopyButton timeout={2000} value={diagnostics}>
@@ -699,7 +448,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         </CopyButton>
                         {/* Back to the playlist list, not the start: the XML is still
                             loaded and the selection is what the user will retry. */}
-                        <Button fullWidth onClick={() => setStep('preview')} variant="default">
+                        <Button fullWidth onClick={handleBackToPreview} variant="default">
                             {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
                         </Button>
                     </Stack>
@@ -726,6 +475,48 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         </Text>
                     )}
                 </Stack>
+            </SyncResult>
+        );
+    }
+
+    // ── Tagging failed (tracks uploaded, import not started) ───────────────
+    if (step === 'tagging-failed') {
+        return (
+            <SyncResult
+                actionLabel="Finish Import"
+                onAction={handleFinishImport}
+                secondaryAction={
+                    <Stack gap="xs">
+                        <CopyButton
+                            timeout={2000}
+                            value={`Rekordbox upload: tagging failed (import not started)\n${error ?? ''}`}
+                        >
+                            {({ copied, copy }) => (
+                                <Button
+                                    fullWidth
+                                    leftSection={<Icon icon={copied ? 'check' : 'clipboardCopy'} />}
+                                    onClick={copy}
+                                    variant="subtle"
+                                >
+                                    {copied ? 'Copied' : 'Copy details'}
+                                </Button>
+                            )}
+                        </CopyButton>
+                        <Button fullWidth onClick={handleBackToPreview} variant="default">
+                            {t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
+                        </Button>
+                    </Stack>
+                }
+                status="warn"
+                title="Tagging Failed"
+            >
+                <Text size="sm" ta="center">
+                    Your tracks were uploaded, but the server couldn&apos;t finish preparing them
+                    for import: {error}
+                </Text>
+                <Text c="dimmed" size="xs" ta="center">
+                    Finish Import brings in what was prepared without uploading anything again.
+                </Text>
             </SyncResult>
         );
     }

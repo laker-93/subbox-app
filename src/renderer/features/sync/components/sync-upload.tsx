@@ -1,7 +1,8 @@
 import { FormatSelect, SyncFlow } from '/@/renderer/features/sync/components/shared';
 import { SyncRekordbox } from '/@/renderer/features/sync/components/sync-rekordbox';
 import { SyncSerato } from '/@/renderer/features/sync/components/sync-serato';
-import { useLibraryFormat, useSetLibraryFormat } from '/@/renderer/store';
+import { useUploadRun } from '/@/renderer/features/sync/store/upload-run-store';
+import { useCurrentServerId, useLibraryFormat, useSetLibraryFormat } from '/@/renderer/store';
 import { Text } from '/@/shared/components/text/text';
 
 /**
@@ -21,8 +22,13 @@ import { Text } from '/@/shared/components/text/text';
  * switching never throws away a parsed library, and there is no guard to forget.
  */
 export const SyncUpload = () => {
-    const format = useLibraryFormat('upload');
+    const storedFormat = useLibraryFormat('upload');
     const setLibraryFormat = useSetLibraryFormat();
+    // A run in progress (or just finished) decides the flow, whatever format is
+    // stored: the user came back to see that run, not to be asked which software
+    // their library is in.
+    const run = useUploadRun(useCurrentServerId());
+    const format = run?.format ?? storedFormat;
 
     const formatControl = (
         // No description under the control here. Each flow already says what it reads
