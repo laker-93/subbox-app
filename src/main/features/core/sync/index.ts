@@ -8,7 +8,7 @@ import { pipeline } from 'stream/promises';
 import * as unzipper from 'unzipper';
 
 import { appConfig } from '/@/main/config/app-config';
-import { getStoredPassword } from '/@/main/features/core/settings';
+import { getStoredPassword, store } from '/@/main/features/core/settings';
 import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip-layout';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 import { findWhollyStaged, runMapMeta, TrackMetaToMap } from '/@/main/features/core/sync/map-meta';
@@ -1823,6 +1823,53 @@ ipcMain.handle('sync:stop-watch', async (): Promise<void> => {
     knownPresentIds.clear();
     inFlightUploadIds.clear();
 });
+
+// ── Library root ───────────────────────────────────────────────────────────
+// The folder of the user's own library on this device (design-library-roots.md in
+// subbox-workspace). Stored in the main-process settings store, which is per device
+// and never synced: the same library has a different root on every OS. A list, so
+// the data model doesn't preclude several, though the UI sets one.
+//
+// Nothing here reads a file under the root -- the folder may be in a cloud drive,
+// where opening a cloud-only file downloads it. The only check is that it exists.
+
+const LIBRARY_ROOTS_SETTING = 'library_roots';
+
+export type LibraryRootStatus = { reason: string; status: 'unavailable' } | { status: 'ok' };
+
+ipcMain.handle('sync:get-library-roots', async (): Promise<string[]> => {
+    const roots = store.get(LIBRARY_ROOTS_SETTING);
+    return Array.isArray(roots) ? roots.filter((r) => typeof r === 'string') : [];
+});
+
+ipcMain.handle('sync:set-library-roots', async (_event, roots: string[]): Promise<void> => {
+    store.set(LIBRARY_ROOTS_SETTING, roots);
+});
+
+ipcMain.handle('sync:select-library-root', async (): Promise<null | string> => {
+    const { dialog: electronDialog } = await import('electron');
+    const result = await electronDialog.showOpenDialog({
+        buttonLabel: 'Select Folder',
+        properties: ['openDirectory'],
+        title: 'Select Your Music Library Folder',
+    });
+    return result.filePaths[0] || null;
+});
+
+ipcMain.handle(
+    'sync:check-library-root',
+    async (_event, root: string): Promise<LibraryRootStatus> => {
+        // Not found is a hint, not an error: a root on an unmounted drive is still
+        // the right root to write an XML against.
+        try {
+            return fs.statSync(root).isDirectory()
+                ? { status: 'ok' }
+                : { reason: 'Not a folder', status: 'unavailable' };
+        } catch {
+            return { reason: 'Folder not found. Is the drive connected?', status: 'unavailable' };
+        }
+    },
+);
 
 // ── External drive comparison ───────────────────────────────────────────────
 
