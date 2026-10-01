@@ -37,6 +37,15 @@ const statusOf = (err: unknown): null | number =>
     err instanceof tus.DetailedError ? (err.originalResponse?.getStatus() ?? null) : null;
 
 /**
+ * Statuses that mean the upload can't be resumed, only started again: `409`, an
+ * offset mismatch, and `404`/`410`, the upload is gone. filebrowser deletes an
+ * upload that has had no PATCH for ~3 minutes, about as long as tus's own retry
+ * backoff, so a stall of a few minutes ends with the retry landing on a deleted
+ * upload (subbox-app#208).
+ */
+const RESTART_STATUSES = new Set([404, 409, 410]);
+
+/**
  * Auth and retry policy for one `tus.Upload`.
  *
  * `X-Auth` is read from `fbAuth` on every request rather than fixed when the
@@ -75,9 +84,10 @@ const tusOptions = (
  * Upload one file to filebrowser's `uploads/` at `stagingPath`.
  *
  * Creates the upload with `?override=true`, then sends it in chunks. If the
- * upload ends on an offset mismatch, it is re-created from offset 0 once — the
- * override create discards the partial file — and a second failure rejects, so
- * the caller can record the track as failed rather than spin on it.
+ * upload ends on an offset mismatch or is found deleted, it is re-created from
+ * offset 0 once — the override create discards any partial file — and a second
+ * failure rejects, so the caller can record the track as failed rather than spin
+ * on it.
  */
 export async function uploadFileViaTus(args: {
     fbAuth: FbAuth;
@@ -142,9 +152,10 @@ export async function uploadFileViaTus(args: {
     try {
         await attempt();
     } catch (err) {
-        if (statusOf(err) !== 409) throw err;
+        const status = statusOf(err);
+        if (status === null || !RESTART_STATUSES.has(status)) throw err;
         console.warn(
-            `TUS offset mismatch for "${trackName}", restarting from 0:`,
+            `TUS upload for "${trackName}" can't be resumed (${status}), restarting from 0:`,
             (err as Error).message,
         );
         await attempt();
