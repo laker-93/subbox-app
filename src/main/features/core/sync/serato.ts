@@ -7,6 +7,12 @@ import * as path from 'path';
 
 import { getMusicPath } from '/@/main/features/core/sync';
 import { findCloudOnlyAmong, pathKey } from '/@/main/features/core/sync/library-root';
+import { findWhollyStaged, runMapMeta } from '/@/main/features/core/sync/map-meta';
+import {
+    connectionLostError,
+    handleKeepingAwake,
+    runUploadQueue,
+} from '/@/main/features/core/sync/network-retry';
 import {
     createFbAuth,
     createPymixAuth,
@@ -178,7 +184,7 @@ ipcMain.handle(
     },
 );
 
-ipcMain.handle(
+handleKeepingAwake(
     'sync:upload-from-crates',
     async (
         event,
@@ -568,8 +574,19 @@ ipcMain.handle(
             });
         }
 
+        // Skip what an earlier attempt already uploaded whole: a retry after a late
+        // failure re-sends nothing the server has (laker-93/pymix#237). They are
+        // still mapped below, since this attempt's import has to stage them.
+        const alreadyStaged = await findWhollyStaged({
+            items: uploads.map((u) => ({ localPath: u.filePath, stagingPath: u.stagingPath })),
+            pymixAuth,
+            pymixUrl,
+        });
+        const toSend = uploads.filter((u) => !alreadyStaged.has(u.stagingPath));
+        result.skipped += uploads.length - toSend.length;
+
         // Step 5: does it fit? Ask before spending the transfer, not after.
-        const totalUploadBytes = uploads.reduce((sum, u) => sum + fs.statSync(u.filePath).size, 0);
+        const totalUploadBytes = toSend.reduce((sum, u) => sum + fs.statSync(u.filePath).size, 0);
         if (totalUploadBytes > 0) {
             const storageRes = await withPymixAuth<{
                 allowed?: boolean;
@@ -601,7 +618,7 @@ ipcMain.handle(
                 activeTracks: Array.from(activeUploads.values()),
                 currentTrack,
                 phase: 'uploading',
-                total: uploads.length,
+                total: toSend.length,
                 uploaded: completed,
             });
         };
@@ -627,30 +644,28 @@ ipcMain.handle(
             emitProgress(item.trackName);
         };
 
-        const queue = [...uploads];
         const failedStagingPaths = new Set<string>();
-        const workers = Array.from({ length: UPLOAD_CONCURRENCY }, async () => {
-            while (queue.length > 0) {
-                const item = queue.shift()!;
-                try {
-                    await uploadOne(item);
-                } catch (err) {
-                    // One track's failure must not sink the batch — the user has
-                    // dozens of other tracks in flight behind it.
-                    activeUploads.delete(item.trackName);
-                    completed++;
-                    result.skipped++;
-                    failedStagingPaths.add(item.stagingPath);
-                    result.failed.push({
-                        reason: err instanceof Error ? err.message : String(err),
-                        trackName: item.trackName,
-                    });
-                    console.warn(`[serato] upload failed for "${item.trackName}":`, err);
-                    emitProgress();
-                }
-            }
+        // One track's failure must not sink the batch — the user has dozens of
+        // other tracks in flight behind it. A dropped connection pauses the queue
+        // instead of failing it (subbox-app#203).
+        const { connectionLost, unsent } = await runUploadQueue({
+            concurrency: UPLOAD_CONCURRENCY,
+            items: toSend,
+            onFailed: (item, reason) => {
+                activeUploads.delete(item.trackName);
+                completed++;
+                result.skipped++;
+                failedStagingPaths.add(item.stagingPath);
+                result.failed.push({ reason, trackName: item.trackName });
+                console.warn(`[serato] upload failed for "${item.trackName}": ${reason}`);
+                emitProgress();
+            },
+            probeUrl: filebrowserUrl,
+            uploadOne,
         });
-        await Promise.all(workers);
+        if (connectionLost) {
+            throw connectionLostError(result.uploaded, unsent.length);
+        }
 
         // Step 7: map the staged files to their identities. The server re-reads the
         // SUBBOX_ID we wrote above rather than minting a new one, so this records
@@ -675,13 +690,18 @@ ipcMain.handle(
             }));
 
         if (tracksToMap.length > 0) {
-            await withPymixAuth(pymixAuth, (cookie) =>
-                axios.post(
-                    `${pymixUrl}/sync/map_meta`,
-                    { tracks: tracksToMap },
-                    { headers: { Cookie: cookie }, httpsAgent },
-                ),
-            );
+            await runMapMeta({
+                onProgress: (processed, total) =>
+                    sendProgress({
+                        currentTrack: '',
+                        phase: 'mapping-metadata',
+                        total,
+                        uploaded: processed,
+                    }),
+                pymixAuth,
+                pymixUrl,
+                tracks: tracksToMap,
+            });
         }
 
         sendProgress({

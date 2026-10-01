@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
 import { useDeletePlaylist } from '/@/renderer/features/playlists/mutations/delete-playlist-mutation';
-import { DeletePlaylistConfirmText } from '/@/renderer/features/trash/components/delete-confirm-text';
+import { useDeletesToTrash } from '/@/renderer/features/trash/components/delete-confirm-text';
 import { AppRoute } from '/@/renderer/router/routes';
 import { useCurrentServerId } from '/@/renderer/store';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
@@ -23,6 +23,7 @@ export const DeletePlaylistAction = ({ disabled, items }: DeletePlaylistActionPr
     const navigate = useNavigate();
     const serverId = useCurrentServerId();
     const deletePlaylistMutation = useDeletePlaylist({});
+    const deletesToTrash = useDeletesToTrash();
 
     const handleDeletePlaylist = useCallback(async () => {
         if (items.length === 0 || !serverId) return;
@@ -60,19 +61,22 @@ export const DeletePlaylistAction = ({ disabled, items }: DeletePlaylistActionPr
         openModal({
             children: (
                 <ConfirmModal onConfirm={handleDeletePlaylist}>
-                    <DeletePlaylistConfirmText playlists={items}>
-                        <Text>{t('common.areYouSure', { postProcess: 'sentenceCase' })}</Text>
-                    </DeletePlaylistConfirmText>
+                    <Text>{t('common.areYouSure', { postProcess: 'sentenceCase' })}</Text>
                 </ConfirmModal>
             ),
             title: t('form.deletePlaylist.title', { postProcess: 'sentenceCase' }),
         });
-    }, [handleDeletePlaylist, items, t]);
+    }, [handleDeletePlaylist, items.length, t]);
 
     if (items.length === 0) return null;
 
     return (
-        <ContextMenu.Item disabled={disabled} leftIcon="remove" onSelect={openDeletePlaylistModal}>
+        <ContextMenu.Item
+            disabled={disabled}
+            leftIcon="remove"
+            // Subbox: straight to the trash, with Undo; no confirm (#182).
+            onSelect={deletesToTrash ? handleDeletePlaylist : openDeletePlaylistModal}
+        >
             {t('action.deletePlaylist', { postProcess: 'sentenceCase' })}
         </ContextMenu.Item>
     );

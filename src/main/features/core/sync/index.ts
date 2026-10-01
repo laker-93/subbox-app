@@ -20,6 +20,12 @@ import {
     pathKey,
     scanLibraryRoot,
 } from '/@/main/features/core/sync/library-root';
+import { findWhollyStaged, runMapMeta, TrackMetaToMap } from '/@/main/features/core/sync/map-meta';
+import {
+    connectionLostError,
+    handleKeepingAwake,
+    runUploadQueue,
+} from '/@/main/features/core/sync/network-retry';
 import {
     createFbAuth,
     createPymixAuth,
@@ -89,7 +95,7 @@ type LocalTrack = {
 };
 
 type TrackEligibility =
-    | { cleanName: string; key: string; uploadable: true }
+    | { artist: string; cleanName: string; key: string; uploadable: true }
     | { reason: string; uploadable: false };
 
 /**
@@ -124,11 +130,21 @@ function trackEligibility(track: ParsedTrack): TrackEligibility {
     // plain falsy check, then extractTrackName reduces it to null — which we'd send
     // as title:null and pymix's /sync/match_tracks rejects with a 422 that fails the
     // *whole* batch.
-    if (!track.name?.trim() || !track.artist?.trim()) {
-        return { reason: 'no title or artist in the XML', uploadable: false };
+    if (!track.name?.trim()) {
+        return { reason: 'no title in the XML', uploadable: false };
     }
 
-    const cleanName = extractTrackName(track.name, track.artist, track.album ?? undefined);
+    // A blank Artist is allowed: untagged WAVs have none, and pymix finds an uploaded
+    // track by its file (userLocation → subbox_id), not its name (pymix#239), so the
+    // artist isn't needed to place it in a playlist or apply its cues (#201). The XML
+    // parser gives a blank Artist as null; send '' instead, because pymix echoes a
+    // null back from /sync/match_tracks as '' (the key rebuilt from that echo has to
+    // match this one) and /sync/map_meta's originalArtist is a required string. It
+    // stays '' on the wire rather than a placeholder so pymix's name match can't pair
+    // it with some other artist-less track of the same title.
+    const artist = track.artist?.trim() ? track.artist : '';
+
+    const cleanName = extractTrackName(track.name, artist, track.album ?? undefined);
     // extractTrackName can still return null when the title is entirely the
     // artist/album text; such a track has nothing to match on, so drop it rather
     // than poison the batch.
@@ -139,7 +155,7 @@ function trackEligibility(track: ParsedTrack): TrackEligibility {
     // Keyed on the raw artist rather than the trimmed one: pymix echoes back the artist
     // we send to /sync/match_tracks verbatim, and `trackKeyToTrack` below is rebuilt
     // from that echo, so the two spellings have to agree.
-    return { cleanName, key: `${track.artist} - ${cleanName}`, uploadable: true };
+    return { artist, cleanName, key: `${artist} - ${cleanName}`, uploadable: true };
 }
 
 function trackKeysForPlaylist(pl: { tracks: ParsedTrack[] }): string[] {
@@ -264,7 +280,7 @@ function collectTracksNotInAnyPlaylist(result: ReturnType<typeof extractPlaylist
     return result.tracks.filter((t) => !inPlaylist.has(t.location));
 }
 
-ipcMain.handle(
+handleKeepingAwake(
     'sync:upload-from-xml',
     async (
         event,
@@ -325,6 +341,7 @@ ipcMain.handle(
                     continue;
                 }
 
+                track.artist = eligibility.artist;
                 track.cleanName = eligibility.cleanName;
                 if (!trackMap.has(eligibility.key)) {
                     trackMap.set(eligibility.key, track);
@@ -369,6 +386,11 @@ ipcMain.handle(
             fileExtension: t.fileExtension,
             fromTag: true,
             title: t.cleanName,
+            // The same path sent to /sync/map_meta as userLocation below. pymix answers
+            // `matched` for a file an earlier upload already put in the library, so a
+            // retry doesn't re-send one whose tags differ from its Rekordbox name
+            // (pymix#239). A pymix without the field ignores it.
+            userLocation: t.location,
         }));
 
         // Chunk the match request so no single call can exceed Cloudflare's ~100s edge
@@ -464,13 +486,7 @@ ipcMain.handle(
         // Per-track TUS create/upload failures (e.g. a transient filebrowser error)
         // land here instead of aborting the whole batch — see the worker loop below.
         const failedTracks: Array<{ reason: string; stagingPath: string; trackName: string }> = [];
-        const originalTrackMetaData: Array<{
-            originalAlbum: null | string;
-            originalArtist: null | string;
-            originalName: null | string;
-            stagingLocation: string;
-            userLocation: string;
-        }> = [];
+        const originalTrackMetaData: TrackMetaToMap[] = [];
 
         // Build list of tracks that can actually be uploaded
         const uploadableTracks: Array<{
@@ -506,9 +522,10 @@ ipcMain.handle(
             // still matches. Album is optional in Rekordbox exports (white labels,
             // promos, single-track downloads) — sanitizePathSegment(undefined) is '',
             // which would otherwise collapse to an empty path component
-            // ("Artist//Title.mp3") that filebrowser 404s on.
+            // ("Artist//Title.mp3") that filebrowser 404s on. A blank artist (#201)
+            // needs the same fallback.
             const stagingPath = [
-                sanitizePathSegment(track.artist),
+                sanitizePathSegment(track.artist) || 'Unknown Artist',
                 sanitizePathSegment(track.album) || 'Unknown Album',
                 `${sanitizePathSegment(track.cleanName)}${track.fileExtension}`,
             ].join('/');
@@ -524,24 +541,21 @@ ipcMain.handle(
         }
 
         if (uploadableTracks.length > 0) {
-            // Fetch already-uploaded files from filebrowser and skip them
-            let existingPaths = new Set<string>();
-            try {
-                // Through fbRequest, not the token the renderer passed in: this is the
-                // first filebrowser request of the upload, so on a user returning after
-                // the ~2h token lifetime it's the one that 401s (subbox-app#137).
-                const listRes = await fbRequest(fbAuth, {
-                    method: 'get',
-                    url: `${filebrowserUrl}/api/resources/uploads`,
-                });
-                const items: Array<{ path: string }> = listRes.data?.items ?? [];
-                existingPaths = new Set(items.map((i) => i.path.replace(/^\//, '')));
-            } catch (err) {
-                console.warn('Failed to list existing uploads, proceeding without dedup:', err);
-            }
+            // Skip what an earlier attempt already uploaded whole, so a retry after a
+            // late failure doesn't re-send the library. Filebrowser's listing of
+            // uploads/ is one level deep and never matched an Artist/Album/Title
+            // staging path, so this used to skip nothing (laker-93/pymix#237).
+            const alreadyStaged = await findWhollyStaged({
+                items: uploadableTracks.map(({ stagingPath, track }) => ({
+                    localPath: track.location,
+                    stagingPath,
+                })),
+                pymixAuth,
+                pymixUrl,
+            });
 
             const tracksToUpload = uploadableTracks.filter(
-                ({ stagingPath }) => !existingPaths.has(stagingPath),
+                ({ stagingPath }) => !alreadyStaged.has(stagingPath),
             );
             skippedCount += uploadableTracks.length - tracksToUpload.length;
 
@@ -592,31 +606,30 @@ ipcMain.handle(
             };
 
             // Run with bounded concurrency. A single track's upload failure must not
-            // sink the whole batch: it's caught here, counted as skipped, and recorded
-            // with its reason, instead of rejecting Promise.all(workers) below and
-            // aborting every other in-flight and queued track.
-            const queue = [...tracksToUpload];
-            const workers = Array.from({ length: CONCURRENCY }, async () => {
-                while (queue.length > 0) {
-                    const item = queue.shift()!;
-                    try {
-                        await uploadTrack(item);
-                    } catch (err) {
-                        activeUploads.delete(item.trackName);
-                        completedCount++;
-                        skippedCount++;
-                        const reason = err instanceof Error ? err.message : String(err);
-                        failedTracks.push({
-                            reason,
-                            stagingPath: item.stagingPath,
-                            trackName: item.trackName,
-                        });
-                        console.warn(`Upload failed for "${item.trackName}", skipping:`, err);
-                        emitUploadingProgress();
-                    }
-                }
+            // sink the whole batch: it's recorded with its reason and counted as
+            // skipped, instead of aborting every other in-flight and queued track. A
+            // dropped connection pauses the queue instead of failing it (#203).
+            const { connectionLost, unsent } = await runUploadQueue({
+                concurrency: CONCURRENCY,
+                items: tracksToUpload,
+                onFailed: (item, reason) => {
+                    activeUploads.delete(item.trackName);
+                    completedCount++;
+                    skippedCount++;
+                    failedTracks.push({
+                        reason,
+                        stagingPath: item.stagingPath,
+                        trackName: item.trackName,
+                    });
+                    console.warn(`Upload failed for "${item.trackName}", skipping: ${reason}`);
+                    emitUploadingProgress();
+                },
+                probeUrl: filebrowserUrl,
+                uploadOne: uploadTrack,
             });
-            await Promise.all(workers);
+            if (connectionLost) {
+                throw connectionLostError(uploadedCount, unsent.length);
+            }
         }
 
         // Step 4: Map metadata. Tracks whose upload failed above never landed on the
@@ -634,13 +647,18 @@ ipcMain.handle(
             (m) => !failedStagingPaths.has(m.stagingLocation),
         );
 
-        await withPymixAuth(pymixAuth, (cookie) =>
-            axios.post(
-                `${pymixUrl}/sync/map_meta`,
-                { tracks: trackMetaDataToMap },
-                { headers: { Cookie: cookie }, httpsAgent },
-            ),
-        );
+        await runMapMeta({
+            onProgress: (processed, total) =>
+                sendProgress({
+                    currentTrack: '',
+                    phase: 'mapping-metadata',
+                    total,
+                    uploaded: processed,
+                }),
+            pymixAuth,
+            pymixUrl,
+            tracks: trackMetaDataToMap,
+        });
 
         sendProgress({
             currentTrack: '',
@@ -1034,7 +1052,7 @@ async function unzipAndMerge(
     });
 }
 
-ipcMain.handle(
+handleKeepingAwake(
     'sync:download-playlists',
     async (
         event,
@@ -2005,7 +2023,7 @@ ipcMain.handle(
     },
 );
 
-ipcMain.handle(
+handleKeepingAwake(
     'sync:download-missing-tracks',
     async (
         event,

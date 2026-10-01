@@ -88,6 +88,8 @@ const DROP_CLASS: Record<DropPlacement, string> = {
     inside: styles.dropInside,
 };
 
+const INPUT_SELECTOR = { draft: '[data-draft-folder] input', rename: 'input' };
+
 const focusNode = (nodeId: string) =>
     requestAnimationFrame(() => {
         const row = document.querySelector<HTMLElement>(`[data-node-id="${nodeId}"]`);
@@ -233,6 +235,10 @@ const FolderRow = ({
         isOpen,
         node,
     });
+    // Radix hands focus back to the row when the menu closes, which is after Rename or
+    // New folder inside has mounted a name input; steal it back, or keys go to global
+    // hotkeys (#180).
+    const inputOnClose = useRef<'draft' | 'rename' | null>(null);
 
     const row = (
         <div
@@ -288,8 +294,23 @@ const FolderRow = ({
     return (
         <ContextMenu>
             <ContextMenu.Target>{row}</ContextMenu.Target>
-            <ContextMenu.Content>
-                <ContextMenu.Item leftIcon="add" onSelect={() => onNewFolder(node.node_id)}>
+            <ContextMenu.Content
+                onCloseAutoFocus={(e) => {
+                    const input = inputOnClose.current;
+                    if (!input) return;
+                    inputOnClose.current = null;
+                    e.preventDefault();
+                    const scope = input === 'rename' ? ref.current : document;
+                    scope?.querySelector<HTMLInputElement>(INPUT_SELECTOR[input])?.focus();
+                }}
+            >
+                <ContextMenu.Item
+                    leftIcon="add"
+                    onSelect={() => {
+                        inputOnClose.current = 'draft';
+                        onNewFolder(node.node_id);
+                    }}
+                >
                     {t('form.playlistTree.newFolderInside', { postProcess: 'sentenceCase' })}
                 </ContextMenu.Item>
                 <ContextMenu.Item
@@ -299,7 +320,13 @@ const FolderRow = ({
                     {t('form.playlistTree.newPlaylistInside', { postProcess: 'sentenceCase' })}
                 </ContextMenu.Item>
                 <ContextMenu.Divider />
-                <ContextMenu.Item leftIcon="edit" onSelect={() => onRenameStart(node.node_id)}>
+                <ContextMenu.Item
+                    leftIcon="edit"
+                    onSelect={() => {
+                        inputOnClose.current = 'rename';
+                        onRenameStart(node.node_id);
+                    }}
+                >
                     {t('form.playlistTree.rename', { postProcess: 'sentenceCase' })}
                 </ContextMenu.Item>
                 <ContextMenu.Item
@@ -362,6 +389,58 @@ const FolderNameInput = ({
             size="xs"
             value={value}
         />
+    );
+};
+
+/**
+ * A folder that doesn't exist yet: "New folder" names it here and creates it on commit,
+ * so Escape leaves nothing behind (#184). Once committed it shows the name until the
+ * created node's own row replaces it.
+ */
+const DraftFolderRow = ({
+    depth,
+    name,
+    onCancel,
+    onCommit,
+}: {
+    depth: number;
+    name?: string;
+    onCancel: () => void;
+    onCommit: (name: string) => void;
+}) => {
+    const { t } = useTranslation();
+
+    return (
+        <div
+            className={clsx(styles.treeRow, styles.folderRow)}
+            data-draft-folder
+            role="treeitem"
+            style={{ '--tree-depth': depth } as CSSProperties}
+        >
+            <span className={styles.disclosure} />
+            <div className={clsx(rowStyles.row, styles.folder)}>
+                <div className={rowStyles.rowGroup}>
+                    <div className={styles.folderIcon}>
+                        <Icon color="muted" icon="folder" size="lg" />
+                    </div>
+                    <div className={rowStyles.metadata}>
+                        {name === undefined ? (
+                            <FolderNameInput
+                                initial={t('form.playlistTree.newFolderDefaultName', {
+                                    postProcess: 'titleCase',
+                                })}
+                                onCancel={onCancel}
+                                onCommit={onCommit}
+                            />
+                        ) : (
+                            <Text className={rowStyles.name} fw={500} size="md">
+                                {name}
+                            </Text>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 };
 
@@ -430,6 +509,8 @@ export const SidebarPlaylistTree = ({ tree }: { tree: PlaylistTree }) => {
 
     const { expand, expanded, toggle } = useTreeExpanded();
     const [renamingId, setRenamingId] = useState<null | string>(null);
+    // A folder being named by "New folder"; `name` once it's committed and being made.
+    const [draft, setDraft] = useState<null | { name?: string; parentId: null | string }>(null);
     const updateNode = useUpdatePlaylistNode();
     const createFolder = useCreatePlaylistFolder();
 
@@ -531,25 +612,41 @@ export const SidebarPlaylistTree = ({ tree }: { tree: PlaylistTree }) => {
         setRenamingId(null);
     }, [renamingId]);
 
-    const { mutate: mutateCreateFolder } = createFolder;
     const handleNewFolder = useCallback(
-        (parentId: null | string) =>
-            mutateCreateFolder(
-                {
-                    name: t('form.playlistTree.newFolderDefaultName', {
-                        postProcess: 'titleCase',
-                    }),
-                    parent_id: parentId,
-                },
-                {
-                    onSuccess: (node) => {
-                        expand(parentId);
-                        setRenamingId(node.node_id);
-                    },
-                },
-            ),
-        [expand, mutateCreateFolder, t],
+        (parentId: null | string) => {
+            expand(parentId);
+            setDraft({ parentId });
+        },
+        [expand],
     );
+
+    const { mutate: mutateCreateFolder } = createFolder;
+    const handleDraftCommit = useCallback(
+        (name: string) => {
+            if (!draft) return;
+            setDraft({ ...draft, name });
+            mutateCreateFolder(
+                { name, parent_id: draft.parentId },
+                {
+                    onSettled: () => setDraft(null),
+                    onSuccess: (node) => focusNode(node.node_id),
+                },
+            );
+        },
+        [draft, mutateCreateFolder],
+    );
+
+    // A new folder goes at the end of its parent, as pymix puts it: after the parent's
+    // last shown descendant, or at the very end for the top level.
+    const draftAt = useMemo(() => {
+        if (!draft) return null;
+        const parent = rows.findIndex((row) => row.node.node_id === draft.parentId);
+        if (parent === -1) return { depth: 0, index: rows.length };
+        const depth = rows[parent].depth + 1;
+        let index = parent + 1;
+        while (index < rows.length && rows[index].depth >= depth) index++;
+        return { depth, index };
+    }, [draft, rows]);
 
     const handleContextMenu = useCallback(
         (e: MouseEvent<HTMLAnchorElement>, playlist: Playlist) => {
@@ -564,6 +661,20 @@ export const SidebarPlaylistTree = ({ tree }: { tree: PlaylistTree }) => {
     );
 
     const openSet = new Set(expanded);
+
+    const withDraft = (shown: ReactNode[]) => {
+        if (!draft || !draftAt) return shown;
+        const row = (
+            <DraftFolderRow
+                depth={draftAt.depth}
+                key="draft-folder"
+                name={draft.name}
+                onCancel={() => setDraft(null)}
+                onCommit={handleDraftCommit}
+            />
+        );
+        return [...shown.slice(0, draftAt.index), row, ...shown.slice(draftAt.index)];
+    };
 
     return (
         <Accordion.Item value="playlists">
@@ -651,44 +762,46 @@ export const SidebarPlaylistTree = ({ tree }: { tree: PlaylistTree }) => {
             </Accordion.Control>
             <Accordion.Panel>
                 <div role="tree">
-                    {rows.map(({ depth, node, playlist }): ReactNode => {
-                        const isOpen = openSet.has(node.node_id);
+                    {withDraft(
+                        rows.map(({ depth, node, playlist }): ReactNode => {
+                            const isOpen = openSet.has(node.node_id);
 
-                        if (node.kind === 'folder') {
+                            if (node.kind === 'folder') {
+                                return (
+                                    <FolderRow
+                                        context={context}
+                                        depth={depth}
+                                        isOpen={isOpen}
+                                        isRenaming={renamingId === node.node_id}
+                                        key={node.node_id}
+                                        node={node}
+                                        onKeyboardMove={handleKeyboardMove}
+                                        onNewFolder={handleNewFolder}
+                                        onRename={handleRename}
+                                        onRenameEnd={handleRenameEnd}
+                                        onRenameStart={setRenamingId}
+                                        onToggle={toggle}
+                                    />
+                                );
+                            }
+
+                            if (!playlist) return null;
+
                             return (
-                                <FolderRow
+                                <PlaylistRow
                                     context={context}
                                     depth={depth}
                                     isOpen={isOpen}
-                                    isRenaming={renamingId === node.node_id}
                                     key={node.node_id}
                                     node={node}
+                                    onContextMenu={handleContextMenu}
                                     onKeyboardMove={handleKeyboardMove}
-                                    onNewFolder={handleNewFolder}
-                                    onRename={handleRename}
-                                    onRenameEnd={handleRenameEnd}
-                                    onRenameStart={setRenamingId}
                                     onToggle={toggle}
+                                    playlist={playlist}
                                 />
                             );
-                        }
-
-                        if (!playlist) return null;
-
-                        return (
-                            <PlaylistRow
-                                context={context}
-                                depth={depth}
-                                isOpen={isOpen}
-                                key={node.node_id}
-                                node={node}
-                                onContextMenu={handleContextMenu}
-                                onKeyboardMove={handleKeyboardMove}
-                                onToggle={toggle}
-                                playlist={playlist}
-                            />
-                        );
-                    })}
+                        }),
+                    )}
                 </div>
             </Accordion.Panel>
         </Accordion.Item>

@@ -493,6 +493,7 @@
         },
         "modeToggle": {
             "libraryTooltip": "page.modeToggle.libraryTooltip",
+            "syncRunningTooltip": "page.modeToggle.syncRunningTooltip",
             "syncTooltip": "page.modeToggle.syncTooltip"
         },
         "playlistList": {

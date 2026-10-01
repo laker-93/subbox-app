@@ -6,7 +6,43 @@ permissions:
     contents: write
 
 jobs:
+    # One release for the tag, made before the builds start. Each build's electron-builder
+    # uploads to a draft it finds for the tag; left to find none, the three raced to
+    # create one each, and v1.10.37 got two releases (#185).
+    release:
+        runs-on: ubuntu-latest
+        outputs:
+            id: ${{ steps.release.outputs.id }}
+        steps:
+            - name: Checkout git repo
+              uses: actions/checkout@v6
+
+            - name: Create the draft release
+              id: release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GH_REPO: ${{ github.repository }}
+              run: |
+                  VERSION=$(node -p "require('./package.json').version")
+                  TAG="v$VERSION"
+                  # A re-run reuses the release it made (draft or not).
+                  ID=$(gh api "repos/$GH_REPO/releases" --paginate \
+                      --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -1)
+                  if [ -z "$ID" ]; then
+                      # Named as electron-builder names one: the bare version, no notes.
+                      # The id comes from the create itself: the release list can lag a
+                      # new draft by a second or more, and 1.10.38's first run read it
+                      # back empty. Fails if the tag hasn't been pushed.
+                      gh api "repos/$GH_REPO/git/ref/tags/$TAG" --silent
+                      ID=$(gh api -X POST "repos/$GH_REPO/releases" \
+                          -f tag_name="$TAG" -f name="$VERSION" -F draft=true --jq .id)
+                  fi
+                  test -n "$ID"
+                  echo "Release $ID for $TAG"
+                  echo "id=$ID" >> "$GITHUB_OUTPUT"
+
     publish:
+        needs: release
         runs-on: ${{ matrix.os }}
 
         strategy:
@@ -76,3 +112,25 @@ jobs:
                   command: |
                       pnpm run publish:linux-arm64
                   on_retry_command: pnpm cache delete
+
+    # Publish the draft once every platform has uploaded, and only if each one's update
+    # feed is there: a failed build leaves it a draft, which no updater reads.
+    finalize:
+        needs: [release, publish]
+        runs-on: ubuntu-latest
+        steps:
+            - name: Publish the release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GH_REPO: ${{ github.repository }}
+                  RELEASE_ID: ${{ needs.release.outputs.id }}
+              run: |
+                  ASSETS=$(gh api "repos/$GH_REPO/releases/$RELEASE_ID/assets" --paginate --jq '.[].name')
+                  for FEED in latest.yml latest-mac.yml latest-linux.yml latest-linux-arm64.yml; do
+                      if ! grep -qx "$FEED" <<< "$ASSETS"; then
+                          echo "::error::$FEED is missing from release $RELEASE_ID; left as a draft"
+                          exit 1
+                      fi
+                  done
+                  gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
+                      -F draft=false -f make_latest=true --jq '"Published \(.tag_name): \(.html_url)"'

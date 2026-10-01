@@ -101,7 +101,12 @@ export const RemoveFromPlaylistAction = ({ items }: RemoveFromPlaylistActionProp
     if (ids.length === 0 || !playlistId) return null;
 
     return (
-        <ContextMenu.Item leftIcon="remove" onSelect={openRemoveFromPlaylistModal}>
+        <ContextMenu.Item
+            leftIcon="remove"
+            // Subbox: the toast after it has Undo, so it asks nothing first; demo, which
+            // gets no Undo, keeps the confirm (#182).
+            onSelect={isDemo ? openRemoveFromPlaylistModal : handleRemoveFromPlaylist}
+        >
             {t('action.removeFromPlaylist', { postProcess: 'sentenceCase' })}
         </ContextMenu.Item>
     );

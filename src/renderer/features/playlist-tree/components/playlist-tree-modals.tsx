@@ -96,10 +96,9 @@ export const openCreatePlaylistInFolderModal = (folder: {
     openModal({
         children: <CreatePlaylistInFolderForm parentId={folder.node_id} />,
         size: 'sm',
-        title: t('form.playlistTree.newPlaylistTitle', {
-            folder: folder.name ?? '',
-            postProcess: 'sentenceCase',
-        }),
+        // Written in sentence case, not post-processed: that would lowercase the
+        // folder's own name (#181).
+        title: t('form.playlistTree.newPlaylistTitle', { folder: folder.name ?? '' }),
     });
 };
 

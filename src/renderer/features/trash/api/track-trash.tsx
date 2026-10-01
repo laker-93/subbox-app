@@ -180,14 +180,33 @@ export const restoreTrackBatch = async ({
     }
 };
 
+/**
+ * Shown from Confirm until pymix answers, which takes a few seconds (#183). The
+ * result's toast replaces it. `name` when it's one track.
+ */
+export const showTracksDeletingToast = ({ count, name }: { count: number; name?: string }) => {
+    const id = `trash-deleting-${Date.now()}`;
+    toast.info({
+        autoClose: false,
+        id,
+        loading: true,
+        message: name
+            ? t('form.trash.tracks.deletingOne', { name })
+            : t('form.trash.tracks.deleting', { count }),
+    });
+    return () => toast.hide(id);
+};
+
 export const showTracksDeletedToast = ({
     batchId,
     count,
+    name,
     queryClient,
     serverId,
 }: {
     batchId: string;
     count: number;
+    name?: string;
     queryClient: QueryClient;
     serverId: string;
 }) => {
@@ -197,7 +216,11 @@ export const showTracksDeletedToast = ({
         id,
         message: (
             <Group gap="sm" justify="space-between" wrap="nowrap">
-                <span>{t('form.trash.tracks.deleted', { count })}</span>
+                <span>
+                    {name
+                        ? t('form.trash.tracks.deletedOne', { name })
+                        : t('form.trash.tracks.deleted', { count })}
+                </span>
                 <Button
                     onClick={() => {
                         toast.hide(id);
