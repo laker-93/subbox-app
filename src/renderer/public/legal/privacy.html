@@ -11,7 +11,7 @@
         <header>
             <a class="home" href="./index.html">← Legal</a>
             <h1>Privacy Notice</h1>
-            <p class="updated"> Version 1.0 (beta) · Last updated 11 August 2026 </p>
+            <p class="updated"> Version 1.1 (beta) · Last updated 2 October 2026 </p>
         </header>
 
         <h2>1. Who is responsible for your data</h2>
@@ -102,6 +102,20 @@
             rate-limit the form and is not written to our database.
         </p>
 
+        <h3>Billing data (paid plans only)</h3>
+        <p>
+            If you buy a paid plan: your name, email address and billing country, the plan you
+            bought, and a record of each payment (amount, date and whether it succeeded), together
+            with the identifiers our payment provider, Stripe, gives your customer record and
+            subscription. Your card details are entered directly with Stripe and are never sent to
+            us; we can see only the card brand, its last four digits and its expiry date.
+        </p>
+        <p>
+            <strong>Why:</strong> to take payment, manage your plan and keep the business records
+            the law requires. <strong>Legal basis:</strong> performance of our contract with you,
+            and our legal obligation to keep tax records.
+        </p>
+
         <h3>Product analytics</h3>
         <p>
             <strong>None.</strong> Subbox does not use product analytics, and does not load any
@@ -153,8 +167,19 @@
                     <td>Traffic routing, IP addresses in transit</td>
                     <td>United States</td>
                 </tr>
+                <tr>
+                    <td>Stripe</td>
+                    <td>Payments for paid plans: billing data and card details</td>
+                    <td>United Kingdom, Ireland and United States</td>
+                </tr>
             </tbody>
         </table>
+        <p>
+            Stripe also uses payment data for its own purposes, such as preventing fraud and meeting
+            its legal obligations as a payment provider. For those purposes it is a controller in
+            its own right, and its use is governed by the
+            <a href="https://stripe.com/gb/privacy">Stripe Privacy Policy</a>.
+        </p>
         <p>
             We may also disclose data where the law requires it, or to establish or defend legal
             claims.
@@ -166,7 +191,7 @@
             service metrics we collect are all held in UK datacentres, so using Subbox does not by
             itself send your data overseas.
         </p>
-        <p>Two things do leave the UK:</p>
+        <p>Three things do leave the UK:</p>
         <ul>
             <li>
                 <strong>Traffic routing.</strong> Cloudflare, Inc. sits in front of the Service and
@@ -181,6 +206,11 @@
                 mailbox operated by Google LLC in the United States, and our reply is sent from
                 there.
             </li>
+            <li>
+                <strong>Payments.</strong> If you buy a paid plan, Stripe may process your billing
+                and card data in the United States and other countries, protected by the transfer
+                safeguards set out in Stripe's privacy policy and data processing terms.
+            </li>
         </ul>
 
         <h2>6. How long we keep it</h2>
@@ -188,6 +218,12 @@
             We keep your account data and your library for as long as your account is open. When
             your account is closed we delete your library and your account record. Any backup copies
             still holding your data are deleted as those backups are rotated out.
+        </p>
+        <p>
+            Billing records are the exception: if you have bought a paid plan, we keep the record
+            of your payments (your name, email address, and the amounts and dates you paid) for six
+            years after the end of the tax year they relate to, even if you close your account,
+            because UK tax law requires us to keep them.
         </p>
         <p>
             Server logs are kept for 14 days. Service metrics are kept for 14 days. Beta invitation
