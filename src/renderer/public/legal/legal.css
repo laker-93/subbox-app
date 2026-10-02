@@ -172,3 +172,10 @@ footer {
     color: var(--muted);
     border-top: 1px solid var(--rule);
 }
+
+blockquote {
+    padding: 0.75rem 1.1rem;
+    margin: 1.25rem 0;
+    font-size: 0.95rem;
+    border-left: 3px solid var(--rule);
+}

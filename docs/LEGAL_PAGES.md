@@ -78,6 +78,22 @@ Settled on 2026-08-12:
 - **Liability cap: the greater of £100 or twelve months' fees.** A conventional
   formulation, not advice, and it applies to business users only.
 
+Settled on 2026-10-02 (version 1.1 of the terms and the privacy notice):
+
+- **Paid plans exist.** Terms §9 covers a Stripe subscription for a larger storage
+  allowance: price shown at checkout, monthly renewal, cancel via the Stripe receipt link
+  (customer portal) or email, the Consumer Contracts Regulations 14-day right to cancel
+  with a proportionate deduction, the model cancellation form, a 30-day grace before any
+  content is removed when a plan ends, and a refund for outages over 7 days. §8 no
+  longer says the Service is free of charge. Sections 9–12 became 10–13.
+- **The 14-day express request is the Stripe terms checkbox.** Its custom text must say
+  the plan starts immediately and that cancelling within 14 days refunds less the days
+  used; terms §9 says "when you pay, you ask us to start your plan immediately", which
+  is only true while that checkbox text says so.
+- **Stripe is a named processor and a transfer** (privacy §2, §4, §5), and an independent
+  controller for its own fraud and compliance use. Billing records are kept six years
+  after the tax year they relate to, overriding deletion-on-closure (§6).
+
 ### Dropped from the pages on 2026-08-12 — still owed
 
 These were removed so the PR could merge, on the instruction not to block it
