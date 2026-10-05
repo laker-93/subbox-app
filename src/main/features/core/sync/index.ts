@@ -11,6 +11,7 @@ import { appConfig } from '/@/main/config/app-config';
 import { getStoredPassword } from '/@/main/features/core/settings';
 import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip-layout';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
+import { findInPlaceTracks, InPlaceTrack } from '/@/main/features/core/sync/in-place';
 import { findWhollyStaged, runMapMeta, TrackMetaToMap } from '/@/main/features/core/sync/map-meta';
 import {
     connectionLostError,
@@ -23,6 +24,7 @@ import {
     FbAuth,
     fbRequest,
     httpsAgent,
+    PymixAuth,
     sendSessionExpired,
     withPymixAuth,
 } from '/@/main/features/core/sync/pymix-auth';
@@ -1067,8 +1069,17 @@ handleKeepingAwake(
             rekordboxXmlDir?: string;
             serverId?: string;
             username?: string;
+            // Use the tracks still where they were uploaded from, instead of
+            // downloading them (#214). Only for a Rekordbox download that writes no
+            // Serato crates: a crate needs every track under the music folder.
+            useTracksInPlace?: boolean;
         },
-    ): Promise<{ musicPath: string; tracksExported: number; xmlPath?: string }> => {
+    ): Promise<{
+        musicPath: string;
+        tracksExported: number;
+        tracksInPlace: number;
+        xmlPath?: string;
+    }> => {
         const {
             filebrowserToken,
             filebrowserUrl,
@@ -1079,6 +1090,7 @@ handleKeepingAwake(
             rekordboxXmlDir,
             serverId,
             username,
+            useTracksInPlace,
         } = args;
         const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
 
@@ -1103,8 +1115,17 @@ handleKeepingAwake(
                 username,
             });
 
-            // Scan local music directory for existing tracks
-            const localTracks = await scanLocalTracks();
+            // Scan local music directory for existing tracks, plus the ones still
+            // where the user uploaded them from: pymix leaves those out of the zip
+            // and points the XML at them.
+            const inPlaceTracks = useTracksInPlace
+                ? await findInPlace(pymixAuth, pymixUrl, playlistIds)
+                : [];
+            const localTracks: Array<InPlaceTrack | LocalTrack> = [
+                ...(await scanLocalTracks()),
+                ...inPlaceTracks,
+            ];
+            const tracksInPlace = inPlaceTracks.length;
 
             const appPath = getAppPath();
             if (!fs.existsSync(appPath)) {
@@ -1168,7 +1189,12 @@ handleKeepingAwake(
                     downloadFilename,
                     xmlDestPath,
                 );
-                return { musicPath: getMusicPath(), tracksExported: 0, xmlPath: xmlDestPath };
+                return {
+                    musicPath: getMusicPath(),
+                    tracksExported: 0,
+                    tracksInPlace,
+                    xmlPath: xmlDestPath,
+                };
             }
 
             // Step 2: Download the zip from filebrowser. pymix names the file it
@@ -1221,7 +1247,12 @@ handleKeepingAwake(
                 xmlPath = xmlDestPath;
             }
 
-            return { musicPath: getMusicPath(), tracksExported: nTracksExported, xmlPath };
+            return {
+                musicPath: getMusicPath(),
+                tracksExported: nTracksExported,
+                tracksInPlace,
+                xmlPath,
+            };
         } finally {
             watchPaused = false;
         }
@@ -1231,6 +1262,42 @@ handleKeepingAwake(
 ipcMain.handle('sync:get-local-tracks', async (): Promise<LocalTrack[]> => {
     return scanLocalTracks();
 });
+
+/** The tracks in these playlists still where they were uploaded from (#214). */
+function findInPlace(
+    pymixAuth: PymixAuth,
+    pymixUrl: string,
+    playlistIds: string[],
+): Promise<InPlaceTrack[]> {
+    return findInPlaceTracks({
+        playlistIds,
+        post: (ids) =>
+            withPymixAuth<{ locations: Record<string, string> }>(pymixAuth, (cookie) =>
+                axios.post(
+                    `${pymixUrl}/tracks/locations`,
+                    { playlistIds: ids },
+                    { headers: { Cookie: cookie }, httpsAgent },
+                ),
+            ),
+    });
+}
+
+// The download preview's half of sync:download-playlists' useTracksInPlace, so the
+// plan counts these tracks as present before the user downloads.
+ipcMain.handle(
+    'sync:find-in-place-tracks',
+    async (
+        _event,
+        args: { playlistIds: string[]; pymixUrl: string; serverId?: string; username?: string },
+    ): Promise<InPlaceTrack[]> => {
+        const { playlistIds, pymixUrl, serverId, username } = args;
+        return findInPlace(
+            createPymixAuth({ pymixUrl, serverId, username }),
+            pymixUrl,
+            playlistIds,
+        );
+    },
+);
 
 // ── Choose where downloaded Rekordbox XML is saved ─────────────────────────
 
