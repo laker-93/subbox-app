@@ -27,6 +27,10 @@ import {
     withPymixAuth,
 } from '/@/main/features/core/sync/pymix-auth';
 import {
+    matchedTrackLocations,
+    recordTrackLocations,
+} from '/@/main/features/core/sync/record-locations';
+import {
     extractPlaylists,
     ParsedPlaylist,
     ParsedTrack,
@@ -389,11 +393,18 @@ handleKeepingAwake(
         // server-side concurrently, so a chunk of this size stays well within the limit
         // regardless of total library size; the server also preserves per-chunk order.
         const MATCH_CHUNK_SIZE = 500;
-        const matchedTracks: Array<{ artist: string; matched: boolean; title: string }> = [];
+        type MatchedTrack = {
+            artist: string;
+            matched: boolean;
+            // The library track it matched (laker-93/pymix#247); absent from an older pymix.
+            subboxId?: null | string;
+            title: string;
+        };
+        const matchedTracks: MatchedTrack[] = [];
         for (let i = 0; i < clientTracks.length; i += MATCH_CHUNK_SIZE) {
             const chunk = clientTracks.slice(i, i + MATCH_CHUNK_SIZE);
             const matchResponse = await withPymixAuth<{
-                tracks: Array<{ artist: string; matched: boolean; title: string }>;
+                tracks: MatchedTrack[];
             }>(pymixAuth, (cookie) =>
                 axios.post(
                     `${pymixUrl}/sync/match_tracks`,
@@ -409,6 +420,27 @@ handleKeepingAwake(
             if (track.matched === false) {
                 missingTracks.push(track);
             }
+        }
+
+        // A matched track isn't sent, so /sync/map_meta never records where it is on
+        // this machine. Record it now, so a later download can use it in place
+        // (#214 point 5). Best effort: it never fails the upload.
+        const matchedLocations = matchedTrackLocations(clientTracks, matchedTracks);
+        if (matchedLocations.length > 0) {
+            const recorded = await recordTrackLocations({
+                entries: matchedLocations,
+                post: (chunk) =>
+                    withPymixAuth<{ recorded: string[] }>(pymixAuth, (cookie) =>
+                        axios.post(
+                            `${pymixUrl}/tracks/locations/record`,
+                            { tracks: chunk },
+                            { headers: { Cookie: cookie }, httpsAgent },
+                        ),
+                    ),
+            });
+            console.log(
+                `[sync] recorded the path of ${recorded} of ${matchedLocations.length} matched track(s)`,
+            );
         }
 
         // Build lookup from key → ParsedTrack
