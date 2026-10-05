@@ -151,6 +151,12 @@ export const useUploadRunStore = createWithEqualityFn<UploadRunState>()(() => ({
 }));
 
 const IMPORT_POLL_MS = 3000;
+// A failed progress poll says nothing about the job: pymix keeps running it. One
+// stalled request through Cloudflare (a 524 after 100 s) used to end the run as
+// "Import failed" while the import went on to finish (laker-93/subbox-app#215),
+// so polling backs off and only gives up after this long of nothing but failures.
+const IMPORT_POLL_GIVE_UP_MS = 10 * 60 * 1000;
+const IMPORT_POLL_MAX_BACKOFF_MS = 30 * 1000;
 
 export const isUploadRunActive = (run: null | UploadRun): boolean =>
     run?.step === 'uploading' || run?.step === 'importing';
@@ -289,6 +295,8 @@ const runImport = async (
     // only thing that can say it finished (laker-93/subbox-app#55).
     update(token, { importProgress: null, jobId, step: 'importing' });
 
+    let failingSince: null | number = null;
+    let failedPolls = 0;
     for (;;) {
         let prog: ImportProgress;
         try {
@@ -297,12 +305,22 @@ const runImport = async (
                 query: { job_id: jobId, public: false },
             })) as ImportProgress;
         } catch (err: any) {
-            update(token, {
-                error: err?.message || 'Failed to check import progress',
-                step: 'done',
-            });
-            return;
+            if (useUploadRunStore.getState().runToken !== token) return;
+            failingSince ??= Date.now();
+            failedPolls += 1;
+            if (Date.now() - failingSince >= IMPORT_POLL_GIVE_UP_MS) {
+                update(token, {
+                    error: err?.message || 'Failed to check import progress',
+                    step: 'done',
+                });
+                return;
+            }
+            const backoff = Math.min(IMPORT_POLL_MS * 2 ** failedPolls, IMPORT_POLL_MAX_BACKOFF_MS);
+            await new Promise((resolve) => setTimeout(resolve, backoff));
+            continue;
         }
+        failingSince = null;
+        failedPolls = 0;
         if (useUploadRunStore.getState().runToken !== token) return;
         update(token, { importProgress: prog });
 
