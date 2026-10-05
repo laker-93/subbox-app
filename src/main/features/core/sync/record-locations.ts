@@ -93,11 +93,12 @@ export async function recordTrackLocations(args: {
         } catch (err) {
             if (isAxiosError(err) && err.response?.status === 404) {
                 console.log('[sync] pymix has no /tracks/locations/record; no paths recorded');
+            } else if (isAxiosError(err) && err.response?.status === 422) {
+                // A pymix before #253 requires user_location, which a moved
+                // track's replace entry leaves out. The next download searches again.
+                console.log('[sync] pymix cannot record moved tracks yet; none recorded');
             } else {
-                console.warn(
-                    '[sync] could not record track paths (an older pymix refuses an entry with no user_location, #253):',
-                    err,
-                );
+                console.warn('[sync] could not record track paths:', err);
             }
             return recorded;
         }
