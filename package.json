@@ -55,6 +55,7 @@
         "check:rekordbox-playlist-names": "tsx scripts/check-rekordbox-playlist-names.ts",
         "check:export-zip-extraction": "tsx scripts/check-export-zip-extraction.ts",
         "check:serato-crates": "tsx scripts/check-serato-crates.ts",
+        "check:serato-no-write": "tsx scripts/check-serato-no-write.ts",
         "dev:rekordbox-export": "tsx scripts/dev-rekordbox-export.ts",
         "dev:rekordbox-grid": "tsx scripts/dev-rekordbox-grid.ts",
         "dev:serato-roundtrip": "tsx scripts/dev-serato-roundtrip.ts",

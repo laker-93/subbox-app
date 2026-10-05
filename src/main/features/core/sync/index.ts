@@ -18,6 +18,7 @@ import {
 } from '/@/main/features/core/sync/in-place';
 import {
     checkLibraryRoot,
+    isAtOrUnderRoot,
     LIBRARY_ROOT_SETTING,
     LibraryRootCheck,
     withRootRelativePath,
@@ -1386,6 +1387,12 @@ ipcMain.handle(
 );
 
 ipcMain.handle('sync:check-library-root', async (_event, root: string) => checkLibraryRoot(root));
+
+/** Whether `dir` is this device's library root or inside it (#221). False with no root. */
+ipcMain.handle('sync:is-under-library-root', async (_event, dir: string): Promise<boolean> => {
+    const root = getLibraryRoot();
+    return Boolean(root && dir && isAtOrUnderRoot(root, dir));
+});
 
 /**
  * Give the tracks already uploaded from under this device's root their path under

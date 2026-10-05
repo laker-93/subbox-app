@@ -66,6 +66,20 @@ export async function checkLibraryRoot(
 }
 
 /**
+ * Whether `dir` is the library root or a folder inside it (#221): the Watch
+ * folder there means subbox writes a tag into files that sync to every device.
+ */
+export function isAtOrUnderRoot(
+    root: string,
+    dir: string,
+    platform: NodeJS.Platform = process.platform,
+): boolean {
+    if (!isPlatformAbsolute(root, platform) || !isPlatformAbsolute(dir, platform)) return false;
+    const relative = pathFor(platform).relative(root.normalize('NFC'), dir.normalize('NFC'));
+    return relative === '' || rootRelative(root, dir, platform) !== null;
+}
+
+/**
  * `file`'s path under `root`, `/`-separated with its own case kept, or null when
  * it isn't under the root. The one place this rule lives: pymix stores the result
  * as an opaque string and does no path work (#214 point 10).
