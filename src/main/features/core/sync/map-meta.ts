@@ -16,6 +16,8 @@ export interface TrackMetaToMap {
     originalAlbum: null | string;
     originalArtist: null | string;
     originalName: null | string;
+    // userLocation under this device's library root, when one is set (#219).
+    rootRelativePath?: string;
     stagingLocation: string;
     userLocation: string;
 }

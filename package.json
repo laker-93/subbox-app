@@ -63,6 +63,7 @@
         "dev:serato-dmg": "tsx scripts/dev-serato-dmg.ts",
         "check:taglib-tagging": "tsx scripts/check-taglib-tagging.ts",
         "check:job-outcome": "tsx scripts/check-job-outcome.ts",
+        "check:library-root": "tsx scripts/check-library-root.ts",
         "check:record-locations": "tsx scripts/check-record-locations.ts",
         "check:tracks-in-place": "tsx scripts/check-tracks-in-place.ts",
         "postinstall": "electron-builder install-app-deps",

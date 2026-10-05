@@ -1,8 +1,12 @@
 import { isAxiosError } from 'axios';
 import * as fs from 'fs';
 
+import { rootRelative } from './library-root';
+
 /** One entry of pymix's `POST /tracks/locations/record` body. */
 export interface TrackLocationToRecord {
+    // user_location under this device's library root, when one is set (#219).
+    root_relative_path?: string;
     subbox_id: string;
     user_location: string;
 }
@@ -19,11 +23,15 @@ export const RECORD_LOCATIONS_CHUNK = 1000;
  * laker-93/pymix#247 sends none, and then nothing is recorded. A path that doesn't
  * exist here is left out: pymix keeps the first path recorded for a track, so a stale
  * XML entry would otherwise block the right one for good.
+ *
+ * With a library root set, each entry also carries its path under the root (#219),
+ * which pymix fills in where the track has none.
  */
 export function matchedTrackLocations(
     sent: Array<{ userLocation?: null | string }>,
     matched: Array<{ matched: boolean; subboxId?: null | string }>,
     exists: (filePath: string) => boolean = fs.existsSync,
+    root: null | string = null,
 ): TrackLocationToRecord[] {
     const entries: TrackLocationToRecord[] = [];
     const seen = new Set<string>();
@@ -32,7 +40,12 @@ export function matchedTrackLocations(
         if (!answer.matched || !answer.subboxId || !location) return;
         if (seen.has(answer.subboxId) || !exists(location)) return;
         seen.add(answer.subboxId);
-        entries.push({ subbox_id: answer.subboxId, user_location: location });
+        const relative = root ? rootRelative(root, location) : null;
+        entries.push({
+            subbox_id: answer.subboxId,
+            user_location: location,
+            ...(relative ? { root_relative_path: relative } : {}),
+        });
     });
     return entries;
 }
