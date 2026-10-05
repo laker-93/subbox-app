@@ -129,11 +129,14 @@ export const LibraryRootSetting = () => {
                     Looking for uploaded tracks in this folder...
                 </Text>
             )}
-            {backfill && backfill !== 'running' && (
+            {/* Uploaded *from* here: on another computer the same library is found
+                under this folder at download time, but none of it was uploaded from it,
+                so a zero says nothing useful and is not shown. */}
+            {backfill && backfill !== 'running' && backfill.underRoot > 0 && (
                 <Text c="dimmed" data-testid="library-root-backfill" size="xs">
                     {backfill.underRoot === 1
-                        ? '1 uploaded track is in this folder.'
-                        : `${backfill.underRoot.toLocaleString()} uploaded tracks are in this folder.`}
+                        ? '1 track was uploaded from this folder.'
+                        : `${backfill.underRoot.toLocaleString()} tracks were uploaded from this folder.`}
                 </Text>
             )}
         </Stack>
