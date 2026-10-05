@@ -1,14 +1,20 @@
 import { isAxiosError } from 'axios';
 import * as fs from 'fs';
 
+import type { MovedTrack } from './in-place';
+
 import { rootRelative } from './library-root';
 
 /** One entry of pymix's `POST /tracks/locations/record` body. */
 export interface TrackLocationToRecord {
+    // Overwrite the stored root_relative_path, not fill it only if null (#222,
+    // pymix#253). user_location is never replaced either way.
+    replace?: boolean;
     // user_location under this device's library root, when one is set (#219).
     root_relative_path?: string;
     subbox_id: string;
-    user_location: string;
+    // Absent on a replace: user_location is write-once (#214 point 7).
+    user_location?: string;
 }
 
 // pymix caps a /tracks/locations/record request at 1000 tracks.
@@ -51,6 +57,21 @@ export function matchedTrackLocations(
 }
 
 /**
+ * The record entries for tracks a download found moved under the library root
+ * (#222): the new path under the root, replacing the recorded one. Only that: the
+ * absolute path is write-once, and on the machine it was recorded on it simply
+ * fails its stat now, so the root's relative path finds the file instead. The same
+ * payload from every machine.
+ */
+export function movedTrackEntries(moved: MovedTrack[]): TrackLocationToRecord[] {
+    return moved.map((m) => ({
+        replace: true,
+        root_relative_path: m.rootRelativePath,
+        subbox_id: m.subboxId,
+    }));
+}
+
+/**
  * Send the entries to `/tracks/locations/record`, a chunk at a time. Returns how
  * many tracks pymix recorded a path for.
  *
@@ -72,8 +93,12 @@ export async function recordTrackLocations(args: {
         } catch (err) {
             if (isAxiosError(err) && err.response?.status === 404) {
                 console.log('[sync] pymix has no /tracks/locations/record; no paths recorded');
+            } else if (isAxiosError(err) && err.response?.status === 422) {
+                // A pymix before #253 requires user_location, which a moved
+                // track's replace entry leaves out. The next download searches again.
+                console.log('[sync] pymix cannot record moved tracks yet; none recorded');
             } else {
-                console.warn('[sync] could not record the paths of matched tracks:', err);
+                console.warn('[sync] could not record track paths:', err);
             }
             return recorded;
         }

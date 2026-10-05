@@ -20,9 +20,22 @@ export interface InPlaceTrack {
 // Stats in flight at once. One per track, so a whole library is ~12k of them.
 const STAT_CONCURRENCY = 32;
 
+/** The slice of `fs.Dirent` the root walk reads. */
+export interface DirEntry {
+    isDirectory(): boolean;
+    isFile(): boolean;
+    isSymbolicLink(): boolean;
+    name: string;
+}
+
 export interface InPlaceResult {
     // Null when no root is set, it was ignored, or pymix couldn't answer.
     libraryRoot: LibraryRootStatus | null;
+    // Tracks found only by the filename search under the root (#222): moved inside
+    // it since their path was recorded. Each is also in `tracks`, at its new path.
+    // The download records `rootRelativePath` as the track's new path; the preview
+    // only counts them.
+    moved: MovedTrack[];
     tracks: InPlaceTrack[];
 }
 
@@ -46,6 +59,13 @@ export type LibraryRootStatus =
       }
     | { expected: number; found: number; root: string; status: 'ok' };
 
+/** A track found at a new place under the library root (#222). */
+export interface MovedTrack {
+    // Its new path under this device's root, `/`-separated and NFC.
+    rootRelativePath: string;
+    subboxId: string;
+}
+
 /** What `POST /tracks/locations` says about the tracks in some playlists. */
 export interface TrackPaths {
     // Where each was uploaded from: absolute on the machine that uploaded it.
@@ -58,6 +78,8 @@ export interface TrackPaths {
 type PostLocations = (playlistIds: string[]) => Promise<{
     data: { locations?: Record<string, string>; relativePaths?: Record<string, string> };
 }>;
+
+type ReaddirFn = (dir: string) => Promise<DirEntry[]>;
 
 type StatFn = (p: string) => Promise<{ isFile(): boolean }>;
 
@@ -90,6 +112,22 @@ export async function fetchTrackPaths(args: {
 
 const pathFor = (platform: NodeJS.Platform) => (platform === 'win32' ? path.win32 : path.posix);
 
+export interface RootListing {
+    byName: Map<string, Array<{ path: string; relative: string }>>;
+    // Files listed, for the log.
+    files: number;
+}
+
+/**
+ * A file name as the root listing keys it: NFC, and case-folded where the disk is
+ * case-insensitive (macOS, Windows), so a name recorded one way finds a file
+ * listed the other.
+ */
+export function fileNameKey(name: string, platform: NodeJS.Platform = process.platform): string {
+    const nfc = name.normalize('NFC');
+    return platform === 'darwin' || platform === 'win32' ? nfc.toLowerCase() : nfc;
+}
+
 /**
  * The tracks in these playlists found on this machine, as `localTracks` entries,
  * and the state of the library root if one is set.
@@ -105,12 +143,13 @@ export async function findInPlaceTracks(args: {
     platform?: NodeJS.Platform;
     playlistIds: string[];
     post: PostLocations;
+    readdir?: ReaddirFn;
     stat?: (p: string) => Promise<{ isDirectory?(): boolean; isFile(): boolean }>;
 }): Promise<InPlaceResult> {
     const { libraryRoot = null, platform = process.platform, playlistIds, post } = args;
     const stat = args.stat ?? ((p: string) => fs.promises.stat(p));
     const paths = await fetchTrackPaths({ playlistIds, post });
-    if (!paths) return { libraryRoot: null, tracks: [] };
+    if (!paths) return { libraryRoot: null, moved: [], tracks: [] };
 
     let rootStatus: LibraryRootStatus | null = null;
     let rootUsable = false;
@@ -156,12 +195,49 @@ export async function findInPlaceTracks(args: {
     }
 
     const found = await resolveInPlace(candidates, { platform, stat });
-    console.log(
-        `[sync] ${found.size} of ${candidates.size} track(s) with a recorded path found in place`,
-    );
+
+    // The last candidate (#222): a track still missing may have been moved inside
+    // the root. One listing of the root, only when something is missing, matched
+    // by file name. Its own step rather than a list entry, since the listing is
+    // shared by every track and only exists once one needs it.
+    const moved: MovedTrack[] = [];
+    if (rootUsable && libraryRoot) {
+        const missing = [...ids].filter((id) => !found.has(id));
+        if (missing.length > 0) {
+            const started = Date.now();
+            const listing = await listLibraryRoot(libraryRoot, {
+                platform,
+                readdir: args.readdir,
+            });
+            const relocated = await findMovedTracks({
+                listing,
+                missing: missing.map((subboxId) => ({
+                    location: paths.locations[subboxId],
+                    relativePath: paths.relativePaths[subboxId],
+                    subboxId,
+                })),
+                platform,
+                stat,
+            });
+            for (const track of relocated) {
+                found.set(track.subboxId, track.path);
+                moved.push({ rootRelativePath: track.rootRelativePath, subboxId: track.subboxId });
+            }
+            console.log(
+                `[sync] ${relocated.length} of ${missing.length} missing track(s) found at a new ` +
+                    `place under the library root (${listing.files} file(s) listed in ` +
+                    `${Date.now() - started} ms)`,
+            );
+        }
+    }
+    console.log(`[sync] ${found.size} of ${ids.size} track(s) with a recorded path found in place`);
 
     if (rootUsable && libraryRoot) {
-        const foundUnderRoot = [...expectedUnderRoot].filter((id) => found.has(id)).length;
+        // Counted after the search (#222 point 5): a library moved wholesale into a
+        // subfolder is found by it, and must not read as an unmounted drive.
+        const foundUnderRoot =
+            [...expectedUnderRoot].filter((id) => found.has(id)).length +
+            moved.filter((m) => !expectedUnderRoot.has(m.subboxId)).length;
         rootStatus =
             expectedUnderRoot.size > 0 && foundUnderRoot === 0
                 ? {
@@ -180,6 +256,7 @@ export async function findInPlaceTracks(args: {
 
     return {
         libraryRoot: rootStatus,
+        moved,
         tracks: Array.from(found, ([subboxId, userLocation]) => ({
             artist: '',
             fromTag: true,
@@ -188,6 +265,51 @@ export async function findInPlaceTracks(args: {
             userLocation,
         })),
     };
+}
+
+/**
+ * The missing tracks the root listing finds by file name (#222): the name of the
+ * recorded path under the root, or of the absolute one when there is none.
+ *
+ * Exactly one file of that name is the track; none or several leave it missing,
+ * never guessed between. A file two missing tracks both name is neither's. The
+ * winner is stat-ed before use, as every other candidate is.
+ */
+export async function findMovedTracks(args: {
+    listing: RootListing;
+    missing: Array<{ location?: string; relativePath?: string; subboxId: string }>;
+    platform?: NodeJS.Platform;
+    stat?: StatFn;
+}): Promise<Array<{ path: string; rootRelativePath: string; subboxId: string }>> {
+    const { listing, missing, platform = process.platform } = args;
+    const stat = args.stat ?? ((p: string) => fs.promises.stat(p));
+    const claims = new Map<string, Array<{ relative: string; subboxId: string }>>();
+    for (const track of missing) {
+        const recorded = track.relativePath || track.location;
+        if (!recorded) continue;
+        const name = recorded.split(/[\\/]/).pop();
+        if (!name) continue;
+        const files = listing.byName.get(fileNameKey(name, platform)) ?? [];
+        if (files.length !== 1) continue;
+        const list = claims.get(files[0].path) ?? [];
+        list.push({ relative: files[0].relative, subboxId: track.subboxId });
+        claims.set(files[0].path, list);
+    }
+    const moved: Array<{ path: string; rootRelativePath: string; subboxId: string }> = [];
+    for (const [filePath, claimants] of claims) {
+        if (claimants.length !== 1) continue;
+        try {
+            if (!(await stat(filePath)).isFile()) continue;
+        } catch {
+            continue;
+        }
+        moved.push({
+            path: filePath,
+            rootRelativePath: claimants[0].relative,
+            subboxId: claimants[0].subboxId,
+        });
+    }
+    return moved;
 }
 
 /**
@@ -223,6 +345,53 @@ export function joinUnderRoot(
     if (!relativePath || relativePath.startsWith('/') || parts.some((p) => p === '..')) return null;
     if (platform === 'win32' && /^[A-Za-z]:/.test(relativePath)) return null;
     return pathFor(platform).join(root, ...parts);
+}
+
+/**
+ * Every file under the library root, by name: one recursive listing of directory
+ * entries, never opening or stat-ing a file (#222). Symlinks are skipped, file and
+ * folder alike, so a loop can't trap the walk. A cloud-only file lists as an
+ * ordinary file, and listing hydrates nothing on Windows (#166).
+ *
+ * Keyed by `fileNameKey`; each value is every file of that name, with its path and
+ * its path under the root (`/`-separated, NFC, as `rootRelative` gives). An
+ * unreadable folder is skipped, not fatal.
+ */
+export async function listLibraryRoot(
+    root: string,
+    opts: { platform?: NodeJS.Platform; readdir?: ReaddirFn } = {},
+): Promise<RootListing> {
+    const { platform = process.platform } = opts;
+    const readdir =
+        opts.readdir ?? ((dir: string) => fs.promises.readdir(dir, { withFileTypes: true }));
+    const impl = pathFor(platform);
+    const byName = new Map<string, Array<{ path: string; relative: string }>>();
+    let files = 0;
+    const walk = async (dir: string, relative: string[]) => {
+        let entries: DirEntry[];
+        try {
+            entries = await readdir(dir);
+        } catch (err) {
+            console.warn(`[sync] could not list ${dir} while looking for moved tracks:`, err);
+            return;
+        }
+        for (const entry of entries) {
+            if (entry.isSymbolicLink()) continue;
+            const full = impl.join(dir, entry.name);
+            const parts = [...relative, entry.name];
+            if (entry.isDirectory()) {
+                await walk(full, parts);
+            } else if (entry.isFile()) {
+                files++;
+                const key = fileNameKey(entry.name, platform);
+                const list = byName.get(key) ?? [];
+                list.push({ path: full, relative: parts.join('/').normalize('NFC') });
+                byName.set(key, list);
+            }
+        }
+    };
+    await walk(root, []);
+    return { byName, files };
 }
 
 /**

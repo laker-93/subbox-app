@@ -61,6 +61,14 @@ import { Playlist, PlaylistListSort, SortOrder } from '/@/shared/types/domain-ty
 const ipc = isElectron() ? window.api.ipc : null;
 const localSettings = isElectron() ? window.api.localSettings : null;
 
+/** Mirrors InPlaceResult in main/features/core/sync/in-place.ts. */
+interface InPlacePlan {
+    libraryRoot: LibraryRootStatus | null;
+    // Absent from a main process before #222.
+    moved?: Array<{ rootRelativePath: string; subboxId: string }>;
+    tracks: LocalTrack[];
+}
+
 /** localSettings key holding the user-chosen folder for downloaded Rekordbox XML. */
 const XML_DIRECTORY_KEY = 'rekordbox_xml_directory';
 
@@ -185,6 +193,8 @@ export const SyncDownload = () => {
         count: number;
         ignoreRoot: boolean;
         libraryRoot: LibraryRootStatus | null;
+        // Of `count`, those found only by name at a new place under the root (#222).
+        moved: number;
         used: boolean;
     }>(null);
     // "Download anyway": the user chose to go ahead without an unavailable library
@@ -308,10 +318,7 @@ export const SyncDownload = () => {
     // Best effort: a failure here means nothing is found in place, which is today's
     // download.
     const getInPlaceTracks = useCallback(
-        async (
-            playlistIds: string[],
-            ignoreRoot: boolean,
-        ): Promise<{ libraryRoot: LibraryRootStatus | null; tracks: LocalTrack[] }> => {
+        async (playlistIds: string[], ignoreRoot: boolean): Promise<InPlacePlan> => {
             try {
                 return (await window.api.ipc.invoke('sync:find-in-place-tracks', {
                     ignoreLibraryRoot: ignoreRoot,
@@ -319,9 +326,9 @@ export const SyncDownload = () => {
                     pymixUrl: urlConfig.pymix,
                     serverId: serverId ?? undefined,
                     username: server.username,
-                })) as { libraryRoot: LibraryRootStatus | null; tracks: LocalTrack[] };
+                })) as InPlacePlan;
             } catch {
-                return { libraryRoot: null, tracks: [] };
+                return { libraryRoot: null, moved: [], tracks: [] };
             }
         },
         [server.username, serverId],
@@ -358,7 +365,7 @@ export const SyncDownload = () => {
         try {
             const inPlace = useTracksInPlace
                 ? await getInPlaceTracks(Array.from(selectedPlaylists), ignoreLibraryRoot)
-                : { libraryRoot: null, tracks: [] };
+                : { libraryRoot: null, moved: [], tracks: [] };
             const inPlaceTracks = inPlace.tracks;
             const localTracks = [...(await getLocalTracks()), ...inPlaceTracks];
 
@@ -383,6 +390,7 @@ export const SyncDownload = () => {
                 count: inPlaceTracks.length,
                 ignoreRoot: ignoreLibraryRoot,
                 libraryRoot: inPlace.libraryRoot,
+                moved: inPlace.moved?.length ?? 0,
                 used: useTracksInPlace,
             });
             setStep('preview');
@@ -987,11 +995,21 @@ export const SyncDownload = () => {
                                   color: 'green',
                                   label: `${summary.tracksAlreadyPresent} already present`,
                               },
-                              ...(plannedInPlace?.used && plannedInPlace.count > 0
+                              ...(plannedInPlace?.used &&
+                              plannedInPlace.count - plannedInPlace.moved > 0
                                   ? [
                                         {
                                             color: 'teal',
-                                            label: `${plannedInPlace.count} found on this computer`,
+                                            label: `${plannedInPlace.count - plannedInPlace.moved} found on this computer`,
+                                        },
+                                    ]
+                                  : []),
+                              // Moved inside the library folder since upload (#222).
+                              ...(plannedInPlace?.used && plannedInPlace.moved > 0
+                                  ? [
+                                        {
+                                            color: 'cyan',
+                                            label: `${plannedInPlace.moved} found at a new location`,
                                         },
                                     ]
                                   : []),
