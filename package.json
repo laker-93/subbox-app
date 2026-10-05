@@ -64,6 +64,7 @@
         "check:taglib-tagging": "tsx scripts/check-taglib-tagging.ts",
         "check:job-outcome": "tsx scripts/check-job-outcome.ts",
         "check:library-root": "tsx scripts/check-library-root.ts",
+        "check:library-root-download": "tsx scripts/check-library-root-download.ts",
         "check:record-locations": "tsx scripts/check-record-locations.ts",
         "check:tracks-in-place": "tsx scripts/check-tracks-in-place.ts",
         "postinstall": "electron-builder install-app-deps",
