@@ -94,7 +94,10 @@ export async function recordTrackLocations(args: {
             if (isAxiosError(err) && err.response?.status === 404) {
                 console.log('[sync] pymix has no /tracks/locations/record; no paths recorded');
             } else {
-                console.warn('[sync] could not record the paths of matched tracks:', err);
+                console.warn(
+                    '[sync] could not record track paths (an older pymix refuses an entry with no user_location, #253):',
+                    err,
+                );
             }
             return recorded;
         }
