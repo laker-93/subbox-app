@@ -15,6 +15,7 @@ import {
     formatBytes,
     formatDuration,
     FormatSelect,
+    LibraryRootSetting,
     RekordboxImportSteps,
     SelectableList,
     SeratoOverwriteOptions,
@@ -1030,6 +1031,10 @@ export const SyncDownload = () => {
                 opened={settingsOpened}
                 title="Download Settings"
             >
+                {/* This device's own library folder (#219): tracks under it are found
+                    in place on this computer even when uploaded from another. */}
+                <LibraryRootSetting />
+
                 {/* What comes out, rather than what format it is in. "I already have
                     these tracks, just give me the XML" is a real workflow, but it is
                     not the one anybody is in by default. */}

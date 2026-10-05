@@ -5,7 +5,8 @@ import { parseFile } from 'music-metadata';
 import * as os from 'os';
 import * as path from 'path';
 
-import { getMusicPath } from '/@/main/features/core/sync';
+import { getLibraryRoot, getMusicPath } from '/@/main/features/core/sync';
+import { withRootRelativePath } from '/@/main/features/core/sync/library-root';
 import { findWhollyStaged, runMapMeta } from '/@/main/features/core/sync/map-meta';
 import {
     connectionLostError,
@@ -627,6 +628,7 @@ handleKeepingAwake(
             uploaded: result.uploaded,
         });
 
+        const libraryRoot = getLibraryRoot();
         const tracksToMap = uploads
             .filter((u) => !failedStagingPaths.has(u.stagingPath))
             .map((u) => ({
@@ -635,6 +637,8 @@ handleKeepingAwake(
                 originalName: u.title,
                 stagingLocation: u.stagingPath,
                 userLocation: u.filePath,
+                // Its path under this device's library root, when one is set (#219).
+                ...withRootRelativePath(libraryRoot, u.filePath),
             }));
 
         if (tracksToMap.length > 0) {

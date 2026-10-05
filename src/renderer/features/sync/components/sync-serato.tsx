@@ -7,6 +7,7 @@ import {
     DestinationPath,
     IMPORT_PHASE_LABELS,
     JobOutcome,
+    LibraryRootSetting,
     PathText,
     SelectableList,
     SyncFlow,
@@ -305,6 +306,9 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                     opened={settingsOpened}
                     title="Upload Settings"
                 >
+                    {/* This device's own library folder (#219): an upload records each
+                        track's path under it, for other devices to find it. */}
+                    <LibraryRootSetting />
                     <DestinationPath
                         emptyLabel="No _Serato_ folder found. Choose one to read your crates"
                         label="Serato Folder"

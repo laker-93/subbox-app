@@ -7,12 +7,15 @@ import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite
 import {
     IMPORT_PHASE_LABELS,
     JobOutcome,
+    LibraryRootSetting,
     SelectableList,
     SyncFlow,
     SyncFlowFill,
     SyncLoading,
     SyncProgress,
     SyncResult,
+    SyncSettingsButton,
+    SyncSettingsModal,
     SyncStorageExceeded,
     SyncSummary,
     useSelection,
@@ -30,6 +33,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
+import { useDisclosure } from '/@/shared/hooks/use-disclosure';
 
 const ipc = isElectron() ? window.api.ipc : null;
 
@@ -66,6 +70,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
     const { t } = useTranslation();
     const currentServer = useCurrentServerWithCredential();
     const serverId = currentServer?.id;
+    const [settingsOpened, settingsHandlers] = useDisclosure(false);
 
     // The upload itself, once started, lives in the run store so that it survives the
     // user leaving this screen (#195). Everything below it is the run's; everything
@@ -229,6 +234,11 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         })}
                     </Button>
                 }
+                headerAction={
+                    isElectron() ? (
+                        <SyncSettingsButton onClick={settingsHandlers.open} />
+                    ) : undefined
+                }
                 subtitle={
                     <Text c="dimmed" size="sm">
                         {/* The how-to (File → Export Collection) is on the button's
@@ -247,6 +257,16 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
             >
                 {formatControl}
                 <SyncFlowFill />
+
+                <SyncSettingsModal
+                    handlers={settingsHandlers}
+                    opened={settingsOpened}
+                    title="Upload Settings"
+                >
+                    {/* This device's own library folder (#219): an upload records each
+                        track's path under it, for other devices to find it. */}
+                    <LibraryRootSetting />
+                </SyncSettingsModal>
             </SyncFlow>
         );
     }

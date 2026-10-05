@@ -8,10 +8,17 @@ import { pipeline } from 'stream/promises';
 import * as unzipper from 'unzipper';
 
 import { appConfig } from '/@/main/config/app-config';
-import { getStoredPassword } from '/@/main/features/core/settings';
+import { getStoredPassword, store } from '/@/main/features/core/settings';
 import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip-layout';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 import { findInPlaceTracks, InPlaceTrack } from '/@/main/features/core/sync/in-place';
+import {
+    checkLibraryRoot,
+    LIBRARY_ROOT_SETTING,
+    LibraryRootCheck,
+    withRootRelativePath,
+} from '/@/main/features/core/sync/library-root';
+import { backfillLibraryRoot } from '/@/main/features/core/sync/library-root-backfill';
 import { findWhollyStaged, runMapMeta, TrackMetaToMap } from '/@/main/features/core/sync/map-meta';
 import {
     connectionLostError,
@@ -427,7 +434,13 @@ handleKeepingAwake(
         // A matched track isn't sent, so /sync/map_meta never records where it is on
         // this machine. Record it now, so a later download can use it in place
         // (#214 point 5). Best effort: it never fails the upload.
-        const matchedLocations = matchedTrackLocations(clientTracks, matchedTracks);
+        const libraryRoot = getLibraryRoot();
+        const matchedLocations = matchedTrackLocations(
+            clientTracks,
+            matchedTracks,
+            fs.existsSync,
+            libraryRoot,
+        );
         if (matchedLocations.length > 0) {
             const recorded = await recordTrackLocations({
                 entries: matchedLocations,
@@ -562,6 +575,8 @@ handleKeepingAwake(
                 originalName: track.name,
                 stagingLocation: stagingPath,
                 userLocation: track.location,
+                // Its path under this device's library root, when one is set (#219).
+                ...withRootRelativePath(libraryRoot, track.location),
             });
         }
 
@@ -1296,6 +1311,80 @@ ipcMain.handle(
             pymixUrl,
             playlistIds,
         );
+    },
+);
+
+// ── Library root (#214 stage 2, #219) ───────────────────────────────────────
+
+/** This device's library root, or null when none is set. */
+export function getLibraryRoot(): null | string {
+    const root = store.get(LIBRARY_ROOT_SETTING);
+    return typeof root === 'string' && root.length > 0 ? root : null;
+}
+
+ipcMain.handle('sync:get-library-root', async (): Promise<null | string> => getLibraryRoot());
+
+ipcMain.handle('sync:select-library-root', async (): Promise<null | string> => {
+    const { dialog: electronDialog } = await import('electron');
+    const result = await electronDialog.showOpenDialog({
+        buttonLabel: 'Select Folder',
+        properties: ['openDirectory'],
+        title: 'Select Your Music Library Folder',
+    });
+    return result.filePaths[0] || null;
+});
+
+// Set (a folder that passes checkLibraryRoot) or clear (null) the root.
+ipcMain.handle(
+    'sync:set-library-root',
+    async (_event, root: null | string): Promise<LibraryRootCheck> => {
+        if (root === null) {
+            store.delete(LIBRARY_ROOT_SETTING);
+            return { ok: true };
+        }
+        const check = await checkLibraryRoot(root);
+        if (check.ok) store.set(LIBRARY_ROOT_SETTING, root);
+        return check;
+    },
+);
+
+ipcMain.handle('sync:check-library-root', async (_event, root: string) => checkLibraryRoot(root));
+
+/**
+ * Give the tracks already uploaded from under this device's root their path under
+ * it, so another device can find them under its own (#219). See
+ * backfillLibraryRoot.
+ */
+ipcMain.handle(
+    'sync:backfill-library-root',
+    async (
+        _event,
+        args: { playlistIds: string[]; pymixUrl: string; serverId?: string; username?: string },
+    ): Promise<null | { recorded: number; underRoot: number }> => {
+        const { playlistIds, pymixUrl, serverId, username } = args;
+        const root = getLibraryRoot();
+        if (!root) return null;
+        const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
+        return backfillLibraryRoot({
+            playlistIds,
+            postLocations: (ids) =>
+                withPymixAuth<{ locations: Record<string, string> }>(pymixAuth, (cookie) =>
+                    axios.post(
+                        `${pymixUrl}/tracks/locations`,
+                        { playlistIds: ids },
+                        { headers: { Cookie: cookie }, httpsAgent },
+                    ),
+                ),
+            postRecord: (chunk) =>
+                withPymixAuth<{ recorded: string[] }>(pymixAuth, (cookie) =>
+                    axios.post(
+                        `${pymixUrl}/tracks/locations/record`,
+                        { tracks: chunk },
+                        { headers: { Cookie: cookie }, httpsAgent },
+                    ),
+                ),
+            root,
+        });
     },
 );
 
