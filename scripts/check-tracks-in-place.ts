@@ -146,7 +146,7 @@ async function main(): Promise<void> {
             stat: statAfter404.stat,
         }),
         // pymix can't say where anything is, so the root isn't even checked.
-        { libraryRoot: null, tracks: [] },
+        { libraryRoot: null, moved: [], tracks: [] },
     );
     assert.equal(statAfter404.asked.length, 0);
     // Any other failure is the same.

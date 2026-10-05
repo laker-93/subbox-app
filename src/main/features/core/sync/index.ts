@@ -15,6 +15,7 @@ import {
     findInPlaceTracks,
     InPlaceResult,
     InPlaceTrack,
+    MovedTrack,
 } from '/@/main/features/core/sync/in-place';
 import {
     checkLibraryRoot,
@@ -42,6 +43,7 @@ import {
 } from '/@/main/features/core/sync/pymix-auth';
 import {
     matchedTrackLocations,
+    movedTrackEntries,
     recordTrackLocations,
 } from '/@/main/features/core/sync/record-locations';
 import {
@@ -1206,6 +1208,14 @@ handleKeepingAwake(
                 throw new Error(`Sync failed: ${syncResponse.data.reason}`);
             }
 
+            // pymix has written their new paths into this download: record them, so
+            // later downloads on any device find them with no search (#222). Only
+            // here, never from the preview. Best effort: the next download searches
+            // again.
+            if (inPlace && inPlace.moved.length > 0) {
+                await recordMovedTracks(pymixAuth, pymixUrl, inPlace.moved);
+            }
+
             const { downloadFilename, nTracksExported, xmlIncluded, zipPath } = syncResponse.data;
 
             if (!includeTracks) {
@@ -1326,6 +1336,27 @@ function findInPlace(
                 ),
             ),
     });
+}
+
+/** Send the new relative path of tracks found moved under the root (#222). */
+async function recordMovedTracks(
+    pymixAuth: PymixAuth,
+    pymixUrl: string,
+    moved: MovedTrack[],
+): Promise<void> {
+    const entries = movedTrackEntries(moved);
+    const recorded = await recordTrackLocations({
+        entries,
+        post: (chunk) =>
+            withPymixAuth<{ recorded: string[] }>(pymixAuth, (cookie) =>
+                axios.post(
+                    `${pymixUrl}/tracks/locations/record`,
+                    { tracks: chunk },
+                    { headers: { Cookie: cookie }, httpsAgent },
+                ),
+            ),
+    });
+    console.log(`[sync] recorded the new path of ${recorded} of ${entries.length} moved track(s)`);
 }
 
 // The download preview's half of sync:download-playlists' useTracksInPlace, so the
