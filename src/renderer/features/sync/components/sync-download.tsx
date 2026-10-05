@@ -28,6 +28,7 @@ import {
     TrackRow,
     useSelection,
     useSeratoCrates,
+    usesTracksInPlace,
 } from '/@/renderer/features/sync/components/shared';
 import {
     type LibraryFormat,
@@ -150,6 +151,8 @@ type LocalTrack = {
     fromTag: boolean;
     subboxId?: string;
     title: string;
+    // Set only on a track found where the user uploaded it from (#214).
+    userLocation?: string;
 };
 
 export const SyncDownload = () => {
@@ -171,8 +174,14 @@ export const SyncDownload = () => {
     const [downloadResult, setDownloadResult] = useState<null | {
         musicPath?: string;
         tracksExported: number;
+        tracksInPlace?: number;
         xmlPath?: string;
     }>(null);
+    // How many of the plan's tracks were found where the user uploaded them from,
+    // and whether the plan was made counting them (#214).
+    const [plannedInPlace, setPlannedInPlace] = useState<null | { count: number; used: boolean }>(
+        null,
+    );
     // Which format this export is for. Remembered across sessions, per direction,
     // so a DJ is never asked twice for something that is close to an identity
     // property. Falls back to Rekordbox only if the store somehow holds nothing.
@@ -210,6 +219,13 @@ export const SyncDownload = () => {
     // state is how they drifted into being askable independently in the first place.
     const includeRekordboxXml = format === 'rekordbox';
     const includeSeratoCrates = format === 'serato' || alsoWriteSeratoCrates;
+    // A track still where the user uploaded it from is used there, not downloaded,
+    // and the XML points at it (#214).
+    const useTracksInPlace = usesTracksInPlace({
+        electron: isElectron(),
+        includeRekordboxXml,
+        includeSeratoCrates,
+    });
     const [xmlHelpOpened, xmlHelpHandlers] = useDisclosure(false);
     const [rekordboxHelpOpened, rekordboxHelpHandlers] = useDisclosure(false);
     // Everything that changes what Download does, behind the cog. On screen they
@@ -281,6 +297,24 @@ export const SyncDownload = () => {
         }
     }, []);
 
+    // Best effort: a failure here means nothing is found in place, which is today's
+    // download.
+    const getInPlaceTracks = useCallback(
+        async (playlistIds: string[]): Promise<LocalTrack[]> => {
+            try {
+                return (await window.api.ipc.invoke('sync:find-in-place-tracks', {
+                    playlistIds,
+                    pymixUrl: urlConfig.pymix,
+                    serverId: serverId ?? undefined,
+                    username: server.username,
+                })) as LocalTrack[];
+            } catch {
+                return [];
+            }
+        },
+        [server.username, serverId],
+    );
+
     const playlistQuery = useSuspenseQuery(
         playlistsQueries.list({
             query: {
@@ -310,7 +344,10 @@ export const SyncDownload = () => {
         setError(null);
 
         try {
-            const localTracks = await getLocalTracks();
+            const inPlaceTracks = useTracksInPlace
+                ? await getInPlaceTracks(Array.from(selectedPlaylists))
+                : [];
+            const localTracks = [...(await getLocalTracks()), ...inPlaceTracks];
 
             const result = await PymixController.syncPlan({
                 baseUrl: urlConfig.pymix,
@@ -329,16 +366,26 @@ export const SyncDownload = () => {
             });
 
             setPlan(result as SyncPlanResponse);
+            setPlannedInPlace({ count: inPlaceTracks.length, used: useTracksInPlace });
             setStep('preview');
         } catch (err: any) {
             setError(err?.message || 'Failed to get sync plan');
             setStep('select');
         }
-    }, [getLocalTracks, selectedPlaylists]);
+    }, [getInPlaceTracks, getLocalTracks, selectedPlaylists, useTracksInPlace]);
+
+    // The format is chosen on the preview, after the plan. A change that turns
+    // in-place on or off changes which tracks are missing, so plan again.
+    useEffect(() => {
+        if (step === 'preview' && plannedInPlace && plannedInPlace.used !== useTracksInPlace) {
+            handleGetPlan();
+        }
+    }, [handleGetPlan, plannedInPlace, step, useTracksInPlace]);
 
     const handleBack = useCallback(() => {
         setStep('select');
         setPlan(null);
+        setPlannedInPlace(null);
         setError(null);
         setDownloadResult(null);
         resetSeratoResult();
@@ -388,10 +435,12 @@ export const SyncDownload = () => {
                     // token has expired by the time the download runs.
                     serverId: serverId ?? undefined,
                     username: server.username,
+                    useTracksInPlace,
                 });
                 const downloaded = result as {
                     musicPath?: string;
                     tracksExported: number;
+                    tracksInPlace?: number;
                     xmlPath?: string;
                 };
                 setDownloadResult(downloaded);
@@ -473,6 +522,7 @@ export const SyncDownload = () => {
         server.fbToken,
         server.username,
         serverId,
+        useTracksInPlace,
         webExtractPath,
         writeSeratoCrates,
         xmlDir,
@@ -859,6 +909,14 @@ export const SyncDownload = () => {
                                   color: 'green',
                                   label: `${summary.tracksAlreadyPresent} already present`,
                               },
+                              ...(plannedInPlace?.used && plannedInPlace.count > 0
+                                  ? [
+                                        {
+                                            color: 'teal',
+                                            label: `${plannedInPlace.count} found where you uploaded them`,
+                                        },
+                                    ]
+                                  : []),
                               { color: 'orange', label: `${summary.tracksMissing} to download` },
                               ...(summary.metadataUpdates > 0
                                   ? [

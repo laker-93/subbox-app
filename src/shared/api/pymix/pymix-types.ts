@@ -217,6 +217,9 @@ const track = z.object({
     // this track exactly instead of falling back to fuzzy title/artist matching.
     subboxId: z.string().optional(),
     title: z.string(),
+    // A download's local track found where the user uploaded it from (#214): pymix
+    // writes this path as its Rekordbox XML Location.
+    userLocation: z.string().optional(),
 });
 
 const syncParameters = z.object({
