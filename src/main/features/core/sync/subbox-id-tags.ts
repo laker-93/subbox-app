@@ -17,6 +17,26 @@ const SUBBOX_ID_FIELD = 'SUBBOX_ID';
 const APPLE_ITUNES_MEAN = 'com.apple.iTunes';
 
 /**
+ * Whether TagLib can open this file's tags at all; logged when it can't. Opens
+ * the file read-only and changes nothing.
+ */
+export function canOpenTags(filePath: string): boolean {
+    let probe: null | TagLib.File = null;
+    try {
+        probe = openTagFile(filePath);
+        return true;
+    } catch (err) {
+        // Never swallow this: a false here drops the file from the upload set
+        // entirely, so without a log the user's only symptom is a track that
+        // never arrives (#110).
+        console.error(`[subbox-id] TagLib cannot open ${filePath}:`, err);
+        return false;
+    } finally {
+        probe?.dispose();
+    }
+}
+
+/**
  * Return the existing SUBBOX_ID for a file, or generate a fresh UUID.
  * Returns null if the file cannot be opened by TagLib at all — it has no tag
  * structure we can read or write, so there is no way to give it an id. Callers
@@ -33,18 +53,7 @@ export function getOrCreateSubboxId(filePath: string): null | string {
     // that's handled by the caller via isFileSizeStable before this is ever
     // called. Nor is it an audio check — openTagFile deliberately does not
     // decode the stream, so a file only fails here if its *tags* are unreadable.
-    let probe: null | TagLib.File = null;
-    try {
-        probe = openTagFile(filePath);
-    } catch (err) {
-        // Never swallow this: a null return drops the file from the upload set
-        // entirely, so without a log the user's only symptom is a track that
-        // never arrives (#110).
-        console.error(`[subbox-id] TagLib cannot open ${filePath}:`, err);
-        return null;
-    } finally {
-        probe?.dispose();
-    }
+    if (!canOpenTags(filePath)) return null;
 
     const existing = readSubboxId(filePath);
     if (existing) return existing;

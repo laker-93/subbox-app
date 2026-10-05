@@ -28,6 +28,8 @@ export const SyncWatch = () => {
     /** True between the Start click and sync:start-watch resolving. */
     const [starting, setStarting] = useState(false);
     const [progress, setProgress] = useState<null | WatchProgress>(null);
+    /** The watch folder is this device's library root, or inside it (#221). */
+    const [underLibraryRoot, setUnderLibraryRoot] = useState(false);
 
     // Load persisted watch directory and active state on mount
     useEffect(() => {
@@ -39,6 +41,20 @@ export const SyncWatch = () => {
             },
         );
     }, []);
+
+    useEffect(() => {
+        if (!ipc || !watchDir) {
+            setUnderLibraryRoot(false);
+            return;
+        }
+        let cancelled = false;
+        ipc.invoke('sync:is-under-library-root', watchDir).then((under: boolean) => {
+            if (!cancelled) setUnderLibraryRoot(under);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [watchDir]);
 
     // Listen for progress events
     useEffect(() => {
@@ -128,6 +144,16 @@ export const SyncWatch = () => {
                     </Text>
                 )}
             </Group>
+
+            {/* A warning, not a block: Watch tags each file it uploads, and in a
+                cloud folder every tag write syncs to every device (#221). */}
+            {underLibraryRoot && (
+                <Text c="yellow" data-testid="watch-under-library-root" size="sm">
+                    This folder is in your library folder. Subbox writes a tag into each file it
+                    uploads from here, and in a cloud folder each change syncs to all your
+                    computers. Watch a folder outside your library folder to avoid this.
+                </Text>
+            )}
 
             {watchDir && (
                 <Group gap="sm">

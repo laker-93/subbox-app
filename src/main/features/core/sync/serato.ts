@@ -43,7 +43,14 @@ import {
     writeTrackCues,
     writeTrackGrid,
 } from '/@/main/features/core/sync/serato-crates';
-import { getOrCreateSubboxId, writeSubboxId } from '/@/main/features/core/sync/subbox-id-tags';
+import {
+    byLocationBody,
+    CrateTrackIdentity,
+    identifyCrateTrack,
+    needsTaggedCopy,
+    sendableSize,
+    withTaggedFile,
+} from '/@/main/features/core/sync/serato-identity';
 import { uploadFileViaTus } from '/@/main/features/core/sync/tus-upload';
 import { writeFlatZip } from '/@/main/features/core/sync/write-zip';
 
@@ -60,6 +67,8 @@ import { writeFlatZip } from '/@/main/features/core/sync/write-zip';
 // each local file and send pymix a path → subbox_id manifest alongside the
 // crates (`track_identities` on POST /serato/import). See pymix's
 // `SeratoCrateOrchestrator._resolve_subbox_id` for the server half.
+//
+// It only ever reads the user's files (#221): see ./serato-identity.ts.
 
 /** pymix's /tracks/presence rejects a batch larger than this. */
 const PRESENCE_CHUNK_SIZE = 1000;
@@ -106,6 +115,8 @@ function describeCrateTrack(trackPath: string): string {
 /**
  * For each path on this machine, the subbox_id of the library track an earlier
  * upload of that file became (pymix's POST /tracks/by_location), when there is one.
+ * With a library root set, by the path under it too (pymix#252), so the same
+ * library under another computer's root is found.
  *
  * An empty answer when pymix can't say, so the upload goes ahead as it did before
  * the endpoint existed: a pymix older than laker-93/pymix#231 404s it.
@@ -114,6 +125,7 @@ async function libraryIdsByLocation(
     pymixAuth: PymixAuth,
     pymixUrl: string,
     paths: string[],
+    libraryRoot: null | string,
 ): Promise<Record<string, null | string>> {
     const result: Record<string, null | string> = {};
     try {
@@ -123,7 +135,7 @@ async function libraryIdsByLocation(
                 (cookie) =>
                     axios.post(
                         `${pymixUrl}/tracks/by_location`,
-                        { user_locations: chunk },
+                        byLocationBody(chunk, libraryRoot),
                         { headers: { Cookie: cookie }, httpsAgent },
                     ),
             );
@@ -257,8 +269,8 @@ handleKeepingAwake(
         );
 
         // Step 2: resolve every crate entry to a subbox_id, reading the tag off the
-        // local file (and writing one if it has none). This is the manifest — without
-        // it pymix has only the path, which does not survive the user moving a file.
+        // local file, or minting one in memory if it has none: nothing is written to
+        // it (#221). This is the manifest — without it pymix has only the path.
         const allTrackPaths = Array.from(new Set(nodes.flatMap((n) => n.tracks)));
         sendProgress({
             currentTrack: '',
@@ -275,12 +287,14 @@ handleKeepingAwake(
         }> = [];
         /** subbox_id → absolute local path, for the upload pass below. */
         const pathById = new Map<string, string>();
+        /** subbox_id → what was read off that file, for the upload pass below. */
+        const identityById = new Map<string, CrateTrackIdentity>();
 
         for (const [index, trackPath] of allTrackPaths.entries()) {
-            // Reading (and where needed writing) a tag opens every file in the
-            // selection, which on a real library is thousands of them. Report as we
-            // go: a phase that says nothing until it finishes is indistinguishable
-            // from one that has hung (laker-93/subbox-app#83).
+            // Reading a tag opens every file in the selection, which on a real
+            // library is thousands of them. Report as we go: a phase that says
+            // nothing until it finishes is indistinguishable from one that has hung
+            // (laker-93/subbox-app#83).
             if (index % 25 === 0) {
                 sendProgress({
                     currentTrack: describeCrateTrack(trackPath),
@@ -299,14 +313,15 @@ handleKeepingAwake(
                 });
                 continue;
             }
-            const subboxId = getOrCreateSubboxId(trackPath);
-            if (!subboxId) {
+            const identity = identifyCrateTrack(trackPath, username);
+            if (!identity) {
                 dropped.push({
                     reason: 'tags could not be read, so it cannot be identified',
                     trackName: describeCrateTrack(trackPath),
                 });
                 continue;
             }
+            const { subboxId } = identity;
             // The cues, read off the file the user is actually cueing. pymix can
             // only read its own copy, which is frozen at whatever was uploaded, so
             // for a track the library already has, every cue set in Serato since is
@@ -340,6 +355,7 @@ handleKeepingAwake(
                 );
             }
             pathById.set(subboxId, trackPath);
+            identityById.set(subboxId, identity);
         }
 
         if (dropped.length > 0) {
@@ -391,15 +407,18 @@ handleKeepingAwake(
         }
 
         // Step 3b: an id the library doesn't know may still be a file it has. A
-        // Rekordbox upload tags only the server's copy, so the user's own file has
-        // no SUBBOX_ID and step 2 has just minted one; uploading it would make a
-        // second copy of a track already there (laker-93/pymix#231). The path that
-        // upload recorded identifies it. Both modes need this: "Playlists only"
-        // would otherwise send an id the library can't find and lose the track.
+        // Rekordbox upload tags only the server's copy, and this import tags no
+        // file at all (#221), so the user's own file has no SUBBOX_ID and step 2
+        // has just minted one; uploading it would make a second copy of a track
+        // already there (laker-93/pymix#231). The path that upload recorded
+        // identifies it. Both modes need this: "Playlists only" would otherwise
+        // send an id the library can't find and lose the track.
+        const libraryRoot = getLibraryRoot();
         const libraryIdByPath = await libraryIdsByLocation(
             pymixAuth,
             pymixUrl,
             trackIdentities.filter((t) => !present.has(t.subbox_id)).map((t) => t.crate_path),
+            libraryRoot,
         );
         /** The id step 2 read or minted → the library's id for the same file. */
         const adopted = new Map<string, string>();
@@ -410,25 +429,14 @@ handleKeepingAwake(
             }
         }
         for (const identity of trackIdentities) {
+            // Not written to the file (#221): the next import finds it by path again.
             const libraryId = adopted.get(identity.subbox_id);
-            if (!libraryId) continue;
-            // The library's id goes on the file too, so the next upload reads it
-            // straight off the tag, and the file carries the identity the library
-            // uses. The id replaced is one nothing in the library refers to.
-            try {
-                writeSubboxId(identity.crate_path, libraryId);
-            } catch (err) {
-                console.warn(
-                    `[serato] could not write SUBBOX_ID to ${identity.crate_path}; ` +
-                        `using the library's id for this upload only:`,
-                    err,
-                );
-            }
-            identity.subbox_id = libraryId;
+            if (libraryId) identity.subbox_id = libraryId;
         }
         for (const [localId, libraryId] of adopted) {
             pathById.set(libraryId, pathById.get(localId)!);
             pathById.delete(localId);
+            identityById.delete(localId);
             present.add(libraryId);
         }
         if (adopted.size > 0) {
@@ -466,6 +474,7 @@ handleKeepingAwake(
             album: null | string;
             artist: string;
             filePath: string;
+            identity: CrateTrackIdentity;
             stagingPath: string;
             title: string;
             trackName: string;
@@ -517,152 +526,182 @@ handleKeepingAwake(
                 album: album ?? null,
                 artist: resolvedArtist,
                 filePath,
+                identity: identityById.get(subboxId)!,
                 stagingPath,
                 title: resolvedTitle,
                 trackName: `${resolvedArtist} - ${resolvedTitle}`,
             });
         }
 
-        // Skip what an earlier attempt already uploaded whole: a retry after a late
-        // failure re-sends nothing the server has (laker-93/pymix#237). They are
-        // still mapped below, since this attempt's import has to stage them.
-        const alreadyStaged = await findWhollyStaged({
-            items: uploads.map((u) => ({ localPath: u.filePath, stagingPath: u.stagingPath })),
-            pymixAuth,
-            pymixUrl,
-        });
-        const toSend = uploads.filter((u) => !alreadyStaged.has(u.stagingPath));
-        result.skipped += uploads.length - toSend.length;
-
-        // Step 5: does it fit? Ask before spending the transfer, not after.
-        const totalUploadBytes = toSend.reduce((sum, u) => sum + fs.statSync(u.filePath).size, 0);
-        if (totalUploadBytes > 0) {
-            const storageRes = await withPymixAuth<{
-                allowed?: boolean;
-                currentUsageBytes?: number;
-                maxStorageBytes?: number;
-            }>(pymixAuth, (cookie) =>
-                axios.get(`${pymixUrl}/user/storage_check`, {
-                    headers: { Cookie: cookie },
-                    httpsAgent,
-                    params: { uploadSizeBytes: totalUploadBytes },
-                }),
-            );
-            if (storageRes.data?.allowed === false) {
-                const toMB = (bytes: number) => Math.round(bytes / (1024 * 1024));
-                throw new Error(
-                    `STORAGE_LIMIT_EXCEEDED:Your upload of ${toMB(totalUploadBytes)} MB would ` +
-                        `exceed your storage limit. You are currently using ` +
-                        `${toMB(storageRes.data?.currentUsageBytes ?? 0)} MB of your ` +
-                        `${toMB(storageRes.data?.maxStorageBytes ?? 0)} MB allowance.`,
-                );
-            }
-        }
-
-        // Step 6: upload, at the same bounded concurrency as the Rekordbox flow.
-        const activeUploads = new Map<string, string>();
-        let completed = 0;
-        const emitProgress = (currentTrack = '') => {
-            sendProgress({
-                activeTracks: Array.from(activeUploads.values()),
-                currentTrack,
-                phase: 'uploading',
-                total: toSend.length,
-                uploaded: completed,
-            });
-        };
-        emitProgress();
-
-        const uploadOne = async (item: (typeof uploads)[number]) => {
-            await uploadFileViaTus({
-                fbAuth,
-                filebrowserUrl,
-                filePath: item.filePath,
-                onProgress: (bytesUploaded, bytesTotal) => {
-                    const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
-                    activeUploads.set(item.trackName, `${item.trackName} (${pct}%)`);
-                    emitProgress();
-                },
-                stagingPath: item.stagingPath,
-                trackName: item.trackName,
-            });
-
-            activeUploads.delete(item.trackName);
-            completed++;
-            result.uploaded++;
-            emitProgress(item.trackName);
-        };
-
-        const failedStagingPaths = new Set<string>();
-        // One track's failure must not sink the batch — the user has dozens of
-        // other tracks in flight behind it. A dropped connection pauses the queue
-        // instead of failing it (subbox-app#203).
-        const { connectionLost, unsent } = await runUploadQueue({
-            concurrency: UPLOAD_CONCURRENCY,
-            items: toSend,
-            onFailed: (item, reason) => {
-                activeUploads.delete(item.trackName);
-                completed++;
-                result.skipped++;
-                failedStagingPaths.add(item.stagingPath);
-                result.failed.push({ reason, trackName: item.trackName });
-                console.warn(`[serato] upload failed for "${item.trackName}": ${reason}`);
-                emitProgress();
-            },
-            probeUrl: filebrowserUrl,
-            uploadOne,
-        });
-        if (connectionLost) {
-            throw connectionLostError(result.uploaded, unsent.length);
-        }
-
-        // Step 7: map the staged files to their identities. The server re-reads the
-        // SUBBOX_ID we wrote above rather than minting a new one, so this records
-        // the same id the manifest carries — and it records `userLocation`, which
-        // is what lets a *later* import of this library resolve these same tracks
-        // even with no manifest at all.
-        sendProgress({
-            currentTrack: '',
-            phase: 'mapping-metadata',
-            total: uploads.length,
-            uploaded: result.uploaded,
-        });
-
-        const libraryRoot = getLibraryRoot();
-        const tracksToMap = uploads
-            .filter((u) => !failedStagingPaths.has(u.stagingPath))
-            .map((u) => ({
-                originalAlbum: u.album,
-                originalArtist: u.artist,
-                originalName: u.title,
-                stagingLocation: u.stagingPath,
-                userLocation: u.filePath,
-                // Its path under this device's library root, when one is set (#219).
-                ...withRootRelativePath(libraryRoot, u.filePath),
-            }));
-
-        if (tracksToMap.length > 0) {
-            await runMapMeta({
-                onProgress: (processed, total) =>
-                    sendProgress({
-                        currentTrack: '',
-                        phase: 'mapping-metadata',
-                        total,
-                        uploaded: processed,
-                    }),
+        // The tagged copies of untagged files are made here, one per upload as it
+        // is sent, and deleted after it (#221). The folder goes at the end.
+        const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'subbox-serato-'));
+        try {
+            // Skip what an earlier attempt already uploaded whole: a retry after a late
+            // failure re-sends nothing the server has (laker-93/pymix#237). They are
+            // still mapped below, since this attempt's import has to stage them. An
+            // untagged file was sent as a tagged copy, so that copy's size is compared.
+            const alreadyStaged = await findWhollyStaged({
+                items: uploads.map((u) => ({
+                    localPath: u.filePath,
+                    ...(needsTaggedCopy(u.identity)
+                        ? {
+                              localSize: () =>
+                                  sendableSize({
+                                      filePath: u.filePath,
+                                      identity: u.identity,
+                                      tmpDir,
+                                  }),
+                          }
+                        : {}),
+                    stagingPath: u.stagingPath,
+                })),
                 pymixAuth,
                 pymixUrl,
-                tracks: tracksToMap,
             });
-        }
+            const toSend = uploads.filter((u) => !alreadyStaged.has(u.stagingPath));
+            result.skipped += uploads.length - toSend.length;
 
-        sendProgress({
-            currentTrack: '',
-            phase: 'done',
-            total: uploads.length,
-            uploaded: result.uploaded,
-        });
-        return result;
+            // Step 5: does it fit? Ask before spending the transfer, not after.
+            const totalUploadBytes = toSend.reduce(
+                (sum, u) => sum + fs.statSync(u.filePath).size,
+                0,
+            );
+            if (totalUploadBytes > 0) {
+                const storageRes = await withPymixAuth<{
+                    allowed?: boolean;
+                    currentUsageBytes?: number;
+                    maxStorageBytes?: number;
+                }>(pymixAuth, (cookie) =>
+                    axios.get(`${pymixUrl}/user/storage_check`, {
+                        headers: { Cookie: cookie },
+                        httpsAgent,
+                        params: { uploadSizeBytes: totalUploadBytes },
+                    }),
+                );
+                if (storageRes.data?.allowed === false) {
+                    const toMB = (bytes: number) => Math.round(bytes / (1024 * 1024));
+                    throw new Error(
+                        `STORAGE_LIMIT_EXCEEDED:Your upload of ${toMB(totalUploadBytes)} MB would ` +
+                            `exceed your storage limit. You are currently using ` +
+                            `${toMB(storageRes.data?.currentUsageBytes ?? 0)} MB of your ` +
+                            `${toMB(storageRes.data?.maxStorageBytes ?? 0)} MB allowance.`,
+                    );
+                }
+            }
+
+            // Step 6: upload, at the same bounded concurrency as the Rekordbox flow.
+            const activeUploads = new Map<string, string>();
+            let completed = 0;
+            const emitProgress = (currentTrack = '') => {
+                sendProgress({
+                    activeTracks: Array.from(activeUploads.values()),
+                    currentTrack,
+                    phase: 'uploading',
+                    total: toSend.length,
+                    uploaded: completed,
+                });
+            };
+            emitProgress();
+
+            const uploadOne = async (item: (typeof uploads)[number]) => {
+                // The bytes carry the id pymix reads back: the file's own tag, or a
+                // tagged copy's when it has none (#221).
+                await withTaggedFile(
+                    { filePath: item.filePath, identity: item.identity, tmpDir },
+                    (sendPath) =>
+                        uploadFileViaTus({
+                            fbAuth,
+                            filebrowserUrl,
+                            filePath: sendPath,
+                            onProgress: (bytesUploaded, bytesTotal) => {
+                                const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(1);
+                                activeUploads.set(item.trackName, `${item.trackName} (${pct}%)`);
+                                emitProgress();
+                            },
+                            stagingPath: item.stagingPath,
+                            trackName: item.trackName,
+                        }),
+                );
+
+                activeUploads.delete(item.trackName);
+                completed++;
+                result.uploaded++;
+                emitProgress(item.trackName);
+            };
+
+            const failedStagingPaths = new Set<string>();
+            // One track's failure must not sink the batch — the user has dozens of
+            // other tracks in flight behind it. A dropped connection pauses the queue
+            // instead of failing it (subbox-app#203).
+            const { connectionLost, unsent } = await runUploadQueue({
+                concurrency: UPLOAD_CONCURRENCY,
+                items: toSend,
+                onFailed: (item, reason) => {
+                    activeUploads.delete(item.trackName);
+                    completed++;
+                    result.skipped++;
+                    failedStagingPaths.add(item.stagingPath);
+                    result.failed.push({ reason, trackName: item.trackName });
+                    console.warn(`[serato] upload failed for "${item.trackName}": ${reason}`);
+                    emitProgress();
+                },
+                probeUrl: filebrowserUrl,
+                uploadOne,
+            });
+            if (connectionLost) {
+                throw connectionLostError(result.uploaded, unsent.length);
+            }
+
+            // Step 7: map the staged files to their identities. The server re-reads the
+            // SUBBOX_ID in the bytes sent rather than minting a new one, so this records
+            // the same id the manifest carries — and it records `userLocation`, which
+            // is what lets a *later* import of this library resolve these same tracks
+            // even with no manifest at all.
+            sendProgress({
+                currentTrack: '',
+                phase: 'mapping-metadata',
+                total: uploads.length,
+                uploaded: result.uploaded,
+            });
+
+            const tracksToMap = uploads
+                .filter((u) => !failedStagingPaths.has(u.stagingPath))
+                .map((u) => ({
+                    originalAlbum: u.album,
+                    originalArtist: u.artist,
+                    originalName: u.title,
+                    stagingLocation: u.stagingPath,
+                    userLocation: u.filePath,
+                    // Its path under this device's library root, when one is set (#219).
+                    ...withRootRelativePath(libraryRoot, u.filePath),
+                }));
+
+            if (tracksToMap.length > 0) {
+                await runMapMeta({
+                    onProgress: (processed, total) =>
+                        sendProgress({
+                            currentTrack: '',
+                            phase: 'mapping-metadata',
+                            total,
+                            uploaded: processed,
+                        }),
+                    pymixAuth,
+                    pymixUrl,
+                    tracks: tracksToMap,
+                });
+            }
+
+            sendProgress({
+                currentTrack: '',
+                phase: 'done',
+                total: uploads.length,
+                uploaded: result.uploaded,
+            });
+            return result;
+        } finally {
+            await fs.promises.rm(tmpDir, { force: true, recursive: true }).catch(() => {});
+        }
     },
 );
 

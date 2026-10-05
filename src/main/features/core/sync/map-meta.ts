@@ -59,9 +59,13 @@ const mapMetaFailed = (reason: string) => new Error(`${MAP_META_FAILED_PREFIX}${
  * it is sent again; that retry belongs on the "finish import" path anyway.
  *
  * Best effort: if pymix can't answer, nothing is skipped (laker-93/pymix#237).
+ *
+ * `localSize` is the size of what would be sent, when that isn't the local file
+ * as it is: the Serato import sends a tagged copy (#221). Asked only for a path
+ * the server has something at.
  */
 export async function findWhollyStaged(args: {
-    items: Array<{ localPath: string; stagingPath: string }>;
+    items: Array<{ localPath: string; localSize?: () => Promise<number>; stagingPath: string }>;
     pymixAuth: PymixAuth;
     pymixUrl: string;
 }): Promise<Set<string>> {
@@ -81,11 +85,12 @@ export async function findWhollyStaged(args: {
                     ),
                 ),
             );
-            for (const { localPath, stagingPath } of chunk) {
+            for (const { localPath, localSize, stagingPath } of chunk) {
                 const serverSize = res.data.sizes[stagingPath];
                 if (serverSize == null) continue;
                 try {
-                    if (fs.statSync(localPath).size === serverSize) whole.add(stagingPath);
+                    const size = localSize ? await localSize() : fs.statSync(localPath).size;
+                    if (size === serverSize) whole.add(stagingPath);
                 } catch {
                     // The local file is gone: it can't be uploaded either, and the
                     // caller has already checked it exists, so leave it to fail there.
