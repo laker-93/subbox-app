@@ -23,6 +23,6 @@ export { SyncResult } from './sync-result';
 export { SyncSettingsButton, SyncSettingsModal } from './sync-settings';
 export { SyncSummary, type SyncSummaryItem } from './sync-summary';
 export { TrackRow } from './track-row';
-export { usesTracksInPlace } from './tracks-in-place';
+export { type LibraryRootStatus, usesTracksInPlace } from './tracks-in-place';
 export { useSelection } from './use-selection';
 export { type SeratoWriteResult, useSeratoCrates } from './use-serato-crates';

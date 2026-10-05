@@ -16,6 +16,7 @@ import {
     formatDuration,
     FormatSelect,
     LibraryRootSetting,
+    type LibraryRootStatus,
     RekordboxImportSteps,
     SelectableList,
     SeratoOverwriteOptions,
@@ -180,9 +181,15 @@ export const SyncDownload = () => {
     }>(null);
     // How many of the plan's tracks were found where the user uploaded them from,
     // and whether the plan was made counting them (#214).
-    const [plannedInPlace, setPlannedInPlace] = useState<null | { count: number; used: boolean }>(
-        null,
-    );
+    const [plannedInPlace, setPlannedInPlace] = useState<null | {
+        count: number;
+        ignoreRoot: boolean;
+        libraryRoot: LibraryRootStatus | null;
+        used: boolean;
+    }>(null);
+    // "Download anyway": the user chose to go ahead without an unavailable library
+    // root, so the tracks it would have covered download as before (#220).
+    const [ignoreLibraryRoot, setIgnoreLibraryRoot] = useState(false);
     // Which format this export is for. Remembered across sessions, per direction,
     // so a DJ is never asked twice for something that is close to an identity
     // property. Falls back to Rekordbox only if the store somehow holds nothing.
@@ -301,16 +308,20 @@ export const SyncDownload = () => {
     // Best effort: a failure here means nothing is found in place, which is today's
     // download.
     const getInPlaceTracks = useCallback(
-        async (playlistIds: string[]): Promise<LocalTrack[]> => {
+        async (
+            playlistIds: string[],
+            ignoreRoot: boolean,
+        ): Promise<{ libraryRoot: LibraryRootStatus | null; tracks: LocalTrack[] }> => {
             try {
                 return (await window.api.ipc.invoke('sync:find-in-place-tracks', {
+                    ignoreLibraryRoot: ignoreRoot,
                     playlistIds,
                     pymixUrl: urlConfig.pymix,
                     serverId: serverId ?? undefined,
                     username: server.username,
-                })) as LocalTrack[];
+                })) as { libraryRoot: LibraryRootStatus | null; tracks: LocalTrack[] };
             } catch {
-                return [];
+                return { libraryRoot: null, tracks: [] };
             }
         },
         [server.username, serverId],
@@ -345,9 +356,10 @@ export const SyncDownload = () => {
         setError(null);
 
         try {
-            const inPlaceTracks = useTracksInPlace
-                ? await getInPlaceTracks(Array.from(selectedPlaylists))
-                : [];
+            const inPlace = useTracksInPlace
+                ? await getInPlaceTracks(Array.from(selectedPlaylists), ignoreLibraryRoot)
+                : { libraryRoot: null, tracks: [] };
+            const inPlaceTracks = inPlace.tracks;
             const localTracks = [...(await getLocalTracks()), ...inPlaceTracks];
 
             const result = await PymixController.syncPlan({
@@ -367,26 +379,55 @@ export const SyncDownload = () => {
             });
 
             setPlan(result as SyncPlanResponse);
-            setPlannedInPlace({ count: inPlaceTracks.length, used: useTracksInPlace });
+            setPlannedInPlace({
+                count: inPlaceTracks.length,
+                ignoreRoot: ignoreLibraryRoot,
+                libraryRoot: inPlace.libraryRoot,
+                used: useTracksInPlace,
+            });
             setStep('preview');
         } catch (err: any) {
             setError(err?.message || 'Failed to get sync plan');
             setStep('select');
         }
-    }, [getInPlaceTracks, getLocalTracks, selectedPlaylists, useTracksInPlace]);
+    }, [getInPlaceTracks, getLocalTracks, ignoreLibraryRoot, selectedPlaylists, useTracksInPlace]);
 
-    // The format is chosen on the preview, after the plan. A change that turns
-    // in-place on or off changes which tracks are missing, so plan again.
+    // The format is chosen on the preview, after the plan, and "Download anyway" is
+    // too. A change to either changes which tracks are missing, so plan again.
     useEffect(() => {
-        if (step === 'preview' && plannedInPlace && plannedInPlace.used !== useTracksInPlace) {
+        if (
+            step === 'preview' &&
+            plannedInPlace &&
+            (plannedInPlace.used !== useTracksInPlace ||
+                plannedInPlace.ignoreRoot !== ignoreLibraryRoot)
+        ) {
             handleGetPlan();
         }
-    }, [handleGetPlan, plannedInPlace, step, useTracksInPlace]);
+    }, [handleGetPlan, ignoreLibraryRoot, plannedInPlace, step, useTracksInPlace]);
+
+    // An unavailable root blocks the download until the user connects it, changes or
+    // clears it, or downloads anyway (#214 point 11). Never a silent fetch-everything.
+    const rootUnavailable =
+        plannedInPlace?.used && plannedInPlace.libraryRoot?.status === 'unavailable'
+            ? plannedInPlace.libraryRoot
+            : null;
+
+    // A root changed or cleared in the settings modal is only seen by a new plan.
+    const [settingsWereOpen, setSettingsWereOpen] = useState(false);
+    useEffect(() => {
+        if (settingsOpened) {
+            setSettingsWereOpen(true);
+        } else if (settingsWereOpen) {
+            setSettingsWereOpen(false);
+            if (step === 'preview' && rootUnavailable) handleGetPlan();
+        }
+    }, [handleGetPlan, rootUnavailable, settingsOpened, settingsWereOpen, step]);
 
     const handleBack = useCallback(() => {
         setStep('select');
         setPlan(null);
         setPlannedInPlace(null);
+        setIgnoreLibraryRoot(false);
         setError(null);
         setDownloadResult(null);
         resetSeratoResult();
@@ -427,6 +468,7 @@ export const SyncDownload = () => {
                 const result = await window.api.ipc.invoke('sync:download-playlists', {
                     filebrowserToken: server.fbToken ?? '',
                     filebrowserUrl: urlConfig.filebrowser,
+                    ignoreLibraryRoot,
                     includeRekordboxXml,
                     includeTracks,
                     playlistIds: Array.from(selectedPlaylists),
@@ -517,6 +559,7 @@ export const SyncDownload = () => {
             setStep('preview');
         }
     }, [
+        ignoreLibraryRoot,
         includeRekordboxXml,
         includeTracks,
         selectedPlaylists,
@@ -830,7 +873,10 @@ export const SyncDownload = () => {
                             metadata.updates.length === 0 &&
                             !includeRekordboxXml &&
                             !writingSeratoCrates) ||
-                        (!isElectron() && includeRekordboxXml && webExtractPath.trim().length === 0)
+                        (!isElectron() &&
+                            includeRekordboxXml &&
+                            webExtractPath.trim().length === 0) ||
+                        Boolean(rootUnavailable)
                     }
                     fullWidth
                     onClick={handleDownload}
@@ -887,6 +933,37 @@ export const SyncDownload = () => {
                 </Text>
             )}
 
+            {rootUnavailable && (
+                <Stack data-testid="library-root-unavailable" gap={6}>
+                    <Text c="yellow" size="sm">
+                        Your library folder is unavailable: {rootUnavailable.reason}
+                    </Text>
+                    <Text c="dimmed" size="xs">
+                        {rootUnavailable.root}
+                    </Text>
+                    <Group gap="xs">
+                        <Button onClick={handleGetPlan} size="xs" variant="default">
+                            Check again
+                        </Button>
+                        <Button onClick={settingsHandlers.open} size="xs" variant="subtle">
+                            Change folder
+                        </Button>
+                        <Button
+                            onClick={() => setIgnoreLibraryRoot(true)}
+                            size="xs"
+                            tooltip={{
+                                label: 'Download the tracks your library folder would have covered, as subbox did before it had one.',
+                                multiline: true,
+                                w: 260,
+                            }}
+                            variant="subtle"
+                        >
+                            Download anyway
+                        </Button>
+                    </Group>
+                </Stack>
+            )}
+
             {/* Summary badges. The already-present / to-download / metadata-updates
                 counts are a diff against the local library, which only exists on
                 desktop — on web they are fixed at 0 / everything / a copy of the
@@ -914,7 +991,7 @@ export const SyncDownload = () => {
                                   ? [
                                         {
                                             color: 'teal',
-                                            label: `${plannedInPlace.count} found where you uploaded them`,
+                                            label: `${plannedInPlace.count} found on this computer`,
                                         },
                                     ]
                                   : []),

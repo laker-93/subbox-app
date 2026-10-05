@@ -12,3 +12,13 @@ export const usesTracksInPlace = (args: {
     includeRekordboxXml: boolean;
     includeSeratoCrates: boolean;
 }): boolean => args.electron && args.includeRekordboxXml && !args.includeSeratoCrates;
+
+/** Mirrors LibraryRootStatus in main/features/core/sync/in-place.ts (#220). */
+export type LibraryRootStatus =
+    | {
+          code: 'missing' | 'not-a-folder' | 'nothing-found';
+          reason: string;
+          root: string;
+          status: 'unavailable';
+      }
+    | { expected: number; found: number; root: string; status: 'ok' };

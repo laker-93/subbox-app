@@ -1,4 +1,4 @@
-import { fetchTrackLocations } from './in-place';
+import { fetchTrackPaths } from './in-place';
 import { backfillEntries } from './library-root';
 import { recordTrackLocations, TrackLocationToRecord } from './record-locations';
 
@@ -23,8 +23,9 @@ export async function backfillLibraryRoot(args: {
     root: string;
 }): Promise<null | { recorded: number; underRoot: number }> {
     const { platform, playlistIds, postLocations, postRecord, root } = args;
-    const locations = await fetchTrackLocations({ playlistIds, post: postLocations });
-    if (!locations) return null;
+    const paths = await fetchTrackPaths({ playlistIds, post: postLocations });
+    if (!paths) return null;
+    const { locations } = paths;
     const entries = backfillEntries(root, locations, platform);
     const recorded = await recordTrackLocations({ entries, post: postRecord });
     console.log(

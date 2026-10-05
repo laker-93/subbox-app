@@ -11,7 +11,11 @@ import { appConfig } from '/@/main/config/app-config';
 import { getStoredPassword, store } from '/@/main/features/core/settings';
 import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip-layout';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
-import { findInPlaceTracks, InPlaceTrack } from '/@/main/features/core/sync/in-place';
+import {
+    findInPlaceTracks,
+    InPlaceResult,
+    InPlaceTrack,
+} from '/@/main/features/core/sync/in-place';
 import {
     checkLibraryRoot,
     LIBRARY_ROOT_SETTING,
@@ -1077,6 +1081,9 @@ handleKeepingAwake(
         args: {
             filebrowserToken: string;
             filebrowserUrl: string;
+            // "Download anyway": ignore an unavailable library root, so the tracks
+            // it would have covered download as they did before stage 2 (#220).
+            ignoreLibraryRoot?: boolean;
             includeRekordboxXml?: boolean;
             includeTracks?: boolean;
             playlistIds: string[];
@@ -1098,6 +1105,7 @@ handleKeepingAwake(
         const {
             filebrowserToken,
             filebrowserUrl,
+            ignoreLibraryRoot,
             includeRekordboxXml,
             includeTracks = true,
             playlistIds,
@@ -1133,9 +1141,18 @@ handleKeepingAwake(
             // Scan local music directory for existing tracks, plus the ones still
             // where the user uploaded them from: pymix leaves those out of the zip
             // and points the XML at them.
-            const inPlaceTracks = useTracksInPlace
-                ? await findInPlace(pymixAuth, pymixUrl, playlistIds)
-                : [];
+            const inPlace = useTracksInPlace
+                ? await findInPlace(pymixAuth, pymixUrl, playlistIds, !ignoreLibraryRoot)
+                : null;
+            // Never download what an unplugged root would have covered without the
+            // user saying so (#214 point 11). The preview blocks it first; this is
+            // the backstop.
+            if (inPlace?.libraryRoot?.status === 'unavailable') {
+                throw new Error(
+                    `${LIBRARY_ROOT_UNAVAILABLE_PREFIX}Your library folder ${inPlace.libraryRoot.root} is unavailable. ${inPlace.libraryRoot.reason}`,
+                );
+            }
+            const inPlaceTracks = inPlace?.tracks ?? [];
             const localTracks: Array<InPlaceTrack | LocalTrack> = [
                 ...(await scanLocalTracks()),
                 ...inPlaceTracks,
@@ -1278,16 +1295,29 @@ ipcMain.handle('sync:get-local-tracks', async (): Promise<LocalTrack[]> => {
     return scanLocalTracks();
 });
 
-/** The tracks in these playlists still where they were uploaded from (#214). */
+// The error message prefix for a download blocked by an unavailable library root.
+// The renderer matches on it, as on STORAGE_LIMIT_EXCEEDED:, since an IPC rejection
+// carries only a message.
+const LIBRARY_ROOT_UNAVAILABLE_PREFIX = 'LIBRARY_ROOT_UNAVAILABLE:';
+
+/**
+ * The tracks in these playlists found on this machine (#214): where they were
+ * uploaded from, or under this device's library root unless `useRoot` is false.
+ */
 function findInPlace(
     pymixAuth: PymixAuth,
     pymixUrl: string,
     playlistIds: string[],
-): Promise<InPlaceTrack[]> {
+    useRoot: boolean,
+): Promise<InPlaceResult> {
     return findInPlaceTracks({
+        libraryRoot: useRoot ? getLibraryRoot() : null,
         playlistIds,
         post: (ids) =>
-            withPymixAuth<{ locations: Record<string, string> }>(pymixAuth, (cookie) =>
+            withPymixAuth<{
+                locations: Record<string, string>;
+                relativePaths?: Record<string, string>;
+            }>(pymixAuth, (cookie) =>
                 axios.post(
                     `${pymixUrl}/tracks/locations`,
                     { playlistIds: ids },
@@ -1303,13 +1333,20 @@ ipcMain.handle(
     'sync:find-in-place-tracks',
     async (
         _event,
-        args: { playlistIds: string[]; pymixUrl: string; serverId?: string; username?: string },
-    ): Promise<InPlaceTrack[]> => {
-        const { playlistIds, pymixUrl, serverId, username } = args;
+        args: {
+            ignoreLibraryRoot?: boolean;
+            playlistIds: string[];
+            pymixUrl: string;
+            serverId?: string;
+            username?: string;
+        },
+    ): Promise<InPlaceResult> => {
+        const { ignoreLibraryRoot, playlistIds, pymixUrl, serverId, username } = args;
         return findInPlace(
             createPymixAuth({ pymixUrl, serverId, username }),
             pymixUrl,
             playlistIds,
+            !ignoreLibraryRoot,
         );
     },
 );

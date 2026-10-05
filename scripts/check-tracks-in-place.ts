@@ -2,7 +2,7 @@ import { AxiosError, AxiosHeaders } from 'axios';
 import assert from 'node:assert/strict';
 
 import {
-    fetchTrackLocations,
+    fetchTrackPaths,
     findInPlaceTracks,
     isPlatformAbsolute,
     resolveInPlace,
@@ -101,7 +101,8 @@ async function main(): Promise<void> {
         }),
         stat: winDisk.stat,
     });
-    assert.deepEqual(winFound, [
+    assert.equal(winFound.libraryRoot, null);
+    assert.deepEqual(winFound.tracks, [
         {
             artist: '',
             fromTag: true,
@@ -130,7 +131,7 @@ async function main(): Promise<void> {
 
     // A pymix without /tracks/locations: null, so nothing is sent as in place.
     assert.equal(
-        await fetchTrackLocations({
+        await fetchTrackPaths({
             playlistIds: ['pl-1'],
             post: async () => Promise.reject(axios404()),
         }),
@@ -139,16 +140,18 @@ async function main(): Promise<void> {
     const statAfter404 = fakeDisk([]);
     assert.deepEqual(
         await findInPlaceTracks({
+            libraryRoot: '/Music',
             playlistIds: ['pl-1'],
             post: async () => Promise.reject(axios404()),
             stat: statAfter404.stat,
         }),
-        [],
+        // pymix can't say where anything is, so the root isn't even checked.
+        { libraryRoot: null, tracks: [] },
     );
     assert.equal(statAfter404.asked.length, 0);
     // Any other failure is the same.
     assert.equal(
-        await fetchTrackLocations({
+        await fetchTrackPaths({
             playlistIds: ['pl-1'],
             post: async () => Promise.reject(new Error('ECONNRESET')),
         }),
