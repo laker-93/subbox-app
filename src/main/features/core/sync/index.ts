@@ -98,6 +98,10 @@ export interface UploadResult {
 
 type LocalTrack = {
     album?: string;
+    /** Where this file is in the app's music folder. pymix writes it as the track's
+     *  Rekordbox XML Location, so a file an earlier download named differently is
+     *  still found (laker-93/pymix#261). */
+    appLocation: string;
     artist: string;
     fileExtension?: string;
     fromTag: boolean;
@@ -919,6 +923,7 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
         if (fromFilename) {
             tracks.push({
                 album: fallbackAlbum,
+                appLocation: filePath,
                 artist: fromFilename.artist,
                 fromTag: false,
                 subboxId,
@@ -947,6 +952,7 @@ async function scanLocalTracks(): Promise<LocalTrack[]> {
         const fromTag = !!(tagArtist && tagTitle);
         tracks.push({
             album: (fromTag ? tagAlbum : fallbackAlbum) ?? fallbackAlbum,
+            appLocation: filePath,
             artist: fromTag ? tagArtist! : fallbackArtist,
             fromTag,
             subboxId,
@@ -1639,6 +1645,22 @@ const subboxIdCacheStore = new Store<{ entries: Record<string, SubboxIdCacheEntr
 });
 
 /**
+ * Every file under `root` the SUBBOX_ID cache holds, by its subbox_id. Free: no file
+ * is opened, so it knows only what a scan or a download has already read, which is
+ * every file a download wrote (cacheSubboxIdsForNewFiles).
+ */
+export function cachedPathsBySubboxId(root: string): Map<string, string> {
+    const under = path.resolve(root) + path.sep;
+    const byId = new Map<string, string>();
+    for (const [filePath, entry] of Object.entries(loadSubboxIdCache())) {
+        if (filePath.startsWith(under) && !byId.has(entry.subboxId)) {
+            byId.set(entry.subboxId, filePath);
+        }
+    }
+    return byId;
+}
+
+/**
  * Record SUBBOX_IDs for files just written to disk, e.g. after a download unzips
  * new tracks. pymix always tags a track before zipping it up, so the id is already
  * sitting in the file we just wrote — reading it now means scanLocalTracks doesn't
@@ -2290,11 +2312,15 @@ handleKeepingAwake(
         let xmlPath: string | undefined;
         if (includeRekordboxXml) {
             const musicPath = getMusicPath();
+            // Scanned after the unzip, so it covers what just landed too: pymix points
+            // the XML at each track where it is, not at the name it would give it now
+            // (laker-93/pymix#261). An older pymix ignores it.
+            const localTracks = await scanLocalTracks();
 
             await withPymixAuth(pymixAuth, (cookie) =>
                 axios.post(
                     `${pymixUrl}/rekordbox/export`,
-                    { playlistIds: playlistIds ?? [], user_root: musicPath },
+                    { localTracks, playlistIds: playlistIds ?? [], user_root: musicPath },
                     { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
                 ),
             );

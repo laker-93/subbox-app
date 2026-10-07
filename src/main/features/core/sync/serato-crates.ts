@@ -269,6 +269,30 @@ export function crateFileNames(components: string[]): string[] {
 }
 
 /**
+ * Where a track in pymix's Serato export is on this disk.
+ *
+ * Normally `<musicRoot>/<relativePath>`, where a download extracts it. But a track
+ * an earlier download wrote is never downloaded again (its subbox_id is already
+ * here), and pymix's name for it changed for anything Windows can't hold
+ * (laker-93/pymix#261): `Album: Vol 1` became `Album_ Vol 1`. Such a track is
+ * the file under `musicRoot` that `cachedById` (the SUBBOX_ID cache) holds for
+ * its id. With neither on disk, the predicted path, which writeCrates reports as
+ * missing.
+ */
+export function crateTrackPath(
+    musicRoot: string,
+    relativePath: string,
+    subboxId: null | string | undefined,
+    cachedById: ReadonlyMap<string, string>,
+    exists: (p: string) => boolean = fs.existsSync,
+): string {
+    const predicted = path.join(musicRoot, relativePath);
+    if (!subboxId || exists(predicted)) return predicted;
+    const cached = cachedById.get(subboxId);
+    return cached && exists(cached) ? cached : predicted;
+}
+
+/**
  * Make a crate name safe to be part of a filename, changing as little as possible.
  *
  * Only the things that would break the layout are touched: the path separators,

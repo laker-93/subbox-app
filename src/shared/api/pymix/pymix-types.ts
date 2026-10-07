@@ -203,13 +203,11 @@ const loginParameters = z.object({
     username: z.string(),
 });
 
-const rbExportParameters = z.object({
-    playlistIds: z.array(z.string()).optional(),
-    user_root: z.string(),
-});
-
 const track = z.object({
     album: z.string().optional(),
+    // A download's local track in the app's own music folder: pymix writes this path
+    // as its Rekordbox XML Location, whatever name it would give the file today (#261).
+    appLocation: z.string().optional(),
     artist: z.string(),
     fileExtension: z.string().optional(),
     fromTag: z.boolean().default(true),
@@ -220,6 +218,13 @@ const track = z.object({
     // A download's local track found where the user uploaded it from (#214): pymix
     // writes this path as its Rekordbox XML Location.
     userLocation: z.string().optional(),
+});
+
+const rbExportParameters = z.object({
+    // The tracks the caller already has, so their Locations are where they are (#261).
+    localTracks: z.array(track).optional(),
+    playlistIds: z.array(z.string()).optional(),
+    user_root: z.string(),
 });
 
 const syncParameters = z.object({

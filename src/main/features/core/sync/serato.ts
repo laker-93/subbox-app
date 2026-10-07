@@ -5,7 +5,7 @@ import { parseFile } from 'music-metadata';
 import * as os from 'os';
 import * as path from 'path';
 
-import { getLibraryRoot, getMusicPath } from '/@/main/features/core/sync';
+import { cachedPathsBySubboxId, getLibraryRoot, getMusicPath } from '/@/main/features/core/sync';
 import { withRootRelativePath } from '/@/main/features/core/sync/library-root';
 import { findWhollyStaged, runMapMeta } from '/@/main/features/core/sync/map-meta';
 import {
@@ -27,6 +27,7 @@ import {
     CRATE_ZIP_FILENAME,
     CratePreview,
     CrateToWrite,
+    crateTrackPath,
     DEFAULT_SERATO_FOLDER,
     nodeKey,
     readCrateTree,
@@ -738,6 +739,7 @@ ipcMain.handle(
                     beatgrid?: SeratoBeatgridWire[];
                     cues?: SeratoCueWire[];
                     relative_path: string;
+                    subbox_id?: null | string;
                 }>;
             }>;
             /** Where the download put the tracks — the `music` folder, not its
@@ -794,13 +796,19 @@ ipcMain.handle(
             );
         }
 
+        const cachedById = cachedPathsBySubboxId(musicRoot);
         const toWrite: CrateToWrite[] = crates.map((crate) => ({
             pathComponents:
                 crate.path_components.length > 0 ? crate.path_components : [crate.display_name],
             tracks: crate.tracks.map((track) => ({
                 beatgrid: track.beatgrid,
                 cues: track.cues,
-                localPath: path.join(musicRoot, track.relative_path),
+                localPath: crateTrackPath(
+                    musicRoot,
+                    track.relative_path,
+                    track.subbox_id,
+                    cachedById,
+                ),
             })),
         }));
 
