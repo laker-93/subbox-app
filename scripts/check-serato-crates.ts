@@ -8,6 +8,7 @@ import { BeatgridEncoder, Builder, Crate, Track, V2Encoder } from 'tserato';
 import {
     CRATE_ZIP_FILENAME,
     crateFileNames,
+    crateTrackPath,
     nodeKey,
     readCrateTree,
     readTrackCues,
@@ -249,6 +250,7 @@ function main(): void {
     checkFileNamesMatchTseratoSave();
     checkCratesAreWritten();
     checkPathsAreStoredSeratoStyle();
+    checkATrackDownloadedUnderAnOlderNameIsFound();
     checkAnExistingParentCrateSurvives();
     checkAParentAndItsSubCrateInOneCall();
     checkAReplacedCrateIsBackedUp();
@@ -442,6 +444,43 @@ function checkAReplacedCrateIsBackedUp(): void {
         path.join(musicRoot, 'Artist/Album/three.mp3'),
     ]);
     console.log('  writing: a replaced crate is backed up outside SubCrates — OK');
+}
+
+/**
+ * pymix renamed `:` and the rest of what Windows can't hold out of the zip's entry
+ * names (laker-93/pymix#261), and the export's `relative_path` with them. A track a
+ * Mac downloaded before that is still under its old name, and is never downloaded
+ * again: its subbox_id is already here. The crate has to find it by that id.
+ */
+function checkATrackDownloadedUnderAnOlderNameIsFound(): void {
+    const before = localTrack('Giacomo Dianz/Best New Trance: April 2025/feel.mp3');
+    const cachedById = new Map([['sid-feel', before]]);
+
+    assert.equal(
+        crateTrackPath(
+            musicRoot,
+            'Giacomo Dianz/Best New Trance_ April 2025/feel.mp3',
+            'sid-feel',
+            cachedById,
+        ),
+        before,
+    );
+    // Where the predicted file exists, it wins: the cache can hold a stale copy.
+    const current = localTrack('Artist/Album/current.mp3');
+    assert.equal(
+        crateTrackPath(musicRoot, 'Artist/Album/current.mp3', 'sid-feel', cachedById),
+        current,
+    );
+    // Neither on disk: the predicted path, which writeCrates reports as missing.
+    assert.equal(
+        crateTrackPath(musicRoot, 'Nope/nope.mp3', 'sid-gone', cachedById),
+        path.join(musicRoot, 'Nope/nope.mp3'),
+    );
+    assert.equal(
+        crateTrackPath(musicRoot, 'Nope/nope.mp3', null, cachedById),
+        path.join(musicRoot, 'Nope/nope.mp3'),
+    );
+    console.log('  writing: a track downloaded under an older name is found by its id — OK');
 }
 
 function checkCratesAreWritten(): void {

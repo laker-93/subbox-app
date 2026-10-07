@@ -156,6 +156,8 @@ const resolveDownloadFilename = (
 
 type LocalTrack = {
     album?: string;
+    // Set on a track in the app's own music folder: where it is (pymix#261).
+    appLocation?: string;
     artist: string;
     fileExtension?: string;
     fromTag: boolean;
