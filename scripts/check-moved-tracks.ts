@@ -9,12 +9,13 @@ import {
     findInPlaceTracks,
     findMovedTracks,
     listLibraryRoot,
+    sharedParentFolders,
 } from '../src/main/features/core/sync/in-place';
 import { movedTrackEntries } from '../src/main/features/core/sync/record-locations';
 
 // A download follows tracks moved inside the library root (#222): one listing of
 // the root, only when something is missing, matched by file name; exactly one
-// candidate or none; the unavailable-root guard counted after the search; and the
+// candidate or none, unless its folders settle it (#234); the unavailable-root guard counted after the search; and the
 // record payload that replaces the relative path and never the absolute one.
 //
 // Usage: pnpm run check:moved-tracks
@@ -144,6 +145,76 @@ async function main(): Promise<void> {
             ],
             platform: 'darwin',
             stat: twoIntros.stat,
+        }),
+        [],
+    );
+
+    // ── #234: several files of one name, several tracks naming one file ─────
+    assert.equal(sharedParentFolders('Old/HiTech/Melodic/a.flac', 'HiTech/Melodic/a.flac'), 2);
+    assert.equal(sharedParentFolders('C:\\X\\hitech\\a.flac', 'HiTech/a.flac', 'win32'), 1);
+    assert.equal(sharedParentFolders('C:\\X\\hitech\\a.flac', 'HiTech/a.flac', 'linux'), 0);
+    assert.equal(sharedParentFolders('a.flac', 'HiTech/a.flac'), 0);
+
+    // The prod case (2026-10-07): recorded under a "(Source)" folder this machine
+    // doesn't have, and the name in two HiTech folders here.
+    const prod = fakeDisk([
+        '/Lib/Personal/Music/Music Library/HiTech/Melodic Hightech/Who We Are.flac',
+        '/Lib/Personal/Music/Music Library/HiTech/Djane Psynonima/Who We Are.flac',
+        '/Lib/Personal/Music/Music Library/Shades Like/Beneath.flac',
+        '/Lib/Personal/Music/Music Library/Albums/A/01 Intro.mp3',
+        '/Lib/Personal/Music/Music Library/Albums/B/01 Intro.mp3',
+        '/Lib/Personal/Music/Music Library/Albums/C/02 Outro.mp3',
+    ]);
+    const l3 = await listLibraryRoot('/Lib', { platform: 'darwin', readdir: prod.readdir });
+    const prodMoved = await findMovedTracks({
+        listing: l3,
+        missing: [
+            // Two files, one whose folders match: that one.
+            {
+                relativePath:
+                    'Personal/Music/Music Library (Source)/HiTech/Melodic Hightech/Who We Are.flac',
+                subboxId: 'sid-who',
+            },
+            // A pymix#262 pair: one file, two tracks naming it from the same
+            // folder. Both get it.
+            {
+                relativePath: 'Personal/Music/Music Library (Source)/Shades Like/Beneath.flac',
+                subboxId: 'sid-beneath-old',
+            },
+            {
+                location: '/Volumes/EXTERNAL/Music Library (Source)/Shades Like/Beneath.flac',
+                subboxId: 'sid-beneath-new',
+            },
+            // Two files, folders match neither: still never guessed.
+            { relativePath: 'Old/Z/01 Intro.mp3', subboxId: 'sid-intro' },
+            // Two tracks naming one file, one from its folder: that one only.
+            { relativePath: 'Old/C/02 Outro.mp3', subboxId: 'sid-outro-c' },
+            { relativePath: 'Old/D/02 Outro.mp3', subboxId: 'sid-outro-d' },
+        ],
+        platform: 'darwin',
+        stat: prod.stat,
+    });
+    assert.deepEqual(
+        prodMoved
+            .map((m) => [m.subboxId, m.rootRelativePath])
+            .sort((a, b) => a[0].localeCompare(b[0])),
+        [
+            ['sid-beneath-new', 'Personal/Music/Music Library/Shades Like/Beneath.flac'],
+            ['sid-beneath-old', 'Personal/Music/Music Library/Shades Like/Beneath.flac'],
+            ['sid-outro-c', 'Personal/Music/Music Library/Albums/C/02 Outro.mp3'],
+            ['sid-who', 'Personal/Music/Music Library/HiTech/Melodic Hightech/Who We Are.flac'],
+        ],
+    );
+
+    // Two files tied on folders (both share one): still missing.
+    const tied = fakeDisk(['/Lib/A/House/a.mp3', '/Lib/B/House/a.mp3']);
+    const l4 = await listLibraryRoot('/Lib', { platform: 'darwin', readdir: tied.readdir });
+    assert.deepEqual(
+        await findMovedTracks({
+            listing: l4,
+            missing: [{ relativePath: 'Old/House/a.mp3', subboxId: 'sid-a' }],
+            platform: 'darwin',
+            stat: tied.stat,
         }),
         [],
     );

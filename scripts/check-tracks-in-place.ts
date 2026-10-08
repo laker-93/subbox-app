@@ -7,7 +7,10 @@ import {
     isPlatformAbsolute,
     resolveInPlace,
 } from '../src/main/features/core/sync/in-place';
-import { usesTracksInPlace } from '../src/renderer/features/sync/components/shared/tracks-in-place';
+import {
+    usesTracksInPlace,
+    xmlOnlyMissingCount,
+} from '../src/renderer/features/sync/components/shared/tracks-in-place';
 
 // A Rekordbox download uses the tracks still where the user uploaded them from
 // (#214 stage 1, #217): pymix sends each track's upload path, the client stats it,
@@ -188,6 +191,22 @@ async function main(): Promise<void> {
         }),
         false,
     );
+
+    // ── xmlOnlyMissingCount (#230) ──────────────────────────────────────────
+    // The prod preview: three tracks, listed once per playlist they're in.
+    const missing = [
+        { album: 'Who We Are', artist: 'Virtuanoise', title: 'Who We Are' },
+        { album: 'Who We Are', artist: 'Virtuanoise', title: 'Who We Are' },
+        { album: 'Broken Dreams Club', artist: 'Viper Diva', title: 'Love & Riot' },
+        { artist: 'Giacomo Dianz', title: 'Feel The Sound' },
+        { artist: 'Giacomo Dianz', title: 'Feel The Sound' },
+    ];
+    const xmlOnly = { electron: true, includeRekordboxXml: true, includeTracks: false, missing };
+    assert.equal(xmlOnlyMissingCount(xmlOnly), 3, 'one per track, not per playlist entry');
+    assert.equal(xmlOnlyMissingCount({ ...xmlOnly, includeTracks: true }), 0, 'downloaded');
+    assert.equal(xmlOnlyMissingCount({ ...xmlOnly, electron: false }), 0, 'web');
+    assert.equal(xmlOnlyMissingCount({ ...xmlOnly, includeRekordboxXml: false }), 0, 'crates');
+    assert.equal(xmlOnlyMissingCount({ ...xmlOnly, missing: [] }), 0);
 
     console.log('check:tracks-in-place OK');
 }
