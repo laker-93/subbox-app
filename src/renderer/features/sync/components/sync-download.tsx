@@ -31,6 +31,7 @@ import {
     useSelection,
     useSeratoCrates,
     usesTracksInPlace,
+    xmlOnlyMissingCount,
 } from '/@/renderer/features/sync/components/shared';
 import {
     type LibraryFormat,
@@ -417,6 +418,21 @@ export const SyncDownload = () => {
 
     // An unavailable root blocks the download until the user connects it, changes or
     // clears it, or downloads anyway (#214 point 11). Never a silent fetch-everything.
+    // Tracks an XML-only download can't point anywhere real: neither found where
+    // they were uploaded from nor already in the music folder (#230). Said on the
+    // preview and again when it's done, rather than left for Rekordbox to report.
+    const xmlOnlyMissing = xmlOnlyMissingCount({
+        electron: isElectron(),
+        includeRekordboxXml,
+        includeTracks,
+        missing: plan?.tracks.missing ?? [],
+    });
+    const xmlOnlyMissingSentence = `${xmlOnlyMissing} ${
+        xmlOnlyMissing === 1 ? "track isn't" : "tracks aren't"
+    } on this computer. The XML lists ${xmlOnlyMissing === 1 ? 'it' : 'them'}, but Rekordbox will show ${
+        xmlOnlyMissing === 1 ? 'it' : 'them'
+    } as missing.`;
+
     const rootUnavailable =
         plannedInPlace?.used && plannedInPlace.libraryRoot?.status === 'unavailable'
             ? plannedInPlace.libraryRoot
@@ -738,6 +754,12 @@ export const SyncDownload = () => {
                             }.`
                           : 'Download finished.'}
                 </Text>
+                {xmlOnlyMissing > 0 && (
+                    <Text c="yellow" data-testid="xml-only-missing-done" size="sm">
+                        {xmlOnlyMissingSentence} Download again with tracks included to fetch{' '}
+                        {xmlOnlyMissing === 1 ? 'it' : 'them'}.
+                    </Text>
+                )}
                 {isElectron() && (downloadResult?.musicPath || downloadResult?.xmlPath) && (
                     <Group gap="sm" justify="center" wrap="wrap">
                         {downloadResult?.musicPath && (
@@ -943,6 +965,31 @@ export const SyncDownload = () => {
                 </Text>
             )}
 
+            {xmlOnlyMissing > 0 && !rootUnavailable && (
+                <Stack data-testid="xml-only-missing" gap={6}>
+                    <Text c="yellow" size="sm">
+                        {xmlOnlyMissingSentence}
+                    </Text>
+                    <Group gap="xs">
+                        <Button
+                            onClick={() => setIncludeTracks(true)}
+                            size="xs"
+                            tooltip={{
+                                label: "Include the tracks, so the ones that aren't here are downloaded into your music folder with the XML.",
+                                multiline: true,
+                                w: 260,
+                            }}
+                            variant="default"
+                        >
+                            Include tracks
+                        </Button>
+                        <Button onClick={() => setActiveTab('missing')} size="xs" variant="subtle">
+                            Show which
+                        </Button>
+                    </Group>
+                </Stack>
+            )}
+
             {rootUnavailable && (
                 <Stack data-testid="library-root-unavailable" gap={6}>
                     <Text c="yellow" size="sm">
@@ -1015,7 +1062,14 @@ export const SyncDownload = () => {
                                         },
                                     ]
                                   : []),
-                              { color: 'orange', label: `${summary.tracksMissing} to download` },
+                              // XML only downloads nothing, so these aren't "to
+                              // download": they're the tracks it can't point at (#230).
+                              {
+                                  color: 'orange',
+                                  label: includeTracks
+                                      ? `${summary.tracksMissing} to download`
+                                      : `${summary.tracksMissing} not on this computer`,
+                              },
                               ...(summary.metadataUpdates > 0
                                   ? [
                                         {

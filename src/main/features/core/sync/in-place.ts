@@ -271,9 +271,18 @@ export async function findInPlaceTracks(args: {
  * The missing tracks the root listing finds by file name (#222): the name of the
  * recorded path under the root, or of the absolute one when there is none.
  *
- * Exactly one file of that name is the track; none or several leave it missing,
- * never guessed between. A file two missing tracks both name is neither's. The
- * winner is stat-ed before use, as every other candidate is.
+ * One file of that name is the track. When there are several, the one whose
+ * folders match the recorded path's furthest from the file wins (#234): a track
+ * recorded at `…/HiTech/Melodic/a.flac` is the `HiTech/Melodic/a.flac` here, not
+ * the `HiTech/Other/a.flac`. A tie, including no folder in common, is never
+ * guessed between: the track stays missing.
+ *
+ * A file several missing tracks name goes to the one whose folders match it best.
+ * Tracks tied for best, with at least one folder in common, all get it (#234):
+ * the same name in the same folder is copies of one file, uploaded twice
+ * (pymix#262), and two Rekordbox entries can share a Location. Tied with no folder
+ * in common, it's neither's: two different `01 Intro.mp3`s. The file is stat-ed
+ * before use, as every other candidate is.
  */
 export async function findMovedTracks(args: {
     listing: RootListing;
@@ -283,31 +292,42 @@ export async function findMovedTracks(args: {
 }): Promise<Array<{ path: string; rootRelativePath: string; subboxId: string }>> {
     const { listing, missing, platform = process.platform } = args;
     const stat = args.stat ?? ((p: string) => fs.promises.stat(p));
-    const claims = new Map<string, Array<{ relative: string; subboxId: string }>>();
+    const claims = new Map<
+        string,
+        { claimants: Array<{ shared: number; subboxId: string }>; relative: string }
+    >();
     for (const track of missing) {
         const recorded = track.relativePath || track.location;
         if (!recorded) continue;
         const name = recorded.split(/[\\/]/).pop();
         if (!name) continue;
         const files = listing.byName.get(fileNameKey(name, platform)) ?? [];
-        if (files.length !== 1) continue;
-        const list = claims.get(files[0].path) ?? [];
-        list.push({ relative: files[0].relative, subboxId: track.subboxId });
-        claims.set(files[0].path, list);
+        const scored = files
+            .map((file) => ({
+                file,
+                shared: sharedParentFolders(recorded, file.relative, platform),
+            }))
+            .sort((x, y) => y.shared - x.shared);
+        if (scored.length === 0) continue;
+        if (scored.length > 1 && scored[0].shared === scored[1].shared) continue;
+        const { file, shared } = scored[0];
+        const claim = claims.get(file.path) ?? { claimants: [], relative: file.relative };
+        claim.claimants.push({ shared, subboxId: track.subboxId });
+        claims.set(file.path, claim);
     }
     const moved: Array<{ path: string; rootRelativePath: string; subboxId: string }> = [];
-    for (const [filePath, claimants] of claims) {
-        if (claimants.length !== 1) continue;
+    for (const [filePath, { claimants, relative }] of claims) {
+        const best = Math.max(...claimants.map((c) => c.shared));
+        const winners = claimants.filter((c) => c.shared === best);
+        if (winners.length > 1 && best === 0) continue;
         try {
             if (!(await stat(filePath)).isFile()) continue;
         } catch {
             continue;
         }
-        moved.push({
-            path: filePath,
-            rootRelativePath: claimants[0].relative,
-            subboxId: claimants[0].subboxId,
-        });
+        for (const winner of winners) {
+            moved.push({ path: filePath, rootRelativePath: relative, subboxId: winner.subboxId });
+        }
     }
     return moved;
 }
@@ -433,4 +453,27 @@ export async function resolveInPlace(
     };
     await Promise.all(Array.from({ length: Math.min(STAT_CONCURRENCY, entries.length) }, worker));
     return found;
+}
+
+/**
+ * How many folders `recorded` and `relative` share at the end, just above the file
+ * name: `Old/HiTech/Melodic/a.mp3` and `HiTech/Melodic/a.mp3` share 2. Compared as
+ * file names are, so case and Unicode form don't matter where the disk ignores them.
+ */
+export function sharedParentFolders(
+    recorded: string,
+    relative: string,
+    platform: NodeJS.Platform = process.platform,
+): number {
+    const a = recorded.split(/[\\/]/).filter(Boolean).slice(0, -1);
+    const b = relative.split('/').filter(Boolean).slice(0, -1);
+    let n = 0;
+    while (
+        n < a.length &&
+        n < b.length &&
+        fileNameKey(a[a.length - 1 - n], platform) === fileNameKey(b[b.length - 1 - n], platform)
+    ) {
+        n++;
+    }
+    return n;
 }

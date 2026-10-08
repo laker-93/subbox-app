@@ -13,6 +13,27 @@ export const usesTracksInPlace = (args: {
     includeSeratoCrates: boolean;
 }): boolean => args.electron && args.includeRekordboxXml && !args.includeSeratoCrates;
 
+/**
+ * How many of a plan's missing tracks an XML-only download leaves pointing at
+ * files that don't exist (#230). Nothing is downloaded, so the XML sends each one
+ * into the app's music folder, where it isn't, and Rekordbox reports it as "not
+ * imported" for reasons that aren't the real one.
+ *
+ * Counted once per track: the plan lists a track once for every playlist it's in.
+ * Zero for a download that fetches tracks, and on web, which can't tell what is
+ * on the user's disk.
+ */
+export const xmlOnlyMissingCount = (args: {
+    electron: boolean;
+    includeRekordboxXml: boolean;
+    includeTracks: boolean;
+    missing: Array<{ album?: string; artist: string; title: string }>;
+}): number => {
+    if (!args.electron || args.includeTracks || !args.includeRekordboxXml) return 0;
+    return new Set(args.missing.map((t) => JSON.stringify([t.artist, t.title, t.album ?? ''])))
+        .size;
+};
+
 /** Mirrors LibraryRootStatus in main/features/core/sync/in-place.ts (#220). */
 export type LibraryRootStatus =
     | {
