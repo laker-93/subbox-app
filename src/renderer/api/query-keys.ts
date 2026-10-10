@@ -242,6 +242,10 @@ export const queryKeys: Record<
         },
         root: (serverId: string) => [serverId, 'artists'] as const,
     },
+    // Subbox: one track's DJ data (#237), by subbox_id.
+    dj: {
+        track: (serverId: string, subboxId: string) => [serverId, 'dj', 'track', subboxId] as const,
+    },
     folders: {
         folder: (serverId: string, query?: FolderQuery) => {
             if (query) {

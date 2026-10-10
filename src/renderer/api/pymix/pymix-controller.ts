@@ -1,7 +1,12 @@
 import { z } from 'zod';
 
 import { pymixApiClient } from '/@/renderer/api/pymix/pymix-api';
-import { PlaylistTree, pymixType, UpdatePlaylistNodeBody } from '/@/shared/api/pymix/pymix-types';
+import {
+    DjTrack,
+    PlaylistTree,
+    pymixType,
+    UpdatePlaylistNodeBody,
+} from '/@/shared/api/pymix/pymix-types';
 
 type CreateArgs = {
     body: z.infer<typeof pymixType._parameters.create>;
@@ -316,6 +321,25 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to get playlist tree');
+        }
+
+        return res.body.data;
+    },
+
+    // One track's DJ data for the DJ views (#237, pymix#269), or null for a track that
+    // isn't in the user's library (404).
+    getTrackDj: async (args: PymixClientArgs & { subboxId: string }): Promise<DjTrack | null> => {
+        const { baseUrl, signal, subboxId, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).getTrackDj({
+            params: { subboxId },
+        });
+
+        if (res.status === 404) {
+            return null;
+        }
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get DJ data');
         }
 
         return res.body.data;
