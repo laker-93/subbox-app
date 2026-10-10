@@ -816,11 +816,26 @@ export type DjLoop = z.infer<typeof djLoop>;
 export type DjMemoryMark = z.infer<typeof djMemoryMark>;
 export type DjTrack = z.infer<typeof djTrack>;
 
+// --- The user's own settings (subbox-app#236, pymix#268) ---
+
+// design-dj-ui §5.7: DJ mode hides or shows the DJ surfaces, and nothing else reads it.
+// `dj_mode_offered` is set once the app has offered DJ mode, so it is offered only once.
+const userSettings = z.object({
+    dj_mode: z.boolean(),
+    dj_mode_offered: z.boolean(),
+});
+
+// Only the settings named are changed (pymix 422s an unknown field), so two devices
+// each changing one don't undo each other.
+const updateUserSettingsParameters = userSettings.partial();
+
 export type PlaylistNodesDeleted = z.infer<typeof playlistNodesDeleted>;
+
 export type TrashBatch = z.infer<typeof trashBatch>;
 export type TrashList = z.infer<typeof trashList>;
 export type TrashRestored = z.infer<typeof trashRestored>;
 export type TrashRestoreProgress = z.infer<typeof trashRestoreProgress>;
+export type UserSettings = z.infer<typeof userSettings>;
 
 export const pymixType = {
     _parameters: {
@@ -848,6 +863,7 @@ export const pymixType = {
         syncTracks: syncTracksParameters,
         trashRestoreProgress: trashRestoreProgressParameters,
         updatePlaylistNode: updatePlaylistNodeParameters,
+        updateUserSettings: updateUserSettingsParameters,
         wishlistBulkCreate: wishlistBulkCreateParameters,
         wishlistCreate: wishlistCreateParameters,
         wishlistMatchMetadata: wishlistMatchMetadataParameters,
@@ -886,6 +902,7 @@ export const pymixType = {
         trashPurged,
         trashRestored,
         trashRestoreProgress,
+        userSettings,
         wishlistBulkCreateResponse,
         wishlistDeleteResponse,
         wishlistItem,

@@ -2,6 +2,7 @@ import isElectron from 'is-electron';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { DjModeImportOffer } from '/@/renderer/features/dj/components/dj-mode-offer';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import {
     DestinationPath,
@@ -767,6 +768,8 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                     )}
                 </Stack>
             )}
+            {/* Offered once, after a first DJ-app import (#236). */}
+            <DjModeImportOffer />
         </SyncResult>
     );
 };

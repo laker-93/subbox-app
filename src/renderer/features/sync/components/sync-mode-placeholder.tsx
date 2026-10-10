@@ -2,6 +2,7 @@ import isElectron from 'is-electron';
 import { Suspense, useState } from 'react';
 
 import { useIsDemoSession } from '/@/renderer/config/demo-config';
+import { DjModeSyncHint } from '/@/renderer/features/dj/components/dj-mode-offer';
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import { SyncDesktopOnly } from '/@/renderer/features/sync/components/shared';
 import { SyncDownload } from '/@/renderer/features/sync/components/sync-download';
@@ -101,6 +102,7 @@ export const SyncModePlaceholder = () => {
                     </Button>
                 )}
             </Group>
+            <DjModeSyncHint />
             <div style={{ flex: 1, overflow: 'hidden' }}>
                 {/* The demo lock is checked before the desktop-only notice: both are true
                     for a demo user on the web, but only one of them is something they can
