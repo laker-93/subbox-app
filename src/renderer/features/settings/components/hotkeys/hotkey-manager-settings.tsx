@@ -72,6 +72,10 @@ const BINDINGS_MAP: Record<BindingActions, string> = {
         postProcess: 'sentenceCase',
     }),
     listPlayNow: i18n.t('setting.hotkey', { context: 'listPlayNow', postProcess: 'sentenceCase' }),
+    listPrepTrack: i18n.t('setting.hotkey', {
+        context: 'listPrepTrack',
+        postProcess: 'sentenceCase',
+    }),
     localSearch: i18n.t('setting.hotkey', { context: 'localSearch', postProcess: 'sentenceCase' }),
     navigateHome: i18n.t('setting.hotkey', {
         context: 'navigateHome',

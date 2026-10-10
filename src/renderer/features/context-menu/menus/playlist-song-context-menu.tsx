@@ -7,6 +7,7 @@ import { GetInfoAction } from '/@/renderer/features/context-menu/actions/get-inf
 import { GoToAction } from '/@/renderer/features/context-menu/actions/go-to-action';
 import { PlayAction } from '/@/renderer/features/context-menu/actions/play-action';
 import { PlayTrackRadioAction } from '/@/renderer/features/context-menu/actions/play-track-radio-action';
+import { PrepTrackAction } from '/@/renderer/features/context-menu/actions/prep-track-action';
 import { RemoveFromPlaylistAction } from '/@/renderer/features/context-menu/actions/remove-from-playlist-action';
 import { SetFavoriteAction } from '/@/renderer/features/context-menu/actions/set-favorite-action';
 import { SetRatingAction } from '/@/renderer/features/context-menu/actions/set-rating-action';
@@ -18,10 +19,11 @@ import { LibraryItem, Song } from '/@/shared/types/domain-types';
 
 interface PlaylistSongContextMenuProps {
     items: Song[];
+    list?: readonly unknown[];
     type: LibraryItem.PLAYLIST_SONG;
 }
 
-export const PlaylistSongContextMenu = ({ items, type }: PlaylistSongContextMenuProps) => {
+export const PlaylistSongContextMenu = ({ items, list, type }: PlaylistSongContextMenuProps) => {
     const { ids } = useMemo(() => {
         const ids = items.map((item) => item.id);
         return { ids };
@@ -34,6 +36,7 @@ export const PlaylistSongContextMenu = ({ items, type }: PlaylistSongContextMenu
             <PlayAction ids={ids} itemType={type} songs={items} />
             <PlayTrackRadioAction disabled={items.length > 1} song={items[0]} />
             <ContextMenu.Divider />
+            <PrepTrackAction items={items} list={list} />
             <RemoveFromPlaylistAction items={items} />
             <ContextMenu.Divider />
             <AddToPlaylistAction items={ids} itemType={type} />

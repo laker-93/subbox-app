@@ -187,6 +187,7 @@ const AlbumArtistMetadataGenres = ({ genres, order }: AlbumArtistMetadataGenresP
                                 genreId: genre.id,
                                 itemType: null,
                                 playlistId: null,
+                                subboxId: null,
                             })}
                             variant="outline"
                         >

@@ -1,5 +1,5 @@
-import { api } from '/@/renderer/api';
 import { DjPeaks, PeaksSource } from '/@/renderer/features/dj/peaks/peaks-source';
+import { rawStreamUrl } from '/@/renderer/features/dj/utils/raw-stream';
 
 // Subbox-only: peaks from the browser's own decode of the original file (subbox-app#237,
 // design-dj-ui §4.2, track A).
@@ -25,10 +25,7 @@ const CHUNK = DECODE_RATE * 2;
 
 export const clientDecodePeaks: PeaksSource = {
     load: async ({ song }, signal) => {
-        const url = api.controller.getStreamUrl({
-            apiClientProps: { serverId: song._serverId },
-            query: { format: 'raw', id: song.id, transcode: true },
-        });
+        const url = rawStreamUrl(song);
         const response = await fetch(url, { signal });
         if (!response.ok) throw new Error(`Couldn't fetch the track (${response.status})`);
         const encoded = await response.arrayBuffer();

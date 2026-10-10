@@ -67,7 +67,7 @@ export interface MemoryMarkView {
 
 export const EMPTY_MARKS: DjMarks = { anchors: [], beats: [], cues: [], loops: [], memory: [] };
 
-const padColor = (color: null | string | undefined, slot: number) =>
+export const padColor = (color: null | string | undefined, slot: number) =>
     color && /^#[0-9a-f]{6}$/i.test(color) ? color : PAD_FALLBACK_COLORS[slot % 8];
 
 export const djMarks = (

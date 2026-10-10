@@ -137,15 +137,19 @@ type PlaylistContextMenuProps = {
 
 type PlaylistSongContextMenuProps = {
     items: Song[];
+    list?: readonly unknown[];
     type: LibraryItem.PLAYLIST_SONG;
 };
 
 type QueueSongContextMenuProps = {
     items: QueueSong[];
+    list?: readonly unknown[];
     type: LibraryItem.QUEUE_SONG;
 };
 
 type SongContextMenuProps = {
     items: Song[];
+    /** The list it was opened on (subbox-app#239: prep walks it). */
+    list?: readonly unknown[];
     type: LibraryItem.SONG;
 };

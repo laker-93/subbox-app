@@ -82,6 +82,8 @@ const WishlistRoute = lazy(() => import('/@/renderer/features/wishlist/routes/wi
 // Subbox: the trash (#152).
 const TrashRoute = lazy(() => import('/@/renderer/features/trash/routes/trash-route'));
 
+const DjPrepRoute = lazy(() => import('/@/renderer/features/dj/routes/dj-prep-route'));
+
 const SettingsRoute = lazy(() => import('/@/renderer/features/settings/routes/settings-route'));
 
 const LazyLyricsSettingsContextModal = lazy(() =>
@@ -220,6 +222,7 @@ export const AppRouter = () => {
                                             path={AppRoute.WISHLIST}
                                         />
                                         <Route element={<TrashRoute />} path={AppRoute.TRASH} />
+                                        <Route element={<DjPrepRoute />} path={AppRoute.DJ_PREP} />
                                         <Route
                                             element={<SettingsRoute />}
                                             path={AppRoute.SETTINGS}

@@ -1,0 +1,21 @@
+.facts {
+    font-variant-numeric: tabular-nums;
+}
+
+.clock {
+    min-width: 5.5rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.panels {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: var(--theme-spacing-md);
+    align-items: start;
+}
+
+@media (width <= 900px) {
+    .panels {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

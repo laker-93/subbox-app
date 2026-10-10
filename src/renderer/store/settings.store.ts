@@ -160,6 +160,7 @@ const BindingActionsSchema = z.enum([
     'listPlayNext',
     'listPlayLast',
     'listNavigateToPage',
+    'listPrepTrack',
 ]);
 
 const DiscordDisplayTypeSchema = z.enum(['artist', 'subbox', 'song']);
@@ -751,6 +752,7 @@ export enum BindingActions {
     LIST_PLAY_LAST = 'listPlayLast',
     LIST_PLAY_NEXT = 'listPlayNext',
     LIST_PLAY_NOW = 'listPlayNow',
+    LIST_PREP_TRACK = 'listPrepTrack',
     LOCAL_SEARCH = 'localSearch',
     MUTE = 'volumeMute',
     NAVIGATE_HOME = 'navigateHome',
@@ -1199,6 +1201,7 @@ const initialState: SettingsState = {
             listPlayLast: { allowGlobal: false, hotkey: '', isGlobal: false },
             listPlayNext: { allowGlobal: false, hotkey: '', isGlobal: false },
             listPlayNow: { allowGlobal: false, hotkey: '', isGlobal: false },
+            listPrepTrack: { allowGlobal: false, hotkey: 'p', isGlobal: false },
             localSearch: { allowGlobal: false, hotkey: 'mod+f', isGlobal: false },
             navigateHome: { allowGlobal: false, hotkey: '', isGlobal: false },
             next: { allowGlobal: true, hotkey: '', isGlobal: false },
