@@ -6,6 +6,7 @@ import {
     PlaylistTree,
     pymixType,
     UpdatePlaylistNodeBody,
+    UserSettings,
 } from '/@/shared/api/pymix/pymix-types';
 
 type CreateArgs = {
@@ -357,6 +358,23 @@ export const PymixController = {
         return res.body.data;
     },
 
+    // The user's own settings (#236), or null from a pymix without the route (404),
+    // which the caller treats as every setting off.
+    getUserSettings: async (args: PymixClientArgs): Promise<null | UserSettings> => {
+        const { baseUrl, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).getUserSettings();
+
+        if (res.status === 404) {
+            return null;
+        }
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get settings');
+        }
+
+        return res.body.data;
+    },
+
     import: async (args: ImportArgs & PymixClientArgs) => {
         const { baseUrl, body, signal, token } = args;
         const res = await pymixApiClient({ baseUrl, signal, token }).import({ body });
@@ -587,6 +605,21 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to update playlist tree');
+        }
+
+        return res.body.data;
+    },
+
+    // Changes only the settings named, and answers with all of them. `demo` gets a 403:
+    // it's one login shared by every trial visitor, so its choices stay on the device.
+    updateUserSettings: async (
+        args: PymixClientArgs & { body: Partial<UserSettings> },
+    ): Promise<UserSettings> => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).updateUserSettings({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to save settings');
         }
 
         return res.body.data;
