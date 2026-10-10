@@ -177,7 +177,7 @@ const DjPrepRoute = () => {
         : [];
 
     const title = song
-        ? [song.artistName, song.name].filter(Boolean).join(' — ')
+        ? `${t('page.djPrep.prefix')} · ${[song.artistName, song.name].filter(Boolean).join(' — ')}`
         : t('page.djPrep.title');
 
     let body: React.ReactNode;
@@ -275,12 +275,13 @@ const DjPrepRoute = () => {
     return (
         <AnimatedPage>
             <PageHeader>
-                <Flex justify="space-between" w="100%">
-                    <LibraryHeaderBar ignoreMaxWidth>
-                        <LibraryHeaderBar.Title>
-                            {t('page.djPrep.prefix')} · {title}
-                        </LibraryHeaderBar.Title>
-                    </LibraryHeaderBar>
+                <Flex gap="md" justify="space-between" w="100%">
+                    {/* Shrinks so a long title truncates instead of pushing prev/next off. */}
+                    <div className={styles.title}>
+                        <LibraryHeaderBar ignoreMaxWidth>
+                            <LibraryHeaderBar.Title>{title}</LibraryHeaderBar.Title>
+                        </LibraryHeaderBar>
+                    </div>
                     <Group gap="xs" style={{ flexShrink: 0 }} wrap="nowrap">
                         {prepList.length > 1 && index >= 0 && (
                             <Text isMuted size="sm">

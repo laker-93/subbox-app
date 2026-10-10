@@ -19,3 +19,9 @@
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+.title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
