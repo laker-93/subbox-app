@@ -6,9 +6,11 @@ import {
     ItemListStateItemWithRequiredProperties,
 } from '/@/renderer/components/item-list/helpers/item-list-state';
 import { ItemControls } from '/@/renderer/components/item-list/types';
+import { useDjMode } from '/@/renderer/features/dj/hooks/use-dj-mode';
+import { useOpenPrep } from '/@/renderer/features/dj/hooks/use-open-prep';
 import { useHotkeySettings, usePlayButtonBehavior } from '/@/renderer/store';
 import { useHotkeys } from '/@/shared/hooks/use-hotkeys';
-import { LibraryItem } from '/@/shared/types/domain-types';
+import { LibraryItem, Song } from '/@/shared/types/domain-types';
 import { Play } from '/@/shared/types/types';
 
 export const useListHotkeys = ({
@@ -25,6 +27,13 @@ export const useListHotkeys = ({
     const { bindings } = useHotkeySettings();
     const playButtonBehavior = usePlayButtonBehavior();
     const navigate = useNavigate();
+    // Subbox-only (subbox-app#239): open the selected track in prep, walking this list.
+    const djMode = useDjMode();
+    const openPrep = useOpenPrep();
+    const isSongList =
+        itemType === LibraryItem.SONG ||
+        itemType === LibraryItem.PLAYLIST_SONG ||
+        itemType === LibraryItem.QUEUE_SONG;
 
     // Helper to check if item has required properties
     const hasRequiredStateItemProperties = (
@@ -117,6 +126,17 @@ export const useListHotkeys = ({
                 if (path) {
                     navigate(path, { state: { item } });
                 }
+            },
+        ],
+        [
+            bindings.listPrepTrack.hotkey,
+            () => {
+                if (!focused || !djMode.enabled || !isSongList) return;
+                const selected = internalState.getSelected();
+                const validSelected = selected.filter(hasRequiredStateItemProperties);
+                if (validSelected.length === 0) return;
+
+                openPrep(validSelected[0] as unknown as Song, internalState.getData());
             },
         ],
     ]);
