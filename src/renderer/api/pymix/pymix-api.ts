@@ -110,6 +110,14 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    getTrackDj: {
+        method: 'GET',
+        path: 'track/:subboxId/dj',
+        responses: {
+            200: resultWithHeaders(pymixType._response.djTrack),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     getTrash: {
         method: 'GET',
         path: 'trash',
