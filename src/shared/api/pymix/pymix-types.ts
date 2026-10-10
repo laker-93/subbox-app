@@ -721,11 +721,121 @@ const trashPurged = z.object({
     success: z.boolean(),
 });
 
+// --- One track's DJ data (subbox-app#237, pymix#269) ---
+//
+// `cuedata` as GET /track/{id}/dj serves it: `cues` and `loops` hold only pads (index
+// 0-7), every memory mark is in `memory`, positions are milliseconds of DJ-app time
+// (never decode time: convert through features/dj/utils/dj-offset before drawing or
+// seeking). Passthrough throughout, so fields pymix adds later survive a read.
+
+const djOrigin = z.string().nullish();
+
+const djCue = z
+    .object({
+        color: z.string().nullish(),
+        index: z.number(),
+        name: z.string().nullish(),
+        origin: djOrigin,
+        position: z.number(),
+    })
+    .passthrough();
+
+const djLoop = z
+    .object({
+        active: z.boolean().nullish(),
+        color: z.string().nullish(),
+        end: z.number(),
+        index: z.number(),
+        name: z.string().nullish(),
+        origin: djOrigin,
+        start: z.number(),
+    })
+    .passthrough();
+
+const djMemoryMark = z
+    .object({
+        color: z.string().nullish(),
+        end: z.number().nullish(),
+        name: z.string().nullish(),
+        origin: djOrigin,
+        position: z.number(),
+        type: z.enum(['cue', 'loop']),
+    })
+    .passthrough();
+
+// One anchor. Serato-shaped grids carry `beats_till_next` on every anchor but the
+// last, which carries `bpm`; Rekordbox-shaped grids carry `bpm` on every anchor.
+// `metro` and `battito` (beat of the bar the anchor falls on) are Rekordbox's.
+const djGridAnchor = z
+    .object({
+        battito: z.number().nullish(),
+        beats_till_next: z.number().nullish(),
+        bpm: z.number().nullish(),
+        metro: z.string().nullish(),
+        position_ms: z.number(),
+    })
+    .passthrough();
+
+const djCuedata = z
+    .object({
+        beatgrid: z.array(djGridAnchor).nullish(),
+        beatgrid_meta: z
+            .object({ locked: z.boolean().nullish(), origin: djOrigin })
+            .passthrough()
+            .nullish(),
+        bpm: z.number().nullish(),
+        cues: z.array(djCue),
+        key: z.string().nullish(),
+        loops: z.array(djLoop),
+        memory: z.array(djMemoryMark).nullish(),
+    })
+    .passthrough();
+
+const djGridState = z.enum(['none', 'app', 'edited', 'locked']);
+
+const djTrack = z.object({
+    cuedata: djCuedata,
+    // Typed by the On export panel (#243).
+    export_preview: z.unknown(),
+    grid_state: djGridState,
+    key: z.string().nullish(),
+    source_app: z.string().nullish(),
+    subbox_id: z.string(),
+    // False when Navidrome couldn't be asked, so a null key means "unknown".
+    tags_read: z.boolean(),
+    updated_at: z.number().nullish(),
+    // What an edit sends back as `expected_version`; 0 when there's no DJ data yet.
+    version: z.number(),
+});
+
+export type DjCue = z.infer<typeof djCue>;
+export type DjCuedata = z.infer<typeof djCuedata>;
+export type DjGridAnchor = z.infer<typeof djGridAnchor>;
+export type DjGridState = z.infer<typeof djGridState>;
+export type DjLoop = z.infer<typeof djLoop>;
+export type DjMemoryMark = z.infer<typeof djMemoryMark>;
+export type DjTrack = z.infer<typeof djTrack>;
+
+// --- The user's own settings (subbox-app#236, pymix#268) ---
+
+// design-dj-ui §5.7: DJ mode hides or shows the DJ surfaces, and nothing else reads it.
+// `dj_mode_offered` is set once the app has offered DJ mode, so it is offered only once.
+const userSettings = z.object({
+    dj_mode: z.boolean(),
+    dj_mode_offered: z.boolean(),
+});
+
+// Only the settings named are changed (pymix 422s an unknown field), so two devices
+// each changing one don't undo each other.
+const updateUserSettingsParameters = userSettings.partial();
+
 export type PlaylistNodesDeleted = z.infer<typeof playlistNodesDeleted>;
+
 export type TrashBatch = z.infer<typeof trashBatch>;
 export type TrashList = z.infer<typeof trashList>;
 export type TrashRestored = z.infer<typeof trashRestored>;
 export type TrashRestoreProgress = z.infer<typeof trashRestoreProgress>;
+export type UserSettings = z.infer<typeof userSettings>;
 
 export const pymixType = {
     _parameters: {
@@ -753,6 +863,7 @@ export const pymixType = {
         syncTracks: syncTracksParameters,
         trashRestoreProgress: trashRestoreProgressParameters,
         updatePlaylistNode: updatePlaylistNodeParameters,
+        updateUserSettings: updateUserSettingsParameters,
         wishlistBulkCreate: wishlistBulkCreateParameters,
         wishlistCreate: wishlistCreateParameters,
         wishlistMatchMetadata: wishlistMatchMetadataParameters,
@@ -765,6 +876,7 @@ export const pymixType = {
         create,
         deleteDuplicates,
         deleteSong,
+        djTrack,
         download,
         error,
         exportJob,
@@ -790,6 +902,7 @@ export const pymixType = {
         trashPurged,
         trashRestored,
         trashRestoreProgress,
+        userSettings,
         wishlistBulkCreateResponse,
         wishlistDeleteResponse,
         wishlistItem,
