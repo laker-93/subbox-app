@@ -242,6 +242,10 @@ export const queryKeys: Record<
         },
         root: (serverId: string) => [serverId, 'artists'] as const,
     },
+    // Subbox: one track's DJ data (#237), by subbox_id.
+    dj: {
+        track: (serverId: string, subboxId: string) => [serverId, 'dj', 'track', subboxId] as const,
+    },
     folders: {
         folder: (serverId: string, query?: FolderQuery) => {
             if (query) {
@@ -451,6 +455,10 @@ export const queryKeys: Record<
             return [serverId, 'users', 'list'] as const;
         },
         root: (serverId: string) => [serverId, 'users'] as const,
+    },
+    // Subbox: the user's own pymix settings (#236), DJ mode among them.
+    userSettings: {
+        root: (serverId: string) => [serverId, 'userSettings'] as const,
     },
     wishlist: {
         list: (serverId: string) => [serverId, 'wishlist'] as const,

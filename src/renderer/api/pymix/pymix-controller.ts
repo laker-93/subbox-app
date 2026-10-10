@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
 import { pymixApiClient } from '/@/renderer/api/pymix/pymix-api';
-import { PlaylistTree, pymixType, UpdatePlaylistNodeBody } from '/@/shared/api/pymix/pymix-types';
+import {
+    DjTrack,
+    PlaylistTree,
+    pymixType,
+    UpdatePlaylistNodeBody,
+    UserSettings,
+} from '/@/shared/api/pymix/pymix-types';
 
 type CreateArgs = {
     body: z.infer<typeof pymixType._parameters.create>;
@@ -321,6 +327,25 @@ export const PymixController = {
         return res.body.data;
     },
 
+    // One track's DJ data for the DJ views (#237, pymix#269), or null for a track that
+    // isn't in the user's library (404).
+    getTrackDj: async (args: PymixClientArgs & { subboxId: string }): Promise<DjTrack | null> => {
+        const { baseUrl, signal, subboxId, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).getTrackDj({
+            params: { subboxId },
+        });
+
+        if (res.status === 404) {
+            return null;
+        }
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get DJ data');
+        }
+
+        return res.body.data;
+    },
+
     // The restorable batches, newest first (#150; the Trash screen is #152).
     getTrash: async (args: PymixClientArgs) => {
         const { baseUrl, signal, token } = args;
@@ -328,6 +353,23 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to get the trash');
+        }
+
+        return res.body.data;
+    },
+
+    // The user's own settings (#236), or null from a pymix without the route (404),
+    // which the caller treats as every setting off.
+    getUserSettings: async (args: PymixClientArgs): Promise<null | UserSettings> => {
+        const { baseUrl, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).getUserSettings();
+
+        if (res.status === 404) {
+            return null;
+        }
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get settings');
         }
 
         return res.body.data;
@@ -563,6 +605,21 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to update playlist tree');
+        }
+
+        return res.body.data;
+    },
+
+    // Changes only the settings named, and answers with all of them. `demo` gets a 403:
+    // it's one login shared by every trial visitor, so its choices stay on the device.
+    updateUserSettings: async (
+        args: PymixClientArgs & { body: Partial<UserSettings> },
+    ): Promise<UserSettings> => {
+        const { baseUrl, body, signal, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).updateUserSettings({ body });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to save settings');
         }
 
         return res.body.data;

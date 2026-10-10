@@ -15,6 +15,7 @@ import styles from './full-screen-player.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
+import { DjPrepButton } from '/@/renderer/features/dj/components/dj-prep-button';
 import { FullScreenPlayerImage } from '/@/renderer/features/player/components/full-screen-player-image';
 import { FullScreenPlayerQueue } from '/@/renderer/features/player/components/full-screen-player-queue';
 import {
@@ -291,6 +292,7 @@ const Controls = () => {
                 tooltip={{ label: t('common.minimize', { postProcess: 'titleCase' }) }}
                 variant="subtle"
             />
+            <DjPrepButton />
             <Popover position="bottom-start">
                 <Popover.Target>
                     <ActionIcon

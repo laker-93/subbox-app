@@ -110,11 +110,27 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    getTrackDj: {
+        method: 'GET',
+        path: 'track/:subboxId/dj',
+        responses: {
+            200: resultWithHeaders(pymixType._response.djTrack),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     getTrash: {
         method: 'GET',
         path: 'trash',
         responses: {
             200: resultWithHeaders(pymixType._response.trashList),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    getUserSettings: {
+        method: 'GET',
+        path: 'user/settings',
+        responses: {
+            200: resultWithHeaders(pymixType._response.userSettings),
             500: resultWithHeaders(pymixType._response.error),
         },
     },
@@ -284,6 +300,15 @@ export const contract = c.router({
         path: 'playlists/nodes/:id',
         responses: {
             200: resultWithHeaders(pymixType._response.playlistNodeWritten),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    updateUserSettings: {
+        body: pymixType._parameters.updateUserSettings,
+        method: 'PUT',
+        path: 'user/settings',
+        responses: {
+            200: resultWithHeaders(pymixType._response.userSettings),
             500: resultWithHeaders(pymixType._response.error),
         },
     },
