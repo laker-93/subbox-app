@@ -17,5 +17,8 @@ export const useTrackDj = (
         queryFn: ({ signal }) =>
             PymixController.getTrackDj({ baseUrl: urlConfig.pymix, signal, subboxId: subboxId! }),
         queryKey: queryKeys.dj.track(serverId, subboxId ?? ''),
+        // Skipping back and forth through a queue shouldn't refetch each track (#238).
+        // Edits made in subbox update this cache themselves.
+        staleTime: 5 * 60_000,
     });
 };

@@ -4,6 +4,7 @@ import { lazy, Suspense } from 'react';
 import { PlayerbarSeekSlider } from './playerbar-seek-slider';
 import styles from './playerbar-slider.module.css';
 
+import { DjSeekMarkers } from '/@/renderer/features/dj/components/dj-seek-markers';
 import {
     useAppStore,
     useAppStoreActions,
@@ -61,6 +62,7 @@ export const PlayerbarSlider = () => {
                     ) : (
                         <PlayerbarSeekSlider max={songDuration} min={0} />
                     )}
+                    <DjSeekMarkers />
                 </div>
                 <div className={styles.sliderValueWrapper}>
                     <Text
