@@ -58,3 +58,10 @@ export const usePlayerbarSong = (): QueueSong | Song | undefined => {
     const playerSong = usePlayerSong();
     return session ? (session.song ?? undefined) : playerSong;
 };
+
+/**
+ * What tells the full-screen player's image swaps that the shown track changed: a queue
+ * entry's unique id, or the song id for the prep track, which isn't a queue entry.
+ */
+export const playerbarSongKey = (song: QueueSong | Song | undefined): string | undefined =>
+    song && ('_uniqueId' in song ? song._uniqueId : song.id);

@@ -13,6 +13,7 @@ import macMinHover from './assets/min-mac-hover.png';
 import macMin from './assets/min-mac.png';
 import styles from './window-bar.module.css';
 
+import { usePlayerbarPrepSession } from '/@/renderer/features/dj/prep/prep-session.store';
 import { useRadioPlayer } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { useAppStore, usePlayerData, usePlayerStatus, useWindowSettings } from '/@/renderer/store';
 import { Text } from '/@/shared/components/text/text';
@@ -135,6 +136,10 @@ export const WindowBar = () => {
     const handleMinimize = () => minimize();
 
     const { currentSong, index, queueLength } = usePlayerData();
+    // The prep view's track while it holds the player bar (prep-session.store.ts).
+    const prepSession = usePlayerbarPrepSession();
+    const prepPlaying = prepSession?.isPlaying;
+    const prepSong = prepSession ? (prepSession.song ?? null) : undefined;
     const { isPlaying: isRadioPlaying, metadata, stationName } = useRadioPlayer();
     const isRadioActive = Boolean(stationName || metadata);
     const [max, setMax] = useState(localSettings?.env.START_MAXIMIZED || false);
@@ -173,6 +178,14 @@ export const WindowBar = () => {
             return `${radioStatusString}${radioTitle}${radioMetadata} — Sub-box${privateMode ? ` ${privateModeString}` : ''}`;
         }
 
+        if (prepSong !== undefined) {
+            const statusString = prepPlaying ? '' : t('page.windowBar.paused');
+            const track = prepSong
+                ? `${t('page.djPrep.prefix')} · ${prepSong.name}${prepSong.artistName ? ` — ${prepSong.artistName}` : ''}`
+                : t('page.djPrep.title');
+            return `${statusString}${track} — Sub-box${privateMode ? ` ${privateModeString}` : ''}`;
+        }
+
         // Show regular song information
         const statusString = playerStatus === PlayerStatus.PAUSED ? t('page.windowBar.paused') : '';
         const queueString = queueLength ? `(${index + 1} / ${queueLength}) ` : '';
@@ -190,6 +203,8 @@ export const WindowBar = () => {
         isRadioPlaying,
         metadata,
         playerStatus,
+        prepPlaying,
+        prepSong,
         privateMode,
         queueLength,
         stationName,
