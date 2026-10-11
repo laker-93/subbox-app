@@ -15,6 +15,11 @@ import styles from './full-screen-player.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import { SONG_TABLE_COLUMNS } from '/@/renderer/components/item-list/item-table-list/default-columns';
+import { DjPrepButton } from '/@/renderer/features/dj/components/dj-prep-button';
+import {
+    playerbarSongKey,
+    usePlayerbarSong,
+} from '/@/renderer/features/dj/prep/prep-session.store';
 import { FullScreenPlayerImage } from '/@/renderer/features/player/components/full-screen-player-image';
 import { FullScreenPlayerQueue } from '/@/renderer/features/player/components/full-screen-player-queue';
 import {
@@ -32,7 +37,6 @@ import {
     useLyricsDisplaySettings,
     useLyricsSettings,
     usePlayerData,
-    usePlayerSong,
     useSettingsStore,
     useSettingsStoreActions,
     useWindowSettings,
@@ -81,7 +85,9 @@ interface BackgroundImageProps {
 }
 
 const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundImageProps) => {
-    const currentSong = usePlayerSong();
+    // The prep view's track while it holds the player bar (prep-session.store.ts).
+    const currentSong = usePlayerbarSong();
+    const currentKey = playerbarSongKey(currentSong);
     const { nextSong } = usePlayerData();
 
     const currentImageUrl = useItemImageUrl({
@@ -102,7 +108,7 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
         topImage: currentImageUrl,
     });
 
-    const previousSongRef = useRef<string | undefined>(currentSong?._uniqueId);
+    const previousSongRef = useRef<string | undefined>(currentKey);
     const imageStateRef = useRef(imageState);
 
     // Keep ref in sync
@@ -112,7 +118,7 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
 
     // Update images when song changes
     useEffect(() => {
-        if (currentSong?._uniqueId === previousSongRef.current) {
+        if (currentKey === previousSongRef.current) {
             return;
         }
 
@@ -124,8 +130,8 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
             topImage: isTop ? nextImageUrl : currentImageUrl,
         });
 
-        previousSongRef.current = currentSong?._uniqueId;
-    }, [currentSong?._uniqueId, currentImageUrl, nextSong?._uniqueId, nextImageUrl]);
+        previousSongRef.current = currentKey;
+    }, [currentKey, currentImageUrl, nextSong?._uniqueId, nextImageUrl]);
 
     if (!dynamicBackground || !dynamicIsImage) {
         return null;
@@ -143,8 +149,8 @@ const BackgroundImage = memo(({ dynamicBackground, dynamicIsImage }: BackgroundI
     };
 
     // Determine which song IDs to use for keys and image URLs
-    const topSongId = imageState.current === 0 ? currentSong?._uniqueId : nextSong?._uniqueId;
-    const bottomSongId = imageState.current === 0 ? nextSong?._uniqueId : currentSong?._uniqueId;
+    const topSongId = imageState.current === 0 ? currentKey : nextSong?._uniqueId;
+    const bottomSongId = imageState.current === 0 ? nextSong?._uniqueId : currentKey;
     const topSong = imageState.current === 0 ? currentSong : nextSong;
     const bottomSong = imageState.current === 0 ? nextSong : currentSong;
 
@@ -291,6 +297,7 @@ const Controls = () => {
                 tooltip={{ label: t('common.minimize', { postProcess: 'titleCase' }) }}
                 variant="subtle"
             />
+            <DjPrepButton />
             <Popover position="bottom-start">
                 <Popover.Target>
                     <ActionIcon
@@ -627,7 +634,8 @@ interface PlayerContainerProps {
 
 const PlayerContainer = memo(
     ({ children, dynamicBackground, dynamicIsImage, windowBarStyle }: PlayerContainerProps) => {
-        const currentSong = usePlayerSong();
+        // The prep view's track while it holds the player bar (prep-session.store.ts).
+        const currentSong = usePlayerbarSong();
         const imageUrl = useItemImageUrl({
             id: currentSong?.imageId || undefined,
             imageUrl: currentSong?.imageUrl,

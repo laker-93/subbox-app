@@ -1,0 +1,49 @@
+.panel {
+    padding: var(--theme-spacing-sm) var(--theme-spacing-md);
+    background: var(--theme-colors-surface);
+    border-radius: var(--theme-radius-md);
+}
+
+.panel-title {
+    margin-bottom: var(--theme-spacing-xs);
+}
+
+.row {
+    min-height: 28px;
+}
+
+.swatch {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.swatch[data-empty] {
+    border: 1px solid var(--theme-colors-foreground-muted);
+}
+
+.slot {
+    flex-shrink: 0;
+    width: 1.25rem;
+}
+
+.time,
+.range {
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.time {
+    min-width: 5.5rem;
+}
+
+.name {
+    flex: 1;
+    min-width: 0;
+}
+
+.label {
+    flex-shrink: 0;
+    width: 6rem;
+}

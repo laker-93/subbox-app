@@ -324,6 +324,9 @@ export const useDefaultItemListControls = (args?: UseDefaultItemListControlsArgs
                     return;
                 }
 
+                // Subbox-only (subbox-app#239): the rows, so "Prep track" can walk them.
+                const list = internalState?.getData();
+
                 // For context menus, prioritize the itemType prop when it's PLAYLIST_SONG or QUEUE_SONG
                 // This is because playlist/queue songs are Song objects (_itemType: SONG) but need special context menus
                 // Otherwise, use the item's _itemType if available, or fall back to the mapped itemType
@@ -335,7 +338,7 @@ export const useDefaultItemListControls = (args?: UseDefaultItemListControlsArgs
                 // If no internalState, call ContextMenuController directly
                 if (!internalState) {
                     return ContextMenuController.call({
-                        cmd: { items: [item] as any[], type: actualItemType as any },
+                        cmd: { items: [item] as any[], list, type: actualItemType as any },
                         event,
                     });
                 }
@@ -346,7 +349,7 @@ export const useDefaultItemListControls = (args?: UseDefaultItemListControlsArgs
 
                 if (!enableMultiSelect) {
                     return ContextMenuController.call({
-                        cmd: { items: [item] as any[], type: actualItemType as any },
+                        cmd: { items: [item] as any[], list, type: actualItemType as any },
                         event,
                     });
                 }
@@ -355,7 +358,7 @@ export const useDefaultItemListControls = (args?: UseDefaultItemListControlsArgs
                 if (internalState.getSelected().length === 0) {
                     internalState.setSelected([item]);
                     return ContextMenuController.call({
-                        cmd: { items: [item] as any[], type: actualItemType as any },
+                        cmd: { items: [item] as any[], list, type: actualItemType as any },
                         event,
                     });
                 }
@@ -363,7 +366,7 @@ export const useDefaultItemListControls = (args?: UseDefaultItemListControlsArgs
                 else if (!internalState.isSelected(rowId)) {
                     internalState.setSelected([item]);
                     return ContextMenuController.call({
-                        cmd: { items: [item] as any[], type: actualItemType as any },
+                        cmd: { items: [item] as any[], list, type: actualItemType as any },
                         event,
                     });
                 }
@@ -380,7 +383,7 @@ export const useDefaultItemListControls = (args?: UseDefaultItemListControlsArgs
                           : itemTypeMapping[itemType] || itemType;
 
                 return ContextMenuController.call({
-                    cmd: { items: selectedItems as any[], type: selectedItemType as any },
+                    cmd: { items: selectedItems as any[], list, type: selectedItemType as any },
                     event,
                 });
             },

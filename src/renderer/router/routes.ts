@@ -1,5 +1,6 @@
 export enum AppRoute {
     ACTION_REQUIRED = '/action-required',
+    DJ_PREP = '/track/:subboxId/prep',
     EXPLORE = '/explore',
     FAKE_LIBRARY_ALBUM_DETAILS = '/library/albums/dummy/:albumId',
     FAVORITES = '/favorites',

@@ -2,6 +2,7 @@ import { t } from 'i18next';
 import { useCallback, useEffect, useState, WheelEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { usePlayerbarSong } from '/@/renderer/features/dj/prep/prep-session.store';
 import { PopoverPlayQueue } from '/@/renderer/features/now-playing/components/popover-play-queue';
 import { PlayerConfig } from '/@/renderer/features/player/components/player-config';
 import { CustomPlayerbarSlider } from '/@/renderer/features/player/components/playerbar-slider';
@@ -19,7 +20,6 @@ import {
     useHotkeySettings,
     usePlayerData,
     usePlayerMuted,
-    usePlayerSong,
     usePlayerVolume,
     useSetFullScreenPlayerStore,
     useSettingsStoreActions,
@@ -38,7 +38,7 @@ import { useHotkeys } from '/@/shared/hooks/use-hotkeys';
 import { useMediaQuery } from '/@/shared/hooks/use-media-query';
 import { useThrottledCallback } from '/@/shared/hooks/use-throttled-callback';
 import { useThrottledValue } from '/@/shared/hooks/use-throttled-value';
-import { LibraryItem, QueueSong, ServerType } from '/@/shared/types/domain-types';
+import { LibraryItem, QueueSong, ServerType, Song } from '/@/shared/types/domain-types';
 
 const calculateVolumeUp = (volume: number, volumeWheelStep: number) => {
     let volumeToSet: number;
@@ -214,13 +214,13 @@ const LyricsButton = () => {
 };
 
 const FavoriteButton = () => {
-    const currentSong = usePlayerSong();
+    const currentSong = usePlayerbarSong();
     const { bindings } = useHotkeySettings();
 
     const addToFavoritesMutation = useCreateFavorite({});
     const removeFromFavoritesMutation = useDeleteFavorite({});
 
-    const handleAddToFavorites = (song: QueueSong | undefined) => {
+    const handleAddToFavorites = (song: QueueSong | Song | undefined) => {
         if (!song?.id) return;
 
         addToFavoritesMutation.mutate({
@@ -232,7 +232,7 @@ const FavoriteButton = () => {
         });
     };
 
-    const handleRemoveFromFavorites = (song: QueueSong | undefined) => {
+    const handleRemoveFromFavorites = (song: QueueSong | Song | undefined) => {
         if (!song?.id) return;
 
         removeFromFavoritesMutation.mutate({
@@ -244,7 +244,7 @@ const FavoriteButton = () => {
         });
     };
 
-    const handleToggleFavorite = (song: QueueSong | undefined) => {
+    const handleToggleFavorite = (song: QueueSong | Song | undefined) => {
         if (!song?.id) return;
 
         if (song.userFavorite) {
@@ -330,7 +330,7 @@ const useFavoritePreviousSongHotkeys = ({
 
 const RatingButton = () => {
     const server = useCurrentServer();
-    const currentSong = usePlayerSong();
+    const currentSong = usePlayerbarSong();
     const setRating = useSetRating();
 
     const isSongDefined = Boolean(currentSong?.id);

@@ -7,21 +7,30 @@ import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { usePlayerTimestamp } from '/@/renderer/store';
 
 interface PlayerbarSeekSliderProps {
+    /** Overrides the app player's time, with `onSeek` (the DJ prep view's audio). */
+    currentTime?: number;
     max: number;
     min: number;
+    onSeek?: (timestamp: number) => void;
 }
 
-export const PlayerbarSeekSlider = ({ max, min }: PlayerbarSeekSliderProps) => {
+export const PlayerbarSeekSlider = ({
+    currentTime: currentTimeOverride,
+    max,
+    min,
+    onSeek,
+}: PlayerbarSeekSliderProps) => {
     const [isSeeking, setIsSeeking] = useState(false);
     const [seekValue, setSeekValue] = useState(0);
-    const currentTime = usePlayerTimestamp();
+    const playerTime = usePlayerTimestamp();
+    const currentTime = currentTimeOverride ?? playerTime;
     const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const lastSeekValueRef = useRef<null | number>(null);
 
     const { mediaSeekToTimestamp } = usePlayer();
 
     const handleSeekToTimestamp = (timestamp: number) => {
-        mediaSeekToTimestamp(timestamp);
+        (onSeek ?? mediaSeekToTimestamp)(timestamp);
     };
 
     // Sync isSeeking state when currentTime catches up to seek value

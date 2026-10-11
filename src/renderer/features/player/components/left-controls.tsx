@@ -10,6 +10,10 @@ import styles from './left-controls.module.css';
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { JoinedArtists } from '/@/renderer/features/albums/components/joined-artists';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import {
+    usePlayerbarPrepSession,
+    usePlayerbarSong,
+} from '/@/renderer/features/dj/prep/prep-session.store';
 import { RadioMetadataDisplay } from '/@/renderer/features/player/components/radio-metadata-display';
 import { SongPlaylistsIndicator } from '/@/renderer/features/playlists/components/song-playlists-indicator';
 import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
@@ -19,7 +23,6 @@ import {
     useAppStoreActions,
     useFullScreenPlayerStore,
     useHotkeySettings,
-    usePlayerSong,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
@@ -46,7 +49,9 @@ export const LeftControls = () => {
         shallow,
     );
 
-    const currentSong = usePlayerSong();
+    // DJ prep view open: the bar shows the track it plays (prep-session.store.ts).
+    const prepSession = usePlayerbarPrepSession();
+    const currentSong = usePlayerbarSong();
     const isRadioActive = useIsRadioActive();
     const { bindings } = useHotkeySettings();
 
@@ -199,6 +204,11 @@ export const LeftControls = () => {
                                             </Text>
                                         )}
                                     </Text>
+                                    {prepSession?.auditioning && (
+                                        <Text isMuted isNoSelect size="xs">
+                                            {t('page.djPrep.looping')}
+                                        </Text>
+                                    )}
                                     {isSongDefined && (
                                         <ActionIcon
                                             icon="ellipsisVertical"

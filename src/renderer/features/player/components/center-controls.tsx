@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './center-controls.module.css';
 
+import { usePlayerbarPrepSession } from '/@/renderer/features/dj/prep/prep-session.store';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { PlayerbarSlider } from '/@/renderer/features/player/components/playerbar-slider';
 import { openShuffleAllModal } from '/@/renderer/features/player/components/shuffle-all-modal';
@@ -24,9 +25,40 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { PlayerRepeat, PlayerShuffle, PlayerStatus } from '/@/shared/types/types';
 
 export const CenterControls = () => {
+    const { t } = useTranslation();
     const skip = useSkipButtons();
 
     const isRadioActive = useIsRadioActive();
+    const prepSession = usePlayerbarPrepSession();
+
+    // DJ prep view open: the bar drives its track (prep-session.store.ts). Prev/next walk
+    // the prep list; queue-only controls (shuffle, repeat, skip) don't apply.
+    if (prepSession) {
+        return (
+            <>
+                <div className={styles.controlsContainer}>
+                    <div className={styles.buttonsContainer}>
+                        <StopButton onClick={prepSession.stop} />
+                        <PreviousButton
+                            disabled={!prepSession.prev}
+                            onClick={prepSession.prev ?? undefined}
+                        />
+                        <MainPlayButton
+                            disabled={!prepSession.song}
+                            isPaused={!prepSession.isPlaying}
+                            onClick={prepSession.toggle}
+                            tooltip={{ label: t('page.djPrep.playKey'), openDelay: 0 }}
+                        />
+                        <NextButton
+                            disabled={!prepSession.next}
+                            onClick={prepSession.next ?? undefined}
+                        />
+                    </div>
+                </div>
+                <PlayerbarSlider />
+            </>
+        );
+    }
 
     if (isRadioActive) {
         return (
@@ -68,6 +100,12 @@ export const CenterControls = () => {
     );
 };
 
+interface OverridableButtonProps {
+    disabled?: boolean;
+    /** Replaces the app player's action (the DJ prep view's transport). */
+    onClick?: () => void;
+}
+
 const RadioCenterPlayButton = ({ disabled }: { disabled?: boolean }) => {
     const { currentStreamUrl } = useRadioPlayer();
     const isPlayingRadio = useIsPlayingRadio();
@@ -103,7 +141,7 @@ const RadioStopButton = ({ disabled }: { disabled?: boolean }) => {
     );
 };
 
-const StopButton = ({ disabled }: { disabled?: boolean }) => {
+const StopButton = ({ disabled, onClick }: OverridableButtonProps) => {
     const { t } = useTranslation();
     const buttonSize = useButtonSize();
     const { mediaStop } = usePlayer();
@@ -112,7 +150,7 @@ const StopButton = ({ disabled }: { disabled?: boolean }) => {
         <PlayerButton
             disabled={disabled}
             icon={<Icon fill="default" icon="mediaStop" size={buttonSize - 2} />}
-            onClick={mediaStop}
+            onClick={onClick ?? mediaStop}
             tooltip={{
                 label: t('player.stop', { postProcess: 'sentenceCase' }),
                 openDelay: 0,
@@ -155,7 +193,7 @@ const ShuffleButton = ({ disabled }: { disabled?: boolean }) => {
     );
 };
 
-const PreviousButton = ({ disabled }: { disabled?: boolean }) => {
+const PreviousButton = ({ disabled, onClick }: OverridableButtonProps) => {
     const { t } = useTranslation();
     const buttonSize = useButtonSize();
     const { mediaPrevious } = usePlayer();
@@ -164,7 +202,7 @@ const PreviousButton = ({ disabled }: { disabled?: boolean }) => {
         <PlayerButton
             disabled={disabled}
             icon={<Icon fill="default" icon="mediaPrevious" size={buttonSize} />}
-            onClick={mediaPrevious}
+            onClick={onClick ?? mediaPrevious}
             tooltip={{
                 label: t('player.previous', { postProcess: 'sentenceCase' }),
                 openDelay: 0,
@@ -233,7 +271,7 @@ const SkipForwardButton = ({ disabled }: { disabled?: boolean }) => {
     );
 };
 
-const NextButton = ({ disabled }: { disabled?: boolean }) => {
+const NextButton = ({ disabled, onClick }: OverridableButtonProps) => {
     const { t } = useTranslation();
     const buttonSize = useButtonSize();
     const { mediaNext } = usePlayer();
@@ -242,7 +280,7 @@ const NextButton = ({ disabled }: { disabled?: boolean }) => {
         <PlayerButton
             disabled={disabled}
             icon={<Icon fill="default" icon="mediaNext" size={buttonSize} />}
-            onClick={mediaNext}
+            onClick={onClick ?? mediaNext}
             tooltip={{
                 label: t('player.next', { postProcess: 'sentenceCase' }),
                 openDelay: 0,

@@ -2,6 +2,7 @@ import { createRef, useCallback, useEffect, useRef, useState } from 'react';
 
 import styles from './visualizer.module.css';
 
+import { usePrepSessionStore } from '/@/renderer/features/dj/prep/prep-session.store';
 import { useWebAudio } from '/@/renderer/features/player/hooks/use-webaudio';
 import { openVisualizerSettingsModal } from '/@/renderer/features/player/utils/open-visualizer-settings-modal';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
@@ -58,7 +59,9 @@ const VisualizerInner = () => {
     const opacity = useSettingsStore((store) => store.visualizer.butterchurn.opacity);
     const { setSettings } = useSettingsStoreActions();
     const playerStatus = usePlayerStatus();
-    const isPlaying = playerStatus === PlayerStatus.PLAYING;
+    // The prep view's own player feeds the same graph (subbox-app#249).
+    const isPrepPlaying = usePrepSessionStore((state) => Boolean(state.session?.isPlaying));
+    const isPlaying = playerStatus === PlayerStatus.PLAYING || isPrepPlaying;
 
     useEffect(() => {
         let isMounted = true;

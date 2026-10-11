@@ -118,7 +118,9 @@ const AudioPlayersContent = ({
                 resetSampleRate();
             }
 
-            const gains = [context.createGain(), context.createGain()];
+            // The app's two players, then the prep view's own <audio> (subbox-app#249),
+            // so the visualizers, the output device and the sample rate follow it too.
+            const gains = [context.createGain(), context.createGain(), context.createGain()];
             for (const gain of gains) {
                 gain.connect(context.destination);
             }

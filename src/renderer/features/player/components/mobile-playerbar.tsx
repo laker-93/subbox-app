@@ -8,13 +8,16 @@ import styles from './mobile-playerbar.module.css';
 
 import { ItemImage } from '/@/renderer/components/item-image/item-image';
 import { ContextMenuController } from '/@/renderer/features/context-menu/context-menu-controller';
+import {
+    usePlayerbarPrepSession,
+    usePlayerbarSong,
+} from '/@/renderer/features/dj/prep/prep-session.store';
 import { MainPlayButton, PlayerButton } from '/@/renderer/features/player/components/player-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { AppRoute } from '/@/renderer/router/routes';
 import {
     useFullScreenPlayerStore,
     useFullScreenPlayerStoreActions,
-    usePlayerSong,
     usePlayerStatus,
     useSetFullScreenPlayerStore,
 } from '/@/renderer/store';
@@ -33,9 +36,15 @@ export const MobilePlayerbar = () => {
     const { expanded: isFullScreenPlayerExpanded } = useFullScreenPlayerStore();
     const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
     const { setStore } = useFullScreenPlayerStoreActions();
-    const currentSong = usePlayerSong();
-    const status = usePlayerStatus();
-    const { mediaNext, mediaPrevious, mediaTogglePlayPause } = usePlayer();
+    const playerStatus = usePlayerStatus();
+    const player = usePlayer();
+    // DJ prep view open: the bar drives its track (prep-session.store.ts).
+    const prepSession = usePlayerbarPrepSession();
+    const currentSong = usePlayerbarSong();
+    const isPaused = prepSession ? !prepSession.isPlaying : playerStatus === PlayerStatus.PAUSED;
+    const mediaPrevious = prepSession ? (prepSession.prev ?? (() => {})) : player.mediaPrevious;
+    const mediaNext = prepSession ? (prepSession.next ?? (() => {})) : player.mediaNext;
+    const mediaTogglePlayPause = prepSession ? prepSession.toggle : player.mediaTogglePlayPause;
     const title = currentSong?.name;
     const artists = currentSong?.artists;
     const isSongDefined = Boolean(currentSong?.id);
@@ -215,7 +224,7 @@ export const MobilePlayerbar = () => {
                 />
                 <MainPlayButton
                     disabled={currentSong?.id === undefined}
-                    isPaused={status === PlayerStatus.PAUSED}
+                    isPaused={isPaused}
                     onClick={(e) => {
                         e.stopPropagation();
                         mediaTogglePlayPause();

@@ -8,16 +8,15 @@ import styles from './full-screen-player-image.module.css';
 
 import { useItemImageUrl } from '/@/renderer/components/item-image/item-image';
 import {
+    playerbarSongKey,
+    usePlayerbarSong,
+} from '/@/renderer/features/dj/prep/prep-session.store';
+import {
     useIsRadioActive,
     useRadioPlayer,
 } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { AppRoute } from '/@/renderer/router/routes';
-import {
-    useGeneralSettings,
-    useNativeAspectRatio,
-    usePlayerData,
-    usePlayerSong,
-} from '/@/renderer/store';
+import { useGeneralSettings, useNativeAspectRatio, usePlayerData } from '/@/renderer/store';
 import { Badge } from '/@/shared/components/badge/badge';
 import { Center } from '/@/shared/components/center/center';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -100,7 +99,9 @@ export const FullScreenPlayerImage = () => {
     const isRadioActive = useIsRadioActive();
     const { isPlaying: isRadioPlaying, metadata: radioMetadata, stationName } = useRadioPlayer();
 
-    const currentSong = usePlayerSong();
+    // The prep view's track while it holds the player bar (prep-session.store.ts).
+    const currentSong = usePlayerbarSong();
+    const currentKey = playerbarSongKey(currentSong);
     const { nextSong } = usePlayerData();
     const { blurExplicitImages, playerItems } = useGeneralSettings();
 
@@ -129,7 +130,7 @@ export const FullScreenPlayerImage = () => {
     });
 
     // Track previous song to detect changes
-    const previousSongRef = useRef<string | undefined>(currentSong?._uniqueId);
+    const previousSongRef = useRef<string | undefined>(currentKey);
     const imageStateRef = useRef(imageState);
 
     // Keep ref in sync
@@ -142,7 +143,7 @@ export const FullScreenPlayerImage = () => {
         if (isPlayingRadio) {
             return;
         }
-        if (currentSong?._uniqueId === previousSongRef.current) {
+        if (currentKey === previousSongRef.current) {
             return;
         }
 
@@ -160,10 +161,10 @@ export const FullScreenPlayerImage = () => {
             topImage: isTop ? nextImageUrl : currentImageUrl,
         });
 
-        previousSongRef.current = currentSong?._uniqueId;
+        previousSongRef.current = currentKey;
     }, [
         isPlayingRadio,
-        currentSong?._uniqueId,
+        currentKey,
         currentImageUrl,
         nextSong?._uniqueId,
         nextImageUrl,
@@ -223,7 +224,7 @@ export const FullScreenPlayerImage = () => {
                             exit="closed"
                             explicit={blurExplicitImages && imageState.topExplicit}
                             initial="closed"
-                            key={`top-${currentSong?._uniqueId || 'none'}`}
+                            key={`top-${currentKey || 'none'}`}
                             placeholder="var(--theme-colors-foreground-muted)"
                             src={imageState.topImage || ''}
                             variants={imageVariants}
@@ -239,7 +240,7 @@ export const FullScreenPlayerImage = () => {
                             exit="closed"
                             explicit={blurExplicitImages && imageState.bottomExplicit}
                             initial="closed"
-                            key={`bottom-${currentSong?._uniqueId || 'none'}`}
+                            key={`bottom-${currentKey || 'none'}`}
                             placeholder="var(--theme-colors-foreground-muted)"
                             src={imageState.bottomImage || ''}
                             variants={imageVariants}

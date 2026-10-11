@@ -23,8 +23,11 @@ re-investigating a flow. The loop itself is documented in `../subbox-workspace/d
 - **Renderer never imports `electron`** — it reaches the main process only through
   `window.api.*` (defined in `src/preload/`). See ARCHITECTURE.md §1.
 - **`/@/…` maps to `src/…`** — use it for all intra-repo imports.
-- **This is a fork.** When touching shared/upstream code, match Feishin patterns so
-  merges stay clean. Subbox-only code (pymix, sync, sharing, filebrowser) has no upstream.
+- **This is a permanent fork of Feishin.** Nothing is merged back to Feishin and nothing
+  is merged in from it, so "keep future merges clean" is never a reason to avoid
+  changing inherited code. Edit the playerbar, tables, stores or anything else directly
+  when a feature needs it; don't route around Feishin code or add parallel copies to
+  spare it. (Decided 2026-10-11.)
 - **Navidrome/Subsonic only.** The Jellyfin controller is inherited dead code — never
   let its capabilities or limits shape a design.
 
