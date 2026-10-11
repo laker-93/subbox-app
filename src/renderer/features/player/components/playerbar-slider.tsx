@@ -5,6 +5,7 @@ import { lazy, Suspense } from 'react';
 import { PlayerbarSeekSlider } from './playerbar-seek-slider';
 import styles from './playerbar-slider.module.css';
 
+import { DjSeekMarkers } from '/@/renderer/features/dj/components/dj-seek-markers';
 import { usePlayerbarPrepSession } from '/@/renderer/features/dj/prep/prep-session.store';
 import {
     useAppStore,
@@ -83,6 +84,7 @@ export const PlayerbarSlider = () => {
                             onSeek={prepSession?.seek}
                         />
                     )}
+                    <DjSeekMarkers />
                 </div>
                 <div className={styles.sliderValueWrapper}>
                     <Text
