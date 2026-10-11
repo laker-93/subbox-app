@@ -785,6 +785,17 @@ const djCuedata = z
             .nullish(),
         bpm: z.number().nullish(),
         cues: z.array(djCue),
+        // The DJ app whose time the track's subbox-made positions are in (#241,
+        // pymix#291): set while any edited position exists.
+        edit_clock: z.enum(['rekordbox', 'serato']).nullish(),
+        // What the last import was sent, when it left a subbox edit alone (pymix#271).
+        import_incoming: z
+            .object({
+                cuedata: z.record(z.string(), z.unknown()),
+                fields: z.array(z.string()),
+                source_app: z.string(),
+            })
+            .nullish(),
         key: z.string().nullish(),
         loops: z.array(djLoop),
         memory: z.array(djMemoryMark).nullish(),
@@ -808,12 +819,55 @@ const djTrack = z.object({
     version: z.number(),
 });
 
+// Edits (#241, pymix#270): exactly one of cue, loop, grid and key per PATCH, made
+// against `expected_version`. A slot's `value` null clears it; `from_slot` moves.
+const djSlotEdit = z.object({
+    from_slot: z.number().optional(),
+    slot: z.number(),
+    value: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
+const djPatchParameters = z.object({
+    cue: djSlotEdit.optional(),
+    expected_version: z.number(),
+    grid: z
+        .object({
+            beatgrid: z.array(z.record(z.string(), z.unknown())).optional(),
+            locked: z.boolean().optional(),
+        })
+        .optional(),
+    key: z.object({ value: z.string().nullable() }).optional(),
+    loop: djSlotEdit.optional(),
+});
+
+const djRevertParameters = z.object({ expected_version: z.number(), to_version: z.number() });
+
+// 409: the track moved on; `current` is it now.
+const djConflict = z.object({ current: djTrack, detail: z.string() });
+
+const djHistory = z.object({
+    next_before: z.number().nullish(),
+    versions: z.array(
+        z.object({
+            change_type: z.string().nullish(),
+            changed_at: z.number().nullish(),
+            cuedata: z.record(z.string(), z.unknown()).nullish(),
+            // `cue:N`, `loop:N`, `memory`, `grid`, `grid.locked`, `bpm`, `key`.
+            fields: z.array(z.string()),
+            source_app: z.string().nullish(),
+            version: z.number(),
+        }),
+    ),
+});
+
 export type DjCue = z.infer<typeof djCue>;
 export type DjCuedata = z.infer<typeof djCuedata>;
 export type DjGridAnchor = z.infer<typeof djGridAnchor>;
 export type DjGridState = z.infer<typeof djGridState>;
+export type DjHistory = z.infer<typeof djHistory>;
 export type DjLoop = z.infer<typeof djLoop>;
 export type DjMemoryMark = z.infer<typeof djMemoryMark>;
+export type DjPatch = z.infer<typeof djPatchParameters>;
 export type DjTrack = z.infer<typeof djTrack>;
 
 // --- The user's own settings (subbox-app#236, pymix#268) ---
@@ -845,6 +899,8 @@ export const pymixType = {
         deleteDuplicates: deleteParameters,
         deletePlaylistNodes: deletePlaylistNodesParameters,
         deleteSong: deleteSongParameters,
+        djPatch: djPatchParameters,
+        djRevert: djRevertParameters,
         download: downloadParameters,
         exportJob: rbExportParameters,
         import: importParameters,
@@ -876,6 +932,8 @@ export const pymixType = {
         create,
         deleteDuplicates,
         deleteSong,
+        djConflict,
+        djHistory,
         djTrack,
         download,
         error,

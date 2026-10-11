@@ -47,3 +47,42 @@
     flex-shrink: 0;
     width: 6rem;
 }
+
+.swatch-button {
+    display: inline-flex;
+    flex-shrink: 0;
+    padding: 2px;
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 50%;
+}
+
+.swatch-button:focus-visible {
+    outline: 2px solid var(--theme-colors-primary);
+}
+
+.palette {
+    display: grid;
+    grid-template-columns: repeat(4, 20px);
+    gap: 6px;
+}
+
+.palette-color {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    border: 0;
+    border-radius: 50%;
+}
+
+.palette-color[aria-pressed='true'] {
+    outline: 2px solid var(--theme-colors-foreground);
+    outline-offset: 2px;
+}
+
+/* A name being typed keeps room beside the times and buttons. */
+.name-input {
+    flex: 1;
+    min-width: 5rem;
+}

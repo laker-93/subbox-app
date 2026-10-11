@@ -148,7 +148,17 @@ assert.equal(appOf('import:serato', 'rekordbox'), 'serato');
 assert.equal(appOf('file', 'rekordbox'), 'serato', 'file: a Serato GEOB read at ingest');
 assert.equal(appOf(null, 'rekordbox'), 'rekordbox', 'no origin: the row source_app');
 assert.equal(appOf(undefined, 'file'), 'serato');
-assert.equal(appOf('edit', 'rekordbox'), null, 'an edit has no DJ app (#241)');
+assert.equal(
+    appOf('edit', 'serato', 'serato'),
+    'serato',
+    "an edit is in its track's edit_clock (#241)",
+);
+assert.equal(
+    appOf('edit', 'serato'),
+    'rekordbox',
+    'an edit from before edit_clock: Rekordbox, as pymix chose',
+);
+assert.equal(appOf('analysis', 'rekordbox'), null, 'analysis has no DJ app yet');
 assert.equal(appOf('recipe:3', 'serato'), null);
 assert.equal(appOf(null, null), null);
 

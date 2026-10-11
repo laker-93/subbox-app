@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -8,13 +8,17 @@ import styles from './dj-prep-route.module.css';
 import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { PageHeader } from '/@/renderer/components/page-header/page-header';
-import { DjWaveform } from '/@/renderer/features/dj/components/dj-waveform';
+import { useIsDemoSession } from '/@/renderer/config/demo-config';
+import { DjWaveform, DjWaveformEditing } from '/@/renderer/features/dj/components/dj-waveform';
+import { KeptEdits, PrepHistory } from '/@/renderer/features/dj/components/prep-history';
 import {
     PrepCues,
+    PrepEditing,
     PrepGrid,
     PrepLoops,
     PrepMemoryCues,
 } from '/@/renderer/features/dj/components/prep-panels';
+import { useDjEdit } from '/@/renderer/features/dj/hooks/use-dj-edit';
 import { useDjMode } from '/@/renderer/features/dj/hooks/use-dj-mode';
 import { useDjPeaks } from '/@/renderer/features/dj/hooks/use-dj-peaks';
 import { usePrepAudio } from '/@/renderer/features/dj/hooks/use-prep-audio';
@@ -22,9 +26,17 @@ import { useTrackDj } from '/@/renderer/features/dj/hooks/use-track-dj';
 import { PrepListEntry, PrepLocationState, prepPath } from '/@/renderer/features/dj/prep/prep-list';
 import { setPrepSession } from '/@/renderer/features/dj/prep/prep-session.store';
 import {
+    editClockOf,
+    SnapMode,
+    snapSeconds,
+    toStoredMs,
+} from '/@/renderer/features/dj/utils/dj-edit';
+import { djMarks } from '/@/renderer/features/dj/utils/dj-marks';
+import {
     codecOf,
     currentEngine,
     decodeSecondsToDj,
+    djToDecodeSeconds,
     markContext,
     TrackOffsetContext,
 } from '/@/renderer/features/dj/utils/dj-offset';
@@ -46,14 +58,19 @@ import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
 import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
+import { SegmentedControl } from '/@/shared/components/segmented-control/segmented-control';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
+import { toast } from '/@/shared/components/toast/toast';
+import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
 import { PlayerStatus } from '/@/shared/types/types';
 
-// Subbox-only: one track's prep view, read-only (subbox-app#239, design-dj-ui §5.2). The
-// waveform with everything the DJ apps stored on it, the eight pads, loops, memory cues
-// and the grid, playable from the original file. Editing lands in #241 and #245.
+// Subbox-only: one track's prep view (subbox-app#239, design-dj-ui §5.2). The waveform
+// with everything the DJ apps stored on it, the eight pads, loops, memory cues and the
+// grid, playable from the original file. Cues and loops are edited here (#241): on the
+// panels, or on the waveform (drag a flag, double-click for a cue, shift-drag for a
+// loop), each change one versioned write, with undo and a history. The grid is #245.
 //
 // Prep is production-line work, so prev/next walk the list the user came from, one key
 // away: ↑/↓ for the track, space to play. The page takes those keys before the app's
@@ -107,6 +124,9 @@ const DjPrepRoute = () => {
     const song = songQuery.data ?? null;
     const djQuery = useTrackDj(subboxId, { enabled: active });
     const dj = djQuery.data ?? null;
+    // `demo` reads demoadmin's library and can't write it (pymix require_uploader).
+    const canEdit = !useIsDemoSession() && Boolean(dj);
+    const editor = useDjEdit(subboxId, dj);
 
     const peaksRequest = useMemo(() => (song ? { song, subboxId } : null), [song, subboxId]);
     const peaks = useDjPeaks(active ? peaksRequest : null);
@@ -117,14 +137,87 @@ const DjPrepRoute = () => {
     const context: TrackOffsetContext = useMemo(
         () => ({
             codec: codecOf(song?.container),
+            editClock: dj?.cuedata.edit_clock,
             engine: currentEngine(),
             mp3Tag,
             sampleRate: song?.sampleRate,
             sourceApp: dj?.source_app,
         }),
-        [dj?.source_app, mp3Tag, song?.container, song?.sampleRate],
+        [dj?.cuedata.edit_clock, dj?.source_app, mp3Tag, song?.container, song?.sampleRate],
     );
     const durationMs = (peaks.peaks?.durationSeconds ?? 0) * 1000 || song?.duration || 0;
+
+    // --- editing (#241) ---
+    const [snapMode, setSnapMode] = useLocalStorage<SnapMode>({
+        defaultValue: 'beat',
+        key: 'dj_prep_snap',
+    });
+    const beats = useMemo(
+        () => (dj && durationMs ? djMarks(dj.cuedata, durationMs / 1000, context).beats : []),
+        [context, dj, durationMs],
+    );
+    const editing = useMemo((): null | PrepEditing => {
+        if (!canEdit || !dj) return null;
+        // pymix#291: an edit is written in the time of the app the track came from.
+        const clock = editClockOf(dj.cuedata, dj.source_app);
+        const toStored = (seconds: number) => toStoredMs(seconds, context, clock);
+        return {
+            beats,
+            editor,
+            restamp: (ms, origin) => {
+                const mark = markContext(context, origin);
+                // Already in the edit's clock: the same number, not a float round trip.
+                return mark.app === clock ? ms : toStored(djToDecodeSeconds(ms, mark));
+            },
+            snap: (seconds) => snapSeconds(seconds, beats, snapMode),
+            toStored,
+        };
+    }, [beats, canEdit, context, dj, editor, snapMode]);
+    const waveformEditing = useMemo((): DjWaveformEditing | null => {
+        if (!editing || !dj) return null;
+        const firstFree = (taken: number[]) =>
+            Array.from({ length: 8 }, (_, i) => i).find((i) => !taken.includes(i));
+        return {
+            onCueAdd: (seconds) => {
+                const slot = firstFree(dj.cuedata.cues.map((c) => c.index));
+                if (slot == null) {
+                    toast.warn({ message: t('page.djPrep.padsFull') as string });
+                    return;
+                }
+                editing.editor.apply({
+                    cue: { slot, value: { position: editing.toStored(seconds) } },
+                });
+            },
+            onCueMove: (slot, seconds) => {
+                const cue = dj.cuedata.cues.find((c) => c.index === slot);
+                if (!cue) return;
+                editing.editor.apply({
+                    cue: {
+                        slot,
+                        value: {
+                            color: cue.color ?? undefined,
+                            name: cue.name ?? undefined,
+                            position: editing.toStored(seconds),
+                        },
+                    },
+                });
+            },
+            onLoopDraw: (start, end) => {
+                const slot = firstFree(dj.cuedata.loops.map((l) => l.index));
+                if (slot == null) {
+                    toast.warn({ message: t('page.djPrep.loopsFull') as string });
+                    return;
+                }
+                editing.editor.apply({
+                    loop: {
+                        slot,
+                        value: { end: editing.toStored(end), start: editing.toStored(start) },
+                    },
+                });
+            },
+            snap: editing.snap,
+        };
+    }, [dj, editing, t]);
 
     // --- prev / next through the list the user came from ---
     const prepList = useMemo(
@@ -208,10 +301,26 @@ const DjPrepRoute = () => {
         }
     }, [active, seek, songId, songLoaded]);
 
+    const undoRef = useRef(editor);
+    undoRef.current = editor;
+    const canEditRef = useRef(canEdit);
+    canEditRef.current = canEdit;
     useEffect(() => {
         if (!active) return undefined;
         const onKey = (event: KeyboardEvent) => {
-            if (event.altKey || event.ctrlKey || event.metaKey || isTyping(event.target)) return;
+            if (isTyping(event.target)) return;
+            // Undo walks back through the track's versions (#241). Ctrl on Windows and
+            // Linux, ⌘ on the Mac.
+            const mod = event.ctrlKey || event.metaKey;
+            const k = event.key.toLowerCase();
+            if (mod && !event.altKey && (k === 'z' || k === 'y') && canEditRef.current) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                if (k === 'y' || event.shiftKey) undoRef.current.redo();
+                else undoRef.current.undo();
+                return;
+            }
+            if (event.altKey || event.ctrlKey || event.metaKey) return;
             const handlers: Record<string, () => void> = {
                 ' ': audio.toggle,
                 ArrowDown: () => go(next),
@@ -280,10 +389,31 @@ const DjPrepRoute = () => {
                         {t('page.djPrep.notInLibrary')}
                     </Text>
                 )}
+                {editing && (
+                    <Group gap="sm" wrap="nowrap">
+                        <Text isMuted size="sm">
+                            {t('page.djPrep.snap')}
+                        </Text>
+                        <SegmentedControl
+                            data={[
+                                { label: t('page.djPrep.snapOff'), value: 'off' },
+                                { label: t('page.djPrep.snapBeat'), value: 'beat' },
+                                { label: t('page.djPrep.snapBar'), value: 'bar' },
+                            ]}
+                            onChange={(value) => setSnapMode(value as SnapMode)}
+                            size="xs"
+                            value={snapMode}
+                        />
+                        <Text isMuted size="xs">
+                            {t('page.djPrep.waveformHint')}
+                        </Text>
+                    </Group>
+                )}
                 <DjWaveform
                     cuedata={dj?.cuedata}
                     detailHeight={140}
                     durationSeconds={(song.duration ?? 0) / 1000}
+                    editing={waveformEditing}
                     error={peaks.status === 'error' ? t('page.djPrep.waveformFailed') : null}
                     isPlaying={audio.isPlaying}
                     offset={context}
@@ -295,17 +425,22 @@ const DjPrepRoute = () => {
                 {dj && (
                     <div className={styles.panels}>
                         <Stack gap="md">
+                            {editing && (
+                                <KeptEdits dj={dj} editor={editor} restamp={editing.restamp} />
+                            )}
                             <PrepCues
                                 audio={audio}
                                 context={context}
                                 dj={dj}
                                 durationMs={durationMs}
+                                editing={editing}
                             />
                             <PrepLoops
                                 audio={audio}
                                 context={context}
                                 dj={dj}
                                 durationMs={durationMs}
+                                editing={editing}
                             />
                             <PrepMemoryCues
                                 audio={audio}
@@ -314,7 +449,10 @@ const DjPrepRoute = () => {
                                 durationMs={durationMs}
                             />
                         </Stack>
-                        <PrepGrid dj={dj} durationMs={durationMs} />
+                        <Stack gap="md">
+                            <PrepGrid dj={dj} durationMs={durationMs} />
+                            {editing && <PrepHistory dj={dj} editor={editor} />}
+                        </Stack>
                     </div>
                 )}
             </Stack>

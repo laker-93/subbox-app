@@ -27,7 +27,11 @@ const APP_NAMES: Record<string, string> = {
 /** `Serato` from `serato`; an origin like `serato:import` names its app first. */
 export const appName = (value: null | string | undefined) => {
     if (!value) return null;
-    const app = value.split(/[:/]/)[0].toLowerCase();
+    // An origin names its app after `import:` (`import:rekordbox`).
+    const app = value
+        .replace(/^import:/, '')
+        .split(/[:/]/)[0]
+        .toLowerCase();
     return APP_NAMES[app] ?? value;
 };
 

@@ -69,6 +69,7 @@
         "check:library-root-download": "tsx scripts/check-library-root-download.ts",
         "check:record-locations": "tsx scripts/check-record-locations.ts",
         "check:tracks-in-place": "tsx scripts/check-tracks-in-place.ts",
+        "check:dj-edit": "tsx --import ./scripts/renderer-alias.mjs scripts/check-dj-edit.ts",
         "check:dj-offset": "tsx --import ./scripts/renderer-alias.mjs scripts/check-dj-offset.ts",
         "postinstall": "electron-builder install-app-deps",
         "lint": "pnpm run typecheck && pnpm run lint-code && pnpm run lint-styles",

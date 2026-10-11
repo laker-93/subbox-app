@@ -40,3 +40,8 @@
     align-items: center;
     justify-content: center;
 }
+
+/* Over a cue flag the prep view can move (#241). */
+.detail[data-over-cue] {
+    cursor: grab;
+}

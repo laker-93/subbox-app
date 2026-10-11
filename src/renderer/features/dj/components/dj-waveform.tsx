@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './dj-waveform.module.css';
 
 import { DjPeaks } from '/@/renderer/features/dj/peaks/peaks-source';
-import { djMarks, EMPTY_MARKS } from '/@/renderer/features/dj/utils/dj-marks';
+import { DjMarks, djMarks, EMPTY_MARKS } from '/@/renderer/features/dj/utils/dj-marks';
 import { TrackOffsetContext } from '/@/renderer/features/dj/utils/dj-offset';
 import {
     drawCues,
@@ -29,11 +29,23 @@ const MIN_ZOOM_SECONDS = 2;
 const MAX_ZOOM_SECONDS = 64;
 const DEFAULT_ZOOM_SECONDS = 8;
 
+/** The detail view's editing gestures (#241). Every time is decode seconds. */
+export interface DjWaveformEditing {
+    /** Double-click: a cue there. */
+    onCueAdd: (seconds: number) => void;
+    /** A cue flag dragged and dropped. */
+    onCueMove: (slot: number, seconds: number) => void;
+    /** Shift-drag: a loop over the dragged range. */
+    onLoopDraw: (start: number, end: number) => void;
+    snap: (seconds: number) => number;
+}
+
 export interface DjWaveformProps {
     cuedata: DjCuedata | null | undefined;
     detailHeight?: number;
     /** Seconds. Used until the peaks say how long the decode really is. */
     durationSeconds: number;
+    editing?: DjWaveformEditing | null;
     error?: null | string;
     isPlaying: boolean;
     /** How this track's stored times convert to decode time (dj-offset). */
@@ -50,6 +62,7 @@ export const DjWaveform = ({
     cuedata,
     detailHeight = 120,
     durationSeconds,
+    editing,
     error,
     isPlaying,
     offset,
@@ -78,6 +91,37 @@ export const DjWaveform = ({
         clock.current = { at: performance.now(), position };
     }, [position, isPlaying]);
     const drag = useRef<null | { position: number; startX: number }>(null);
+    // An edit in progress on the detail view: drawn as it would land, applied on release.
+    const gesture = useRef<
+        | null
+        | { end: number; kind: 'loop'; start: number }
+        | { kind: 'cue'; moved: boolean; seconds: number; slot: number; startX: number }
+    >(null);
+    const shown = useCallback((): DjMarks => {
+        const g = gesture.current;
+        if (!g) return marks;
+        if (g.kind === 'cue') {
+            return {
+                ...marks,
+                cues: marks.cues.map((c) => (c.slot === g.slot ? { ...c, seconds: g.seconds } : c)),
+            };
+        }
+        const [start, end] = g.start <= g.end ? [g.start, g.end] : [g.end, g.start];
+        return {
+            ...marks,
+            loops: [
+                ...marks.loops,
+                {
+                    color: '#ffffff',
+                    endSeconds: end,
+                    label: '+',
+                    name: '',
+                    slot: -1,
+                    startSeconds: start,
+                },
+            ],
+        };
+    }, [marks]);
     const [dragging, setDragging] = useState(false);
     // Bumped on each seek, to redraw while paused.
     const [seeks, setSeeks] = useState(0);
@@ -100,7 +144,8 @@ export const DjWaveform = ({
             width: overview.width,
         };
         if (peaks) drawPeaks(ctx, view, peaks, 4, overviewHeight - 8);
-        drawLoops(ctx, view, marks, false);
+        const drawn = shown();
+        drawLoops(ctx, view, drawn, false);
         const t = now();
         // The played part, dimmed.
         ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
@@ -110,9 +155,9 @@ export const DjWaveform = ({
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.strokeRect(x0 + 0.5, 0.5, zoomSeconds / view.secondsPerPx, overviewHeight - 1);
         }
-        drawCues(ctx, view, marks, false);
+        drawCues(ctx, view, drawn, false);
         drawPlayhead(ctx, view, t);
-    }, [duration, marks, now, overview.width, overviewHeight, peaks, showDetail, zoomSeconds]);
+    }, [duration, now, overview.width, overviewHeight, peaks, shown, showDetail, zoomSeconds]);
 
     const drawDetail = useCallback(() => {
         const canvas = detailCanvas.current;
@@ -128,12 +173,13 @@ export const DjWaveform = ({
             width: detail.width,
         };
         if (peaks) drawPeaks(ctx, view, peaks, 14, detailHeight - 30);
+        const drawn = shown();
         // Over the peaks: the fill is translucent, and under them it would be hidden.
-        drawLoops(ctx, view, marks, true);
-        drawGrid(ctx, view, marks);
-        drawCues(ctx, view, marks, true);
+        drawLoops(ctx, view, drawn, true);
+        drawGrid(ctx, view, drawn);
+        drawCues(ctx, view, drawn, true);
         drawPlayhead(ctx, view, t);
-    }, [detail.width, detailHeight, duration, marks, now, peaks, zoomSeconds]);
+    }, [detail.width, detailHeight, duration, now, peaks, shown, zoomSeconds]);
 
     // Redraw on every frame while playing or dragging; otherwise when something changes.
     useEffect(() => {
@@ -173,12 +219,70 @@ export const DjWaveform = ({
 
     // Detail: drag scrubs (the track moves under the playhead), seeking on release;
     // the wheel zooms.
+    // Editing: the time under the pointer, and the cue flag (if any) it's on.
+    const secondsAt = (clientX: number) => {
+        const rect = detailCanvas.current?.getBoundingClientRect();
+        if (!rect || !detail.width) return 0;
+        const at = now() - zoomSeconds / 2 + (clientX - rect.left) * (zoomSeconds / detail.width);
+        return Math.min(Math.max(at, 0), duration);
+    };
+    const cueAt = (clientX: number) => {
+        const rect = detailCanvas.current?.getBoundingClientRect();
+        if (!rect || !detail.width) return null;
+        const pxPerSecond = detail.width / zoomSeconds;
+        const t = now() - zoomSeconds / 2;
+        let best: null | { distance: number; slot: number } = null;
+        for (const cue of marks.cues) {
+            const x = rect.left + (cue.seconds - t) * pxPerSecond;
+            // The line, or the tab drawn to its right.
+            const distance = clientX >= x && clientX <= x + 18 ? 0 : Math.abs(clientX - x);
+            if (distance <= 6 && (!best || distance < best.distance)) {
+                best = { distance, slot: cue.slot };
+            }
+        }
+        return best && marks.cues.find((c) => c.slot === best.slot)!;
+    };
+
     const onDetailPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
         e.currentTarget.setPointerCapture(e.pointerId);
+        if (editing && e.shiftKey) {
+            const at = editing.snap(secondsAt(e.clientX));
+            gesture.current = { end: at, kind: 'loop', start: at };
+            setDragging(true);
+            return;
+        }
+        const cue = editing ? cueAt(e.clientX) : null;
+        if (cue) {
+            gesture.current = {
+                kind: 'cue',
+                moved: false,
+                seconds: cue.seconds,
+                slot: cue.slot,
+                startX: e.clientX,
+            };
+            setDragging(true);
+            return;
+        }
         drag.current = { position: now(), startX: e.clientX };
         setDragging(true);
     };
+    const [overCue, setOverCue] = useState(false);
     const onDetailPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        // A flag that can be dragged says so.
+        if (editing && !gesture.current && !drag.current) {
+            const over = Boolean(cueAt(e.clientX));
+            if (over !== overCue) setOverCue(over);
+        }
+        const g = gesture.current;
+        if (g && editing) {
+            if (g.kind === 'loop') {
+                g.end = editing.snap(secondsAt(e.clientX));
+            } else {
+                g.moved ||= Math.abs(e.clientX - g.startX) > 2;
+                if (g.moved) g.seconds = editing.snap(secondsAt(e.clientX));
+            }
+            return;
+        }
         const d = drag.current;
         if (!d || !detail.width) return;
         const secondsPerPx = zoomSeconds / detail.width;
@@ -186,6 +290,18 @@ export const DjWaveform = ({
         drag.current = { position: Math.min(Math.max(next, 0), duration), startX: e.clientX };
     };
     const onDetailPointerUp = () => {
+        const g = gesture.current;
+        if (g) {
+            gesture.current = null;
+            setDragging(false);
+            if (g.kind === 'loop') {
+                const [start, end] = g.start <= g.end ? [g.start, g.end] : [g.end, g.start];
+                if (end - start > 0.05) editing?.onLoopDraw(start, end);
+            } else if (g.moved) {
+                editing?.onCueMove(g.slot, g.seconds);
+            }
+            return;
+        }
         const d = drag.current;
         drag.current = null;
         setDragging(false);
@@ -242,6 +358,12 @@ export const DjWaveform = ({
                     aria-label="Track detail"
                     className={styles.detail}
                     data-dragging={dragging}
+                    data-over-cue={overCue || undefined}
+                    onDoubleClick={
+                        editing
+                            ? (e) => editing.onCueAdd(editing.snap(secondsAt(e.clientX)))
+                            : undefined
+                    }
                     onPointerCancel={onDetailPointerUp}
                     onPointerDown={onDetailPointerDown}
                     onPointerMove={onDetailPointerMove}
