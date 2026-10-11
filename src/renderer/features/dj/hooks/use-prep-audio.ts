@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { convertToLogVolume } from '/@/renderer/features/player/audio-player/utils/player-utils';
+import { useWebAudio } from '/@/renderer/features/player/hooks/use-webaudio';
 import { usePlayerStoreBase } from '/@/renderer/store';
 import { PlayerStatus } from '/@/shared/types/types';
 
@@ -8,7 +10,9 @@ import { PlayerStatus } from '/@/shared/types/types';
 // follows the user's transcode setting and, in Electron, may be mpv, and a cue is only
 // where the waveform draws it on the browser's own decode of the original.
 //
-// It and the app's player never play at once: starting one pauses the other.
+// It and the app's player never play at once: starting one pauses the other. It plays at
+// the player bar's volume, and when the app has a Web Audio graph it joins it on its own
+// gain node, so the visualizers and the chosen output device follow it as well.
 
 export interface PrepAudio {
     /** The loop being auditioned, decode seconds. */
@@ -25,12 +29,17 @@ export interface PrepAudio {
     toggle: () => void;
 }
 
+// The web player's curve (web-player-engine): the bar's 0-100 slider, squared.
+const barVolume = (volume: number, muted: boolean) =>
+    muted ? 0 : convertToLogVolume(Math.min(1, Math.max(0, volume / 100 || 0)));
+
 const pauseAppPlayer = () => {
     const state = usePlayerStoreBase.getState();
     if (state.player.status === PlayerStatus.PLAYING) state.mediaPause();
 };
 
 export const usePrepAudio = (src: null | string): PrepAudio => {
+    const { webAudio } = useWebAudio();
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const loopRef = useRef<null | { end: number; start: number }>(null);
     const [auditioning, setAuditioning] = useState<PrepAudio['auditioning']>(null);
@@ -50,8 +59,26 @@ export const usePrepAudio = (src: null | string): PrepAudio => {
 
         const audio = new Audio();
         audio.preload = 'auto';
+        // Without CORS the element source taints and the graph carries silence.
+        audio.crossOrigin = 'anonymous';
+        const { muted, volume } = usePlayerStoreBase.getState().player;
+        audio.volume = barVolume(volume, muted);
         audio.src = src;
         audioRef.current = audio;
+
+        // Gain 2 is the prep view's (audio-players.tsx); the app's players use 0 and 1,
+        // whose gains carry their tracks' replay gain.
+        let source: MediaElementAudioSourceNode | null = null;
+        const prepGain = webAudio?.gains[2];
+        if (webAudio && prepGain) {
+            try {
+                source = webAudio.context.createMediaElementSource(audio);
+                source.connect(prepGain);
+            } catch (error) {
+                console.error('Prep audio could not join the Web Audio graph', error);
+                source = null;
+            }
+        }
 
         const onTime = () => setPosition(audio.currentTime);
         const onPlay = () => setIsPlaying(true);
@@ -78,9 +105,23 @@ export const usePrepAudio = (src: null | string): PrepAudio => {
             audio.pause();
             audio.removeAttribute('src');
             audio.load();
+            source?.disconnect();
             audioRef.current = null;
         };
-    }, [setLoop, src]);
+    }, [setLoop, src, webAudio]);
+
+    // The player bar's volume slider and mute act on this player too.
+    useEffect(
+        () =>
+            usePlayerStoreBase.subscribe(
+                (state) => [state.player.volume, state.player.muted] as const,
+                ([volume, muted]) => {
+                    if (audioRef.current) audioRef.current.volume = barVolume(volume, muted);
+                },
+                { equalityFn: (a, b) => a[0] === b[0] && a[1] === b[1] },
+            ),
+        [],
+    );
 
     // The app's player started: this one stops.
     useEffect(
@@ -112,9 +153,14 @@ export const usePrepAudio = (src: null | string): PrepAudio => {
             if (!audio) return;
             if (seconds !== undefined) seek(seconds);
             pauseAppPlayer();
+            // The context starts suspended until a user gesture (web-player.tsx), and a
+            // suspended context plays nothing through the element source.
+            if (webAudio?.context.state === 'suspended') {
+                webAudio.context.resume().catch(() => undefined);
+            }
             audio.play().catch(() => setIsPlaying(false));
         },
-        [seek],
+        [seek, webAudio],
     );
 
     const pause = useCallback(() => {
