@@ -5,7 +5,7 @@ import styles from './dj-waveform.module.css';
 
 import { DjPeaks } from '/@/renderer/features/dj/peaks/peaks-source';
 import { djMarks, EMPTY_MARKS } from '/@/renderer/features/dj/utils/dj-marks';
-import { AudioCodec, currentEngine } from '/@/renderer/features/dj/utils/dj-offset';
+import { TrackOffsetContext } from '/@/renderer/features/dj/utils/dj-offset';
 import {
     drawCues,
     drawGrid,
@@ -30,13 +30,14 @@ const MAX_ZOOM_SECONDS = 64;
 const DEFAULT_ZOOM_SECONDS = 8;
 
 export interface DjWaveformProps {
-    codec: AudioCodec;
     cuedata: DjCuedata | null | undefined;
     detailHeight?: number;
     /** Seconds. Used until the peaks say how long the decode really is. */
     durationSeconds: number;
     error?: null | string;
     isPlaying: boolean;
+    /** How this track's stored times convert to decode time (dj-offset). */
+    offset: TrackOffsetContext;
     onSeek: (decodeSeconds: number) => void;
     overviewHeight?: number;
     peaks: DjPeaks | null;
@@ -46,12 +47,12 @@ export interface DjWaveformProps {
 }
 
 export const DjWaveform = ({
-    codec,
     cuedata,
     detailHeight = 120,
     durationSeconds,
     error,
     isPlaying,
+    offset,
     onSeek,
     overviewHeight = 56,
     peaks,
@@ -59,10 +60,9 @@ export const DjWaveform = ({
     showDetail = true,
 }: DjWaveformProps) => {
     const duration = peaks?.durationSeconds || durationSeconds || 0;
-    const engine = useMemo(() => currentEngine(), []);
     const marks = useMemo(
-        () => (duration ? djMarks(cuedata, duration, { codec, engine }) : EMPTY_MARKS),
-        [codec, cuedata, duration, engine],
+        () => (duration ? djMarks(cuedata, duration, offset) : EMPTY_MARKS),
+        [cuedata, duration, offset],
     );
 
     const overview = useElementSize();

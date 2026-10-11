@@ -4,7 +4,11 @@ import styles from './prep-panels.module.css';
 
 import { PrepAudio } from '/@/renderer/features/dj/hooks/use-prep-audio';
 import { PAD_LETTERS, padColor } from '/@/renderer/features/dj/utils/dj-marks';
-import { djToDecodeSeconds, OffsetContext } from '/@/renderer/features/dj/utils/dj-offset';
+import {
+    djToDecodeSeconds,
+    markContext,
+    TrackOffsetContext,
+} from '/@/renderer/features/dj/utils/dj-offset';
 import {
     appName,
     formatBpm,
@@ -21,11 +25,12 @@ import { Text } from '/@/shared/components/text/text';
 
 // Subbox-only: the prep view's read-only panels (subbox-app#239, design-dj-ui §5.2):
 // the eight hot cue pads, the loops, memory cues and the grid. Times are shown as the
-// DJ app shows them; play buttons convert to decode time through dj-offset.
+// DJ app shows them; play buttons convert to decode time through dj-offset, each mark
+// through its own origin's app (#252).
 
 interface PanelProps {
     audio: PrepAudio;
-    context: OffsetContext;
+    context: TrackOffsetContext;
     dj: DjTrack;
     durationMs: number;
 }
@@ -73,7 +78,12 @@ export const PrepCues = ({ audio, context, dj }: PanelProps) => {
                                     aria-label={t('page.djPrep.playCue', { slot: letter })}
                                     icon="mediaPlay"
                                     onClick={() =>
-                                        audio.play(djToDecodeSeconds(cue.position, context))
+                                        audio.play(
+                                            djToDecodeSeconds(
+                                                cue.position,
+                                                markContext(context, cue.origin),
+                                            ),
+                                        )
                                     }
                                     size="xs"
                                     variant="subtle"
@@ -100,8 +110,9 @@ export const PrepLoops = ({ audio, context, dj, durationMs }: PanelProps) => {
             )}
             <Stack gap={2}>
                 {loops.map((loop) => {
-                    const start = djToDecodeSeconds(loop.start, context);
-                    const end = djToDecodeSeconds(loop.end, context);
+                    const loopContext = markContext(context, loop.origin);
+                    const start = djToDecodeSeconds(loop.start, loopContext);
+                    const end = djToDecodeSeconds(loop.end, loopContext);
                     const playing =
                         audio.isPlaying &&
                         audio.auditioning?.start === start &&
@@ -171,7 +182,14 @@ export const PrepMemoryCues = ({ audio, context, dj }: PanelProps) => {
                                 time: formatDjTime(mark.position),
                             })}
                             icon="mediaPlay"
-                            onClick={() => audio.play(djToDecodeSeconds(mark.position, context))}
+                            onClick={() =>
+                                audio.play(
+                                    djToDecodeSeconds(
+                                        mark.position,
+                                        markContext(context, mark.origin),
+                                    ),
+                                )
+                            }
                             size="xs"
                             variant="subtle"
                         />

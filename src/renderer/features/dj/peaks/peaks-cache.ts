@@ -8,7 +8,8 @@ import { DjPeaks, PeaksRequest } from '/@/renderer/features/dj/peaks/peaks-sourc
 // start-up.
 
 // Bump when the peaks computation changes, so old entries are never drawn.
-const PEAKS_VERSION = 1;
+// 2: peaks carry the MP3 tag (#252).
+const PEAKS_VERSION = 2;
 const MAX_ENTRIES = 300;
 const INDEX_KEY = '__index';
 

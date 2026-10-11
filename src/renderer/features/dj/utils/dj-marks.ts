@@ -1,10 +1,15 @@
 import { gridBeats, gridSegments } from '/@/renderer/features/dj/utils/beatgrid';
-import { djToDecodeSeconds, OffsetContext } from '/@/renderer/features/dj/utils/dj-offset';
+import {
+    djToDecodeSeconds,
+    markContext,
+    TrackOffsetContext,
+} from '/@/renderer/features/dj/utils/dj-offset';
 import { DjCuedata } from '/@/shared/api/pymix/pymix-types';
 
 // Subbox-only: a track's stored DJ data as things to draw, in decode seconds
 // (subbox-app#237). The conversion from DJ-app time happens here, through dj-offset,
-// so nothing that draws ever sees a stored position.
+// so nothing that draws ever sees a stored position. Each mark converts through its own
+// origin's app (#252): one track can hold a Rekordbox grid and a Serato cue.
 
 export const PAD_LETTERS = 'ABCDEFGH';
 
@@ -73,46 +78,56 @@ export const padColor = (color: null | string | undefined, slot: number) =>
 export const djMarks = (
     cuedata: DjCuedata | null | undefined,
     durationSeconds: number,
-    context: OffsetContext,
+    context: TrackOffsetContext,
 ): DjMarks => {
     if (!cuedata) return EMPTY_MARKS;
-    const at = (ms: number) => djToDecodeSeconds(ms, context);
+    const converter = (origin: null | string | undefined) => {
+        const mark = markContext(context, origin);
+        return (ms: number) => djToDecodeSeconds(ms, mark);
+    };
+    const gridAt = converter(cuedata.beatgrid_meta?.origin);
     const durationMs = durationSeconds * 1000;
 
     const cues = cuedata.cues.map((cue) => ({
         color: padColor(cue.color, cue.index),
         label: PAD_LETTERS[cue.index] ?? String(cue.index + 1),
         name: cue.name || '',
-        seconds: at(cue.position),
+        seconds: converter(cue.origin)(cue.position),
         slot: cue.index,
     }));
-    const loops = cuedata.loops.map((loop) => ({
-        color: padColor(loop.color, loop.index),
-        endSeconds: at(loop.end),
-        label: String(loop.index + 1),
-        name: loop.name || '',
-        slot: loop.index,
-        startSeconds: at(loop.start),
-    }));
-    const memory = (cuedata.memory ?? []).map((mark) => ({
-        color: mark.color && /^#[0-9a-f]{6}$/i.test(mark.color) ? mark.color : '#ffffff',
-        endSeconds: mark.end != null ? at(mark.end) : null,
-        name: mark.name || '',
-        seconds: at(mark.position),
-    }));
+    const loops = cuedata.loops.map((loop) => {
+        const at = converter(loop.origin);
+        return {
+            color: padColor(loop.color, loop.index),
+            endSeconds: at(loop.end),
+            label: String(loop.index + 1),
+            name: loop.name || '',
+            slot: loop.index,
+            startSeconds: at(loop.start),
+        };
+    });
+    const memory = (cuedata.memory ?? []).map((mark) => {
+        const at = converter(mark.origin);
+        return {
+            color: mark.color && /^#[0-9a-f]{6}$/i.test(mark.color) ? mark.color : '#ffffff',
+            endSeconds: mark.end != null ? at(mark.end) : null,
+            name: mark.name || '',
+            seconds: at(mark.position),
+        };
+    });
 
     const beats = gridBeats(cuedata.beatgrid, durationMs).map((beat) => ({
         bar: beat.bar,
         isAnchor: beat.isAnchor,
         isDownbeat: beat.isDownbeat,
-        seconds: at(beat.ms),
+        seconds: gridAt(beat.ms),
     }));
     const segments = gridSegments(cuedata.beatgrid, durationMs);
     const anchors = segments.map((segment, i) => {
         const changed = i === 0 || Math.abs(segment.bpm - segments[i - 1].bpm) >= 0.005;
         return {
             bpmLabel: changed ? segment.bpm.toFixed(2) : null,
-            seconds: at(segment.startMs),
+            seconds: gridAt(segment.startMs),
         };
     });
 
