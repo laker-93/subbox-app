@@ -18,6 +18,11 @@ import styles from './table-config.module.css';
 
 import { ItemTableListColumnConfig } from '/@/renderer/components/item-list/types';
 import {
+    isDjColumn,
+    useShowDjColumns,
+    withoutDjColumns,
+} from '/@/renderer/features/dj/hooks/use-dj-columns';
+import {
     ListConfigBooleanControl,
     ListConfigTable,
 } from '/@/renderer/features/shared/components/list-config-menu';
@@ -70,6 +75,7 @@ export const TableConfig = ({
     tableKey = 'main',
 }: TableConfigProps) => {
     const { t } = useTranslation();
+    const showDj = useShowDjColumns();
 
     const list = useSettingsStore((state) => state.lists[listKey]) as ItemListSettings;
     const { setList } = useSettingsStoreActions();
@@ -295,6 +301,7 @@ export const TableConfig = ({
             <TableColumnConfig
                 data={tableColumnsData}
                 enablePinColumnButtons={enablePinColumnButtons}
+                hideDjColumns={tableKey === 'detail' || !showDj}
                 onChange={(columns) => setTableUpdate({ columns })}
                 value={table.columns}
             />
@@ -305,21 +312,31 @@ export const TableConfig = ({
 const TableColumnConfig = ({
     data,
     enablePinColumnButtons,
+    hideDjColumns,
     onChange,
-    value,
+    value: allColumns,
 }: {
     data: { label: string; value: string }[];
     enablePinColumnButtons: boolean;
+    // Subbox (#240): DJ columns are listed only in DJ mode. Every handler below works
+    // on the full list (valueRef), so a hidden column keeps its place and settings.
+    hideDjColumns: boolean;
     onChange: (value: ItemTableListColumnConfig[]) => void;
     value: ItemTableListColumnConfig[];
 }) => {
     const { t } = useTranslation();
 
-    const valueRef = useRef(value);
+    const value = useMemo(
+        () => (hideDjColumns ? withoutDjColumns(allColumns) : allColumns),
+        [allColumns, hideDjColumns],
+    );
+    const valueRef = useRef(allColumns);
+    const hiddenRef = useRef((id: string) => hideDjColumns && isDjColumn(id));
     const onChangeRef = useRef(onChange);
 
     useLayoutEffect(() => {
-        valueRef.current = value;
+        valueRef.current = allColumns;
+        hiddenRef.current = (id: string) => hideDjColumns && isDjColumn(id);
         onChangeRef.current = onChange;
     });
 
@@ -341,23 +358,28 @@ const TableColumnConfig = ({
         onChangeRef.current(newValues);
     }, []);
 
-    const handleMoveUp = useCallback((item: ItemTableListColumnConfig) => {
+    // Swaps with the nearest listed column that way, so a move never lands on a
+    // hidden DJ column and looks like it did nothing.
+    const move = useCallback((item: ItemTableListColumnConfig, step: -1 | 1) => {
         const currentValue = valueRef.current;
         const index = currentValue.findIndex((v) => v.id === item.id);
-        if (index === 0) return;
+        let other = index + step;
+        while (
+            other >= 0 &&
+            other < currentValue.length &&
+            hiddenRef.current(currentValue[other].id)
+        ) {
+            other += step;
+        }
+        if (other < 0 || other >= currentValue.length) return;
         const newValues = [...currentValue];
-        [newValues[index], newValues[index - 1]] = [newValues[index - 1], newValues[index]];
+        [newValues[index], newValues[other]] = [newValues[other], newValues[index]];
         onChangeRef.current(newValues);
     }, []);
 
-    const handleMoveDown = useCallback((item: ItemTableListColumnConfig) => {
-        const currentValue = valueRef.current;
-        const index = currentValue.findIndex((v) => v.id === item.id);
-        if (index === currentValue.length - 1) return;
-        const newValues = [...currentValue];
-        [newValues[index], newValues[index + 1]] = [newValues[index + 1], newValues[index]];
-        onChangeRef.current(newValues);
-    }, []);
+    const handleMoveUp = useCallback((item: ItemTableListColumnConfig) => move(item, -1), [move]);
+
+    const handleMoveDown = useCallback((item: ItemTableListColumnConfig) => move(item, 1), [move]);
 
     const handlePinToLeft = useCallback((item: ItemTableListColumnConfig) => {
         const currentValue = valueRef.current;

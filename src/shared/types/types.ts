@@ -178,6 +178,11 @@ export enum TableColumn {
     COMPOSER = 'composer',
     DATE_ADDED = 'createdAt',
     DISC_NUMBER = 'discNumber',
+    // Subbox: the DJ columns (#240), shown only in DJ mode.
+    DJ_CUES = 'djCues',
+    DJ_GRID = 'djGrid',
+    DJ_KEY = 'djKey',
+    DJ_SOURCE = 'djSource',
     DURATION = 'duration',
     GENRE = 'genres',
     GENRE_BADGE = 'genreBadge',

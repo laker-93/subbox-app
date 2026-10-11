@@ -41,6 +41,12 @@ import {
     RelativeDateColumn,
 } from '/@/renderer/components/item-list/item-table-list/columns/date-column';
 import { DefaultColumn } from '/@/renderer/components/item-list/item-table-list/columns/default-column';
+import {
+    DjCuesColumn,
+    DjGridColumn,
+    DjKeyColumn,
+    DjSourceColumn,
+} from '/@/renderer/components/item-list/item-table-list/columns/dj-columns';
 import { DurationColumn } from '/@/renderer/components/item-list/item-table-list/columns/duration-column';
 import { FavoriteColumn } from '/@/renderer/components/item-list/item-table-list/columns/favorite-column';
 import { GenreBadgeColumn } from '/@/renderer/components/item-list/item-table-list/columns/genre-badge-column';
@@ -242,6 +248,18 @@ const ItemTableListColumnBase = (props: ItemTableListColumn) => {
 
             case TableColumn.DATE_ADDED:
                 return <DateColumn {...props} {...dragProps} controls={controls} type={type} />;
+
+            case TableColumn.DJ_CUES:
+                return <DjCuesColumn {...props} {...dragProps} controls={controls} type={type} />;
+
+            case TableColumn.DJ_GRID:
+                return <DjGridColumn {...props} {...dragProps} controls={controls} type={type} />;
+
+            case TableColumn.DJ_KEY:
+                return <DjKeyColumn {...props} {...dragProps} controls={controls} type={type} />;
+
+            case TableColumn.DJ_SOURCE:
+                return <DjSourceColumn {...props} {...dragProps} controls={controls} type={type} />;
 
             case TableColumn.DURATION:
                 return <DurationColumn {...props} {...dragProps} controls={controls} type={type} />;
@@ -1040,6 +1058,12 @@ export const columnLabelMap: Record<TableColumn, ReactNode | string> = {
             <Icon icon="disc" />
         </Flex>
     ),
+    [TableColumn.DJ_CUES]: i18n.t('table.column.djCues', { postProcess: 'upperCase' }) as string,
+    [TableColumn.DJ_GRID]: i18n.t('table.column.djGrid', { postProcess: 'upperCase' }) as string,
+    [TableColumn.DJ_KEY]: i18n.t('table.column.djKey', { postProcess: 'upperCase' }) as string,
+    [TableColumn.DJ_SOURCE]: i18n.t('table.column.djSource', {
+        postProcess: 'upperCase',
+    }) as string,
     [TableColumn.DURATION]: (
         <Flex className={styles.headerIconWrapper}>
             <Icon icon="duration" />

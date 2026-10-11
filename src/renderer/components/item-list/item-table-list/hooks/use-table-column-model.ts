@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { parseTableColumns } from '/@/renderer/components/item-list/helpers/parse-table-columns';
 import { ItemTableListColumnConfig } from '/@/renderer/components/item-list/types';
+import { useShowDjColumns, withoutDjColumns } from '/@/renderer/features/dj/hooks/use-dj-columns';
 
 export const useTableColumnModel = ({
     autoFitColumns,
@@ -14,7 +15,11 @@ export const useTableColumnModel = ({
     columns: ItemTableListColumnConfig[];
     totalContainerWidth: number;
 }) => {
-    const parsedColumns = useMemo(() => parseTableColumns(columns), [columns]);
+    const showDj = useShowDjColumns();
+    const parsedColumns = useMemo(
+        () => parseTableColumns(showDj ? columns : withoutDjColumns(columns)),
+        [columns, showDj],
+    );
 
     const calculatedColumnWidths = useMemo(() => {
         const baseWidths = parsedColumns.map((c) => c.width);

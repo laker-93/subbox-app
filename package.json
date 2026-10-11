@@ -70,6 +70,7 @@
         "check:record-locations": "tsx scripts/check-record-locations.ts",
         "check:tracks-in-place": "tsx scripts/check-tracks-in-place.ts",
         "check:dj-offset": "tsx --import ./scripts/renderer-alias.mjs scripts/check-dj-offset.ts",
+        "check:musical-key": "tsx scripts/check-musical-key.ts",
         "postinstall": "electron-builder install-app-deps",
         "lint": "pnpm run typecheck && pnpm run lint-code && pnpm run lint-styles",
         "lint-code": "eslint --max-warnings=0 --cache .",

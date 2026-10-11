@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 
 import { DefaultTableColumn } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { ItemListColumnVisibility } from '/@/renderer/components/item-list/types';
+import { useShowDjColumns, withoutDjColumns } from '/@/renderer/features/dj/hooks/use-dj-columns';
 import { useSettingsStore, useSettingsStoreActions } from '/@/renderer/store';
 import { ItemListKey, TableColumn } from '/@/shared/types/types';
 
@@ -35,15 +36,17 @@ export const useItemListColumnVisibility = ({
 
     // Settings hold every column, enabled or not, in display order — that order is what
     // the menu lists. A column with no label here is one this table doesn't offer.
+    const showDj = useShowDjColumns();
     const menuColumns = useMemo(() => {
-        return (columns ?? [])
+        const all = columns ?? [];
+        return (showDj ? all : withoutDjColumns(all))
             .filter((column) => labels.has(column.id))
             .map((column) => ({
                 id: column.id,
                 isEnabled: column.isEnabled,
                 label: labels.get(column.id) as string,
             }));
-    }, [columns, labels]);
+    }, [columns, labels, showDj]);
 
     const onToggleColumn = useCallback(
         (columnId: TableColumn) => {

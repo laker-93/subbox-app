@@ -575,6 +575,11 @@
         "djMode": {
             "description": "Show cues, loops, beat grids and key on your tracks, and the tools to prepare them. Turning it off only hides them: imports and exports carry your DJ data either way.",
             "importOffer": "Your cues and grids came across. Turn on DJ mode to see and edit them?",
+            "keyNotation": "Key notation",
+            "keyNotationBoth": "Both (8A · Am)",
+            "keyNotationCamelot": "Camelot (8A)",
+            "keyNotationDescription": "How the Key column writes a key. Only the display changes: the key is stored once, whichever you pick.",
+            "keyNotationMusical": "Musical (Am)",
             "saveFailed": "Couldn't save DJ mode. Try again.",
             "syncHint": "DJ mode shows the cues, loops and grids your Rekordbox or Serato library brings with it.",
             "title": "DJ mode",
@@ -1407,9 +1412,14 @@
             "comment": "comment",
             "dateAdded": "date added",
             "discNumber": "disc",
+            "djCues": "cues",
+            "djGrid": "grid",
+            "djKey": "key",
+            "djSource": "source",
             "favorite": "favorite",
             "genre": "$t(entity.genre, {\"count\": 1})",
             "lastPlayed": "last played",
+            "owner": "owner",
             "path": "path",
             "playCount": "plays",
             "rating": "rating",
@@ -1419,8 +1429,7 @@
             "size": "$t(common.size)",
             "songCount": "$t(entity.track, {\"count\": 2})",
             "title": "title",
-            "trackNumber": "track",
-            "owner": "owner"
+            "trackNumber": "track"
         },
         "config": {
             "general": {
@@ -1458,9 +1467,9 @@
             "label": {
                 "actions": "$t(common.action, {\"count\": 2})",
                 "album": "$t(entity.album, {\"count\": 1})",
-                "albumGroup": "album group",
-                "albumCount": "$t(entity.album, {\"count\": 2})",
                 "albumArtist": "$t(entity.albumArtist, {\"count\": 1})",
+                "albumCount": "$t(entity.album, {\"count\": 2})",
+                "albumGroup": "album group",
                 "artist": "$t(entity.artist, {\"count\": 1})",
                 "biography": "$t(common.biography)",
                 "bitDepth": "$t(common.bitDepth)",
@@ -1471,6 +1480,10 @@
                 "composer": "composer",
                 "dateAdded": "date added",
                 "discNumber": "disc number",
+                "djCues": "cues",
+                "djGrid": "beat grid",
+                "djKey": "key",
+                "djSource": "DJ data source",
                 "duration": "$t(common.duration)",
                 "favorite": "$t(common.favorite)",
                 "genre": "$t(entity.genre, {\"count\": 1})",
@@ -1498,6 +1511,14 @@
                 "grid": "grid",
                 "list": "list",
                 "table": "table"
+            }
+        },
+        "dj": {
+            "cuesTooltip": "Hot cues: {{cues}} · Loops: {{loops}} · Memory cues: {{memory}}",
+            "grid": {
+                "app": "App",
+                "edited": "Edited",
+                "locked": "Locked"
             }
         }
     },
