@@ -68,6 +68,11 @@
     }
 }
 
+.slider-value-wrapper-wide {
+    max-width: 72px;
+    font-variant-numeric: tabular-nums;
+}
+
 .slider-wrapper {
     display: flex;
     flex: 6;

@@ -20,6 +20,7 @@ import { useDjPeaks } from '/@/renderer/features/dj/hooks/use-dj-peaks';
 import { usePrepAudio } from '/@/renderer/features/dj/hooks/use-prep-audio';
 import { useTrackDj } from '/@/renderer/features/dj/hooks/use-track-dj';
 import { PrepListEntry, PrepLocationState, prepPath } from '/@/renderer/features/dj/prep/prep-list';
+import { setPrepSession } from '/@/renderer/features/dj/prep/prep-session.store';
 import {
     codecOf,
     currentEngine,
@@ -38,7 +39,7 @@ import { rawStreamUrl } from '/@/renderer/features/dj/utils/raw-stream';
 import { AnimatedPage } from '/@/renderer/features/shared/components/animated-page';
 import { LibraryHeaderBar } from '/@/renderer/features/shared/components/library-header-bar';
 import { PageErrorBoundary } from '/@/renderer/features/shared/components/page-error-boundary';
-import { useCurrentServerId } from '/@/renderer/store';
+import { useCurrentServerId, usePlayerStoreBase, useTimestampStoreBase } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
@@ -47,6 +48,7 @@ import { ScrollArea } from '/@/shared/components/scroll-area/scroll-area';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
+import { PlayerStatus } from '/@/shared/types/types';
 
 // Subbox-only: one track's prep view, read-only (subbox-app#239, design-dj-ui §5.2). The
 // waveform with everything the DJ apps stored on it, the eight pads, loops, memory cues
@@ -137,6 +139,66 @@ const DjPrepRoute = () => {
         else navigate('/');
     }, [location.key, navigate]);
 
+    // The player bar drives this page's audio while it's open (prep-session.store.ts).
+    const { pause, seek, toggle } = audio;
+    const stop = useCallback(() => {
+        pause();
+        seek(0);
+    }, [pause, seek]);
+    const goPrev = useMemo(() => (prev ? () => go(prev) : null), [go, prev]);
+    const goNext = useMemo(() => (next ? () => go(next) : null), [go, next]);
+    const formatTime = useCallback(
+        (seconds: number) => formatDjTime(decodeSecondsToDj(seconds, context)),
+        [context],
+    );
+    const sessionDuration = song?.duration ? song.duration / 1000 : 0;
+    useEffect(() => {
+        if (!active) {
+            setPrepSession(null);
+            return;
+        }
+        setPrepSession({
+            auditioning: Boolean(audio.auditioning),
+            durationSeconds: sessionDuration,
+            formatTime,
+            isPlaying: audio.isPlaying,
+            next: goNext,
+            position: audio.position,
+            prev: goPrev,
+            seek,
+            song: song ?? null,
+            stop,
+            toggle,
+        });
+    }, [
+        active,
+        audio.auditioning,
+        audio.isPlaying,
+        audio.position,
+        formatTime,
+        goNext,
+        goPrev,
+        seek,
+        sessionDuration,
+        song,
+        stop,
+        toggle,
+    ]);
+    useEffect(() => () => setPrepSession(null), []);
+
+    // Opening prep hands the bar to this track, so the app's player pauses rather than
+    // play on under a bar that no longer shows it. Opened on the track that was playing
+    // (the full-screen player's button), prep picks up where it was.
+    const songLoaded = Boolean(song);
+    useEffect(() => {
+        if (!active || !songLoaded || !songId) return;
+        const player = usePlayerStoreBase.getState();
+        if (player.player.status === PlayerStatus.PLAYING) player.mediaPause();
+        if (player.getCurrentSong()?.id === songId) {
+            seek(useTimestampStoreBase.getState().timestamp);
+        }
+    }, [active, seek, songId, songLoaded]);
+
     useEffect(() => {
         if (!active) return undefined;
         const onKey = (event: KeyboardEvent) => {
@@ -221,28 +283,6 @@ const DjPrepRoute = () => {
                     peaks={peaks.peaks}
                     position={audio.position}
                 />
-                <Group gap="sm">
-                    <ActionIcon
-                        aria-label={
-                            audio.isPlaying
-                                ? t('player.pause', { postProcess: 'sentenceCase' })
-                                : t('player.play', { postProcess: 'sentenceCase' })
-                        }
-                        icon={audio.isPlaying ? 'mediaPause' : 'mediaPlay'}
-                        onClick={audio.toggle}
-                        size="lg"
-                        tooltip={{ label: t('page.djPrep.playKey') }}
-                        variant="filled"
-                    />
-                    <Text className={styles.clock} size="sm">
-                        {formatDjTime(decodeSecondsToDj(audio.position, context))}
-                    </Text>
-                    {audio.auditioning && (
-                        <Text isMuted size="sm">
-                            {t('page.djPrep.looping')}
-                        </Text>
-                    )}
-                </Group>
                 {dj && (
                     <div className={styles.panels}>
                         <Stack gap="md">
