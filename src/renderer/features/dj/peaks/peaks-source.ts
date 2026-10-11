@@ -1,3 +1,4 @@
+import { Mp3Tag } from '/@/renderer/features/dj/utils/mp3-tag';
 import { Song } from '/@/shared/types/domain-types';
 
 // Subbox-only: where the DJ waveform's peaks come from (subbox-app#237, design-dj-ui
@@ -15,6 +16,8 @@ export interface DjPeaks {
     high: Uint8Array;
     low: Uint8Array;
     mid: Uint8Array;
+    /** An MP3's first-frame tag, read off the same bytes; WebKit's offset needs it (#252). */
+    mp3Tag?: Mp3Tag | null;
     peaksPerSecond: number;
 }
 

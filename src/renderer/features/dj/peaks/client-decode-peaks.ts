@@ -1,4 +1,6 @@
 import { DjPeaks, PeaksSource } from '/@/renderer/features/dj/peaks/peaks-source';
+import { codecOf } from '/@/renderer/features/dj/utils/dj-offset';
+import { sniffMp3Tag } from '/@/renderer/features/dj/utils/mp3-tag';
 import { rawStreamUrl } from '/@/renderer/features/dj/utils/raw-stream';
 
 // Subbox-only: peaks from the browser's own decode of the original file (subbox-app#237,
@@ -30,6 +32,8 @@ export const clientDecodePeaks: PeaksSource = {
         if (!response.ok) throw new Error(`Couldn't fetch the track (${response.status})`);
         const encoded = await response.arrayBuffer();
         signal.throwIfAborted();
+        // Before decoding: decodeAudioData detaches the buffer.
+        const mp3Tag = codecOf(song.container) === 'mp3' ? sniffMp3Tag(encoded) : null;
 
         const context = new OfflineAudioContext(1, 1, DECODE_RATE);
         const decoded = await context.decodeAudioData(encoded);
@@ -37,7 +41,7 @@ export const clientDecodePeaks: PeaksSource = {
         const channels = Array.from({ length: decoded.numberOfChannels }, (_, c) =>
             decoded.getChannelData(c),
         );
-        return computePeaks(channels, decoded.sampleRate, signal);
+        return { ...(await computePeaks(channels, decoded.sampleRate, signal)), mp3Tag };
     },
 };
 

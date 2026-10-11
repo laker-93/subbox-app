@@ -15,7 +15,8 @@ import { subboxIdOf } from '/@/renderer/features/dj/utils/subbox-id';
 //
 // The playerbar's waveform is still the 64 kbps transcode (§4.2): at this scale a pixel
 // is hundreds of milliseconds, so its timing error doesn't show. Positions still go
-// through dj-offset, like everything else that draws a stored time. DJ mode only.
+// through dj-offset, like everything else that draws a stored time; without the
+// file's MP3 tag, which only WebKit needs and only to ~13 ms. DJ mode only.
 // While the prep view drives the bar (prep-session.store.ts), they are the prep track's.
 
 const percent = (seconds: number, duration: number) =>
@@ -34,9 +35,11 @@ export const DjSeekMarkers = () => {
                 ? djMarks(dj.cuedata, duration, {
                       codec: codecOf(song?.container),
                       engine: currentEngine(),
+                      sampleRate: song?.sampleRate,
+                      sourceApp: dj.source_app,
                   })
                 : null,
-        [dj, duration, song?.container],
+        [dj, duration, song?.container, song?.sampleRate],
     );
 
     if (!djMode.enabled || !marks || (!marks.cues.length && !marks.loops.length)) return null;

@@ -25,7 +25,8 @@ import {
     codecOf,
     currentEngine,
     decodeSecondsToDj,
-    OffsetContext,
+    markContext,
+    TrackOffsetContext,
 } from '/@/renderer/features/dj/utils/dj-offset';
 import {
     appName,
@@ -112,9 +113,16 @@ const DjPrepRoute = () => {
     const src = useMemo(() => (active && song ? rawStreamUrl(song) : null), [active, song]);
     const audio = usePrepAudio(src);
 
-    const context: OffsetContext = useMemo(
-        () => ({ codec: codecOf(song?.container), engine: currentEngine() }),
-        [song?.container],
+    const mp3Tag = peaks.peaks?.mp3Tag;
+    const context: TrackOffsetContext = useMemo(
+        () => ({
+            codec: codecOf(song?.container),
+            engine: currentEngine(),
+            mp3Tag,
+            sampleRate: song?.sampleRate,
+            sourceApp: dj?.source_app,
+        }),
+        [dj?.source_app, mp3Tag, song?.container, song?.sampleRate],
     );
     const durationMs = (peaks.peaks?.durationSeconds ?? 0) * 1000 || song?.duration || 0;
 
@@ -148,7 +156,8 @@ const DjPrepRoute = () => {
     const goPrev = useMemo(() => (prev ? () => go(prev) : null), [go, prev]);
     const goNext = useMemo(() => (next ? () => go(next) : null), [go, next]);
     const formatTime = useCallback(
-        (seconds: number) => formatDjTime(decodeSecondsToDj(seconds, context)),
+        // In the clock of the app the track came from.
+        (seconds: number) => formatDjTime(decodeSecondsToDj(seconds, markContext(context, null))),
         [context],
     );
     const sessionDuration = song?.duration ? song.duration / 1000 : 0;
@@ -272,12 +281,12 @@ const DjPrepRoute = () => {
                     </Text>
                 )}
                 <DjWaveform
-                    codec={context.codec}
                     cuedata={dj?.cuedata}
                     detailHeight={140}
                     durationSeconds={(song.duration ?? 0) / 1000}
                     error={peaks.status === 'error' ? t('page.djPrep.waveformFailed') : null}
                     isPlaying={audio.isPlaying}
+                    offset={context}
                     onSeek={audio.seek}
                     overviewHeight={64}
                     peaks={peaks.peaks}
