@@ -572,6 +572,15 @@
         }
     },
     "page": {
+        "djMode": {
+            "description": "Show cues, loops, beat grids and key on your tracks, and the tools to prepare them. Turning it off only hides them: imports and exports carry your DJ data either way.",
+            "importOffer": "Your cues and grids came across. Turn on DJ mode to see and edit them?",
+            "saveFailed": "Couldn't save DJ mode. Try again.",
+            "syncHint": "DJ mode shows the cues, loops and grids your Rekordbox or Serato library brings with it.",
+            "title": "DJ mode",
+            "turnOn": "Turn on DJ mode",
+            "turnedOn": "DJ mode is on. You can turn it off in Settings."
+        },
         "trash": {
             "confirmEmpty": "Empty the trash? Everything in it is deleted for good. This can't be undone.",
             "confirmPurge": "Delete {{label}} for good? This can't be undone.",
