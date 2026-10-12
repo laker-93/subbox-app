@@ -39,6 +39,8 @@ export interface OffsetContext extends Omit<TrackOffsetContext, 'sourceApp'> {
 /** One track's side of the offset: everything but which app placed the mark. */
 export interface TrackOffsetContext {
     codec: AudioCodec;
+    /** The track's `cuedata.edit_clock`: the app an `edit` mark's time is in (#241). */
+    editClock?: DjApp | null;
     engine: DecodeEngine;
     /** From the waveform's fetch of the original file. Only WebKit MP3 needs it. */
     mp3Tag?: Mp3Tag | null;
@@ -74,21 +76,28 @@ export const codecOf = (container?: null | string): AudioCodec => {
  * `file` is a Serato GEOB frame read at ingest. A mark with no origin predates origins
  * and is the row's `source_app`'s, which is `file` for the same GEOB read.
  */
-export const appOf = (origin: null | string | undefined, sourceApp?: null | string) => {
+export const appOf = (
+    origin: null | string | undefined,
+    sourceApp?: null | string,
+    editClock?: DjApp | null,
+): DjApp | null => {
+    // An edit made in subbox is in the track's own app's time (#241, pymix#291): the
+    // `edit_clock` its first edit fixed. One written before that has none, and pymix
+    // would have picked Rekordbox for it.
+    if (origin === 'edit') return editClock ?? 'rekordbox';
     const app = origin || sourceApp;
     if (app === 'import:rekordbox' || app === 'rekordbox') return 'rekordbox';
     if (app === 'import:serato' || app === 'serato' || app === 'file') return 'serato';
-    // TODO(subbox-app#241): `edit`, and later `analysis` and `recipe:`, have no DJ app
-    // behind them, and their time convention is decided there. Nothing writes them yet;
-    // until then they read as decode time.
+    // TODO(track B): `analysis` and `recipe:` have no DJ app behind them yet; their
+    // convention comes with the analyser. Nothing writes them, and they read as decode time.
     return null;
 };
 
 /** The context one mark converts through. */
 export const markContext = (
-    { sourceApp, ...track }: TrackOffsetContext,
+    { editClock, sourceApp, ...track }: TrackOffsetContext,
     origin: null | string | undefined,
-): OffsetContext => ({ ...track, app: appOf(origin, sourceApp) });
+): OffsetContext => ({ ...track, app: appOf(origin, sourceApp, editClock) });
 
 /**
  * Milliseconds each DJ app places a moment after ffmpeg's decode does (B0.3). FLAC

@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import { pymixApiClient } from '/@/renderer/api/pymix/pymix-api';
 import {
+    DjHistory,
+    DjPatch,
     DjSummary,
     DjTrack,
     PlaylistTree,
@@ -51,6 +53,10 @@ export class PymixUploadForbiddenError extends Error {
 
 export const isUploadForbidden = (err: unknown): boolean =>
     err instanceof PymixUploadForbiddenError;
+
+export type DjWriteResult =
+    | { conflict: false; track: DjTrack }
+    | { conflict: true; current: DjTrack };
 
 /** Why an invite request failed, so the form can say something useful about each case. */
 export type InviteRequestFailure = 'failed' | 'invalid' | 'rateLimited';
@@ -150,6 +156,15 @@ export class PymixInviteRequestError extends Error {
         this.reason = reason;
     }
 }
+
+const djWriteResult = (res: { body: unknown; status: number }, fallback: string): DjWriteResult => {
+    const data = (res.body as null | { data?: unknown })?.data;
+    if (res.status === 200) return { conflict: false, track: data as DjTrack };
+    if (res.status === 409)
+        return { conflict: true, current: (data as { current: DjTrack }).current };
+    const detail = (data as null | { detail?: unknown })?.detail;
+    throw new Error(typeof detail === 'string' ? detail : fallback);
+};
 
 export const PymixController = {
     checkStorage: async (args: PymixClientArgs & StorageCheckArgs) => {
@@ -361,6 +376,20 @@ export const PymixController = {
         return res.body.data;
     },
 
+    // A track's DJ versions, newest first, each with what it changed (#241, pymix#270).
+    getTrackDjHistory: async (args: PymixClientArgs & { subboxId: string }): Promise<DjHistory> => {
+        const { baseUrl, signal, subboxId, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).getTrackDjHistory({
+            params: { subboxId },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get DJ history');
+        }
+
+        return res.body.data;
+    },
+
     // The restorable batches, newest first (#150; the Trash screen is #152).
     getTrash: async (args: PymixClientArgs) => {
         const { baseUrl, signal, token } = args;
@@ -440,6 +469,20 @@ export const PymixController = {
         }
 
         return res.body.data;
+    },
+
+    // One edit to a track's DJ data (#241, pymix#270): the track at its new version, or
+    // `conflict` with the track as it now is when `expected_version` is stale (409).
+    // A refused edit (422) throws with pymix's reason, which is written for the user.
+    patchTrackDj: async (
+        args: PymixClientArgs & { body: DjPatch; subboxId: string },
+    ): Promise<DjWriteResult> => {
+        const { baseUrl, body, signal, subboxId, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).patchTrackDj({
+            body,
+            params: { subboxId },
+        });
+        return djWriteResult(res, 'Failed to save the edit');
     },
 
     // Destroy one batch now. For playlists, the only place they leave Navidrome.
@@ -523,6 +566,18 @@ export const PymixController = {
         }
 
         return res.body.data;
+    },
+
+    // Write an earlier version back as a new one (#241, pymix#270); 409 as patchTrackDj.
+    revertTrackDj: async (
+        args: PymixClientArgs & { expectedVersion: number; subboxId: string; toVersion: number },
+    ): Promise<DjWriteResult> => {
+        const { baseUrl, expectedVersion, signal, subboxId, token, toVersion } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).revertTrackDj({
+            body: { expected_version: expectedVersion, to_version: toVersion },
+            params: { subboxId },
+        });
+        return djWriteResult(res, 'Failed to revert');
     },
 
     seratoExport: async (args: PymixClientArgs & SeratoExportArgs) => {

@@ -127,6 +127,14 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    getTrackDjHistory: {
+        method: 'GET',
+        path: 'track/:subboxId/dj/history',
+        responses: {
+            200: resultWithHeaders(pymixType._response.djHistory),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     getTrash: {
         method: 'GET',
         path: 'trash',
@@ -194,6 +202,16 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    patchTrackDj: {
+        body: pymixType._parameters.djPatch,
+        method: 'PATCH',
+        path: 'track/:subboxId/dj',
+        responses: {
+            200: resultWithHeaders(pymixType._response.djTrack),
+            409: resultWithHeaders(pymixType._response.djConflict),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     purgeTrashBatch: {
         body: null,
         method: 'DELETE',
@@ -227,6 +245,16 @@ export const contract = c.router({
         path: 'trash/:id/restore',
         responses: {
             200: resultWithHeaders(pymixType._response.trashRestored),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
+    revertTrackDj: {
+        body: pymixType._parameters.djRevert,
+        method: 'POST',
+        path: 'track/:subboxId/dj/revert',
+        responses: {
+            200: resultWithHeaders(pymixType._response.djTrack),
+            409: resultWithHeaders(pymixType._response.djConflict),
             500: resultWithHeaders(pymixType._response.error),
         },
     },
