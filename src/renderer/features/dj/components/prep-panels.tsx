@@ -440,6 +440,21 @@ export const PrepLoops = ({
                                 </Text>
                             )}
                             <ActionIcon
+                                aria-label={t('page.djPrep.playLoop', { slot: loop.index + 1 })}
+                                icon="mediaPlay"
+                                onClick={() => {
+                                    // Plays on through the loop's end; pausing first drops
+                                    // an audition, which would otherwise keep wrapping.
+                                    if (audio.auditioning) audio.pause();
+                                    audio.play(start);
+                                }}
+                                size="xs"
+                                tooltip={{
+                                    label: t('page.djPrep.playLoop', { slot: loop.index + 1 }),
+                                }}
+                                variant="subtle"
+                            />
+                            <ActionIcon
                                 aria-label={
                                     playing
                                         ? t('page.djPrep.stopLoop')
@@ -451,6 +466,11 @@ export const PrepLoops = ({
                                     playing ? audio.pause() : audio.playLoop(start, end)
                                 }
                                 size="xs"
+                                tooltip={{
+                                    label: playing
+                                        ? t('page.djPrep.stopLoop')
+                                        : t('page.djPrep.auditionLoop', { slot: loop.index + 1 }),
+                                }}
                                 variant={playing ? 'filled' : 'subtle'}
                             />
                             {editing && (

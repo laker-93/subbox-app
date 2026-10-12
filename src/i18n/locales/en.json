@@ -644,6 +644,7 @@
             "padsFull": "All 8 pads are set. Delete one, or move it, first.",
             "playCue": "Play from cue {{slot}}",
             "playKey": "Play / pause (space)",
+            "playLoop": "Play from loop {{slot}}",
             "playMemory": "Play from {{time}}",
             "prefix": "Prep",
             "previous": "Previous track",
