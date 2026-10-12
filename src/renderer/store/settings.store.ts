@@ -14,6 +14,8 @@ import i18n from '/@/i18n/i18n';
 import {
     ALBUM_ARTIST_TABLE_COLUMNS,
     ALBUM_TABLE_COLUMNS,
+    DJ_COLUMNS,
+    DJ_DEFAULT_COLUMNS,
     GENRE_TABLE_COLUMNS,
     pickGridRows,
     pickTableColumns,
@@ -459,6 +461,8 @@ export const GeneralSettingsSchema = z.object({
     collections: z.array(CollectionSchema),
     combinedLyricsAndVisualizer: z.boolean(),
     disabledContextMenu: z.record(z.string(), z.boolean()),
+    // Subbox: whether DJ mode has turned on its default columns on this device (#259).
+    djColumnsSeeded: z.boolean().optional(),
     enableGridMultiSelect: z.boolean(),
     externalLinks: z.boolean(),
     followCurrentSong: z.boolean(),
@@ -880,6 +884,7 @@ export interface SettingsSlice extends z.infer<typeof SettingsStateSchema> {
         removeCollection: (id: string) => void;
         reset: () => void;
         resetSampleRate: () => void;
+        seedDjColumns: () => void;
         setArtistItems: (item: SortableItem<ArtistItem>[]) => void;
         setArtistReleaseTypeItems: (item: SortableItem<ArtistReleaseTypeItem>[]) => void;
         setGenreBehavior: (target: GenreTarget) => void;
@@ -1119,6 +1124,7 @@ const initialState: SettingsState = {
         collections: [],
         combinedLyricsAndVisualizer: false,
         disabledContextMenu: {},
+        djColumnsSeeded: false,
         enableGridMultiSelect: false,
         externalLinks: true,
         followCurrentSong: true,
@@ -1949,6 +1955,28 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                                 state.playback.mpvProperties.audioSampleRateHz = 0;
                             });
                         },
+                        // Subbox (#259): the first time DJ mode is on, the Tracks and
+                        // playlist tables show Key and Cues, so turning it on visibly
+                        // does something. Once only, and not in a table where the user
+                        // has already turned a DJ column on: after that the columns are
+                        // theirs, kept across mode changes like any other.
+                        seedDjColumns: () => {
+                            set((state) => {
+                                if (state.general.djColumnsSeeded) return;
+                                state.general.djColumnsSeeded = true;
+                                [ItemListKey.SONG, ItemListKey.PLAYLIST_SONG].forEach((key) => {
+                                    const columns = state.lists[key]?.table?.columns;
+                                    if (!columns) return;
+                                    const dj = columns.filter((col) => DJ_COLUMNS.includes(col.id));
+                                    if (dj.some((col) => col.isEnabled)) return;
+                                    dj.forEach((col) => {
+                                        if (DJ_DEFAULT_COLUMNS.includes(col.id)) {
+                                            col.isEnabled = true;
+                                        }
+                                    });
+                                });
+                            });
+                        },
                         setArtistItems: (items) => {
                             set((state) => {
                                 state.general.artistItems = items;
@@ -2507,10 +2535,27 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     });
                 }
 
+                if (version <= 31) {
+                    // Subbox: Key and Grid start-aligned, so a squeezed key ellipsizes
+                    // rather than losing its first character (#258). A column the user
+                    // has realigned keeps their choice.
+                    const realigned = [TableColumn.DJ_KEY, TableColumn.DJ_GRID];
+                    Object.values(state.lists).forEach((listConfig) => {
+                        const list = listConfig as ItemListSettings;
+                        [list?.table?.columns, list?.detail?.columns].forEach((columns) => {
+                            columns?.forEach((col) => {
+                                if (realigned.includes(col.id) && col.align === 'center') {
+                                    col.align = 'start';
+                                }
+                            });
+                        });
+                    });
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 31,
+            version: 32,
         },
     ),
 );

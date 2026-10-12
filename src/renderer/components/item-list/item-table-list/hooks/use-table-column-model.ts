@@ -1,8 +1,11 @@
 import { useMemo } from 'react';
 
 import { parseTableColumns } from '/@/renderer/components/item-list/helpers/parse-table-columns';
+import { AUTO_FIT_MIN_WIDTHS } from '/@/renderer/components/item-list/item-table-list/default-columns';
 import { ItemTableListColumnConfig } from '/@/renderer/components/item-list/types';
 import { useShowDjColumns, withoutDjColumns } from '/@/renderer/features/dj/hooks/use-dj-columns';
+
+const minWidthOf = (column: ItemTableListColumnConfig) => AUTO_FIT_MIN_WIDTHS[column.id] ?? 0;
 
 export const useTableColumnModel = ({
     autoFitColumns,
@@ -48,20 +51,44 @@ export const useTableColumnModel = ({
                 return baseWidths.map((width) => Math.round(width));
             }
 
-            const scaleFactor = availableForUnpinned / unpinnedReferenceWidth;
+            // A column with a minimum (AUTO_FIT_MIN_WIDTHS) is held there rather than
+            // squeezed below it, and the rest share what is left. Holding one shrinks the
+            // others, which can take another below its minimum, so repeat until none is.
+            const floored = new Set<number>();
+            let scaleFactor = availableForUnpinned / unpinnedReferenceWidth;
+            for (;;) {
+                const free = unpinnedIndices.filter((idx) => !floored.has(idx));
+                const freeReference = free.reduce((sum, idx) => sum + baseWidths[idx], 0);
+                const flooredWidth = [...floored].reduce(
+                    (sum, idx) => sum + minWidthOf(parsedColumns[idx]),
+                    0,
+                );
+                if (freeReference === 0) break;
+                scaleFactor = Math.max(0, availableForUnpinned - flooredWidth) / freeReference;
+                const below = free.filter(
+                    (idx) => baseWidths[idx] * scaleFactor < minWidthOf(parsedColumns[idx]),
+                );
+                if (below.length === 0) break;
+                below.forEach((idx) => floored.add(idx));
+            }
+
             const scaledWidths = baseWidths.map((width, idx) => {
                 if (parsedColumns[idx].pinned !== null) {
                     return Math.round(width);
                 }
+                if (floored.has(idx)) {
+                    return minWidthOf(parsedColumns[idx]);
+                }
                 return Math.round(width * scaleFactor);
             });
 
-            // Adjust for rounding errors on unpinned columns only
+            // Adjust for rounding errors on unpinned, unfloored columns only
             const totalScaled = scaledWidths.reduce((sum, width) => sum + width, 0);
             const difference = totalContainerWidth - totalScaled;
+            const adjustable = unpinnedIndices.filter((idx) => !floored.has(idx));
 
-            if (difference !== 0 && unpinnedIndices.length > 0) {
-                const sortedIndices = unpinnedIndices
+            if (difference !== 0 && adjustable.length > 0) {
+                const sortedIndices = adjustable
                     .map((idx) => ({ idx, width: scaledWidths[idx] }))
                     .sort((a, b) => b.width - a.width);
 
