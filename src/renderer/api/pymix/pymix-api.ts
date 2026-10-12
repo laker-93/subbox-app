@@ -94,6 +94,15 @@ export const contract = c.router({
             500: resultWithHeaders(pymixType._response.error),
         },
     },
+    getDjSummary: {
+        body: pymixType._parameters.djSummary,
+        method: 'POST',
+        path: 'tracks/dj/summary',
+        responses: {
+            200: resultWithHeaders(pymixType._response.djSummary),
+            500: resultWithHeaders(pymixType._response.error),
+        },
+    },
     getLibrarySize: {
         method: 'GET',
         path: 'user/library_size',

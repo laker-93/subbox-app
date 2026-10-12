@@ -247,6 +247,9 @@ export const queryKeys: Record<
         // One track's DJ versions (#241).
         history: (serverId: string, subboxId: string) =>
             [serverId, 'dj', 'history', subboxId] as const,
+        // One row's DJ columns (#240); fetched in batches, cached per track.
+        summary: (serverId: string, subboxId: string) =>
+            [serverId, 'dj', 'summary', subboxId] as const,
         track: (serverId: string, subboxId: string) => [serverId, 'dj', 'track', subboxId] as const,
     },
     folders: {

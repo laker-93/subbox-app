@@ -19,6 +19,9 @@ export const formatDjTime = (ms: number) => {
 export const formatBpm = (bpm: number) => bpm.toFixed(2);
 
 const APP_NAMES: Record<string, string> = {
+    // Read off the file at upload: Serato's tags, the only DJ data a file carries
+    // (pymix#267). dj-offset reads `file` as Serato too.
+    file: 'Serato',
     rekordbox: 'Rekordbox',
     serato: 'Serato',
     subbox: 'subbox',

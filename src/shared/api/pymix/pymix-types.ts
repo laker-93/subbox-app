@@ -859,6 +859,29 @@ const djHistory = z.object({
         }),
     ),
 });
+// The song table's DJ columns for a window of rows (#240, pymix#269). Ids that
+// aren't in the user's library are left out of `tracks`.
+const djPad = z.object({ color: z.string().nullish(), slot: z.number() });
+
+const djTrackSummary = z.object({
+    cue_count: z.number(),
+    // Which of pads A-H (0-7) hold a hot cue, and which a loop, in pad order.
+    cue_pads: z.array(djPad),
+    grid_state: djGridState,
+    key: z.string().nullish(),
+    loop_count: z.number(),
+    loop_pads: z.array(djPad),
+    memory_count: z.number(),
+    source_app: z.string().nullish(),
+});
+
+const djSummary = z.object({
+    // False when Navidrome couldn't be asked, so every null key means "unknown".
+    tags_read: z.boolean(),
+    tracks: z.record(z.string(), djTrackSummary),
+});
+
+const djSummaryParameters = z.object({ subbox_ids: z.array(z.string()) });
 
 export type DjCue = z.infer<typeof djCue>;
 export type DjCuedata = z.infer<typeof djCuedata>;
@@ -868,7 +891,9 @@ export type DjHistory = z.infer<typeof djHistory>;
 export type DjLoop = z.infer<typeof djLoop>;
 export type DjMemoryMark = z.infer<typeof djMemoryMark>;
 export type DjPatch = z.infer<typeof djPatchParameters>;
+export type DjSummary = z.infer<typeof djSummary>;
 export type DjTrack = z.infer<typeof djTrack>;
+export type DjTrackSummary = z.infer<typeof djTrackSummary>;
 
 // --- The user's own settings (subbox-app#236, pymix#268) ---
 
@@ -901,6 +926,7 @@ export const pymixType = {
         deleteSong: deleteSongParameters,
         djPatch: djPatchParameters,
         djRevert: djRevertParameters,
+        djSummary: djSummaryParameters,
         download: downloadParameters,
         exportJob: rbExportParameters,
         import: importParameters,
@@ -934,6 +960,7 @@ export const pymixType = {
         deleteSong,
         djConflict,
         djHistory,
+        djSummary,
         djTrack,
         download,
         error,

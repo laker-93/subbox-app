@@ -1,0 +1,42 @@
+/* A narrow column clips its text rather than spilling into the next one. */
+.cell {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pads {
+    display: grid;
+    flex-shrink: 0;
+    grid-template-columns: repeat(4, 5px);
+    gap: 2px;
+}
+
+/* Pads A-H as a controller lays them out: two rows of four. */
+.pad {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+}
+
+.pad[data-empty] {
+    border: 1px solid var(--theme-colors-foreground-muted);
+    opacity: 0.4;
+}
+
+/* A slot holding a loop, not a cue: a ring in the loop's colour. */
+.pad[data-loop] {
+    background: transparent !important;
+    border: 1px solid;
+}
+
+.count {
+    min-width: 1.25rem;
+    font-variant-numeric: tabular-nums;
+}
