@@ -60,6 +60,7 @@ import {
     JOINED_ARTISTS_MUTED_PROPS,
     JoinedArtists,
 } from '/@/renderer/features/albums/components/joined-artists';
+import { withoutDjColumns } from '/@/renderer/features/dj/hooks/use-dj-columns';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useIsMutatingCreateFavorite } from '/@/renderer/features/shared/mutations/create-favorite-mutation';
 import { useIsMutatingDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
@@ -1314,7 +1315,8 @@ export const ItemDetailList = ({
     const trackColumns = useMemo((): ItemTableListColumnConfig[] => {
         const raw = tableConfig?.columns;
         if (raw && raw.length > 0) {
-            return parseTableColumns(raw);
+            // The detail list has no DJ cells (#240).
+            return parseTableColumns(withoutDjColumns(raw));
         }
         return pickTableColumns({
             columns: SONG_TABLE_COLUMNS,

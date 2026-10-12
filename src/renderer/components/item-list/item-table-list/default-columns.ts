@@ -238,6 +238,44 @@ export const SONG_TABLE_COLUMNS: DefaultTableColumn[] = [
         value: TableColumn.BPM,
         width: 100,
     },
+    // Subbox: the DJ columns (#240). Off by default, and hidden outside DJ mode
+    // (DJ_COLUMNS below).
+    {
+        align: 'center',
+        autoSize: false,
+        isEnabled: false,
+        label: i18n.t('table.config.label.djKey', { postProcess: 'titleCase' }),
+        pinned: null,
+        value: TableColumn.DJ_KEY,
+        width: 110,
+    },
+    {
+        align: 'start',
+        autoSize: false,
+        isEnabled: false,
+        label: i18n.t('table.config.label.djCues', { postProcess: 'titleCase' }),
+        pinned: null,
+        value: TableColumn.DJ_CUES,
+        width: 120,
+    },
+    {
+        align: 'center',
+        autoSize: false,
+        isEnabled: false,
+        label: i18n.t('table.config.label.djGrid', { postProcess: 'titleCase' }),
+        pinned: null,
+        value: TableColumn.DJ_GRID,
+        width: 80,
+    },
+    {
+        align: 'start',
+        autoSize: false,
+        isEnabled: false,
+        label: i18n.t('table.config.label.djSource', { postProcess: 'titleCase' }),
+        pinned: null,
+        value: TableColumn.DJ_SOURCE,
+        width: 110,
+    },
     {
         align: 'center',
         autoSize: false,
@@ -301,6 +339,13 @@ export const SONG_TABLE_COLUMNS: DefaultTableColumn[] = [
         value: TableColumn.ACTIONS,
         width: 60,
     },
+];
+
+export const DJ_COLUMNS: readonly TableColumn[] = [
+    TableColumn.DJ_CUES,
+    TableColumn.DJ_GRID,
+    TableColumn.DJ_KEY,
+    TableColumn.DJ_SOURCE,
 ];
 
 export const PLAYLIST_SONG_TABLE_COLUMNS: DefaultTableColumn[] = SONG_TABLE_COLUMNS;

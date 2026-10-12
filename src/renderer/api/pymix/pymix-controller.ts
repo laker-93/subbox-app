@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { pymixApiClient } from '/@/renderer/api/pymix/pymix-api';
 import {
+    DjSummary,
     DjTrack,
     PlaylistTree,
     pymixType,
@@ -292,6 +293,20 @@ export const PymixController = {
 
         if (res.status !== 200) {
             throw new Error('Failed to empty the trash');
+        }
+
+        return res.body.data;
+    },
+
+    // The song table's DJ columns for up to 500 tracks (#240, pymix#269).
+    getDjSummary: async (args: PymixClientArgs & { subboxIds: string[] }): Promise<DjSummary> => {
+        const { baseUrl, signal, subboxIds, token } = args;
+        const res = await pymixApiClient({ baseUrl, signal, token }).getDjSummary({
+            body: { subbox_ids: subboxIds },
+        });
+
+        if (res.status !== 200) {
+            throw new Error('Failed to get DJ summaries');
         }
 
         return res.body.data;

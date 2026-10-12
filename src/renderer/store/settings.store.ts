@@ -2476,10 +2476,41 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     });
                 }
 
+                if (version <= 30) {
+                    // Subbox: the DJ columns (#240), off, after BPM in every song table
+                    // that has one. Only DJ mode lists them.
+                    const djColumns = [
+                        TableColumn.DJ_KEY,
+                        TableColumn.DJ_CUES,
+                        TableColumn.DJ_GRID,
+                        TableColumn.DJ_SOURCE,
+                    ].map((id) => {
+                        const column = SONG_TABLE_COLUMNS.find((c) => c.value === id)!;
+                        return {
+                            align: column.align,
+                            autoSize: false,
+                            id,
+                            isEnabled: false,
+                            pinned: null,
+                            width: column.width,
+                        } satisfies ItemTableListColumnConfig;
+                    });
+
+                    Object.values(state.lists).forEach((listConfig) => {
+                        const columns = (listConfig as ItemListSettings)?.table?.columns;
+                        if (!columns?.some((col) => col.id === TableColumn.BPM)) return;
+                        const missing = djColumns.filter(
+                            (dj) => !columns.some((col) => col.id === dj.id),
+                        );
+                        const bpmIndex = columns.findIndex((col) => col.id === TableColumn.BPM);
+                        columns.splice(bpmIndex + 1, 0, ...missing.map((dj) => ({ ...dj })));
+                    });
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 30,
+            version: 31,
         },
     ),
 );
