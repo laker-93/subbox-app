@@ -36,8 +36,11 @@
     text-align: center;
 }
 
+/* Capped at the column: a centred child wider than it would lose both ends (8A read as
+   3A, subbox-app#258), where a capped one ellipsizes. */
 .container.center > * {
     align-self: center;
+    max-width: 100%;
 }
 
 .container.start {
@@ -56,6 +59,7 @@
 
 .container.right > * {
     align-self: flex-end;
+    max-width: 100%;
 }
 
 .content {
@@ -285,6 +289,15 @@
 
 .header-container.header-sorted .header-content {
     color: var(--theme-colors-foreground);
+}
+
+/* The label shrinks and ellipsizes, rather than overflowing both ends of a centred
+   header ("BPM" read as "PM"). */
+.header-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .header-content.center {

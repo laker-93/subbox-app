@@ -991,7 +991,11 @@ export const TableColumnHeaderContainer = (
                 })}
                 isNoSelect
             >
-                {columnLabelMap[props.type]}
+                {typeof columnLabelMap[props.type] === 'string' ? (
+                    <span className={styles.headerLabel}>{columnLabelMap[props.type]}</span>
+                ) : (
+                    columnLabelMap[props.type]
+                )}
                 {isSortable && (
                     <span
                         className={clsx(styles.headerSortIndicator, {

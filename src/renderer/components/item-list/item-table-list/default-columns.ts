@@ -238,10 +238,11 @@ export const SONG_TABLE_COLUMNS: DefaultTableColumn[] = [
         value: TableColumn.BPM,
         width: 100,
     },
-    // Subbox: the DJ columns (#240). Off by default, and hidden outside DJ mode
-    // (DJ_COLUMNS below).
+    // Subbox: the DJ columns (#240). Off by default, hidden outside DJ mode (DJ_COLUMNS
+    // below), and Key and Cues turned on the first time DJ mode is (#259). Start-aligned,
+    // so a squeezed key ellipsizes at its end, never its start (#258).
     {
-        align: 'center',
+        align: 'start',
         autoSize: false,
         isEnabled: false,
         label: i18n.t('table.config.label.djKey', { postProcess: 'titleCase' }),
@@ -259,7 +260,7 @@ export const SONG_TABLE_COLUMNS: DefaultTableColumn[] = [
         width: 120,
     },
     {
-        align: 'center',
+        align: 'start',
         autoSize: false,
         isEnabled: false,
         label: i18n.t('table.config.label.djGrid', { postProcess: 'titleCase' }),
@@ -347,6 +348,22 @@ export const DJ_COLUMNS: readonly TableColumn[] = [
     TableColumn.DJ_KEY,
     TableColumn.DJ_SOURCE,
 ];
+
+/** The DJ columns DJ mode turns on the first time it is on (#259). */
+export const DJ_DEFAULT_COLUMNS: readonly TableColumn[] = [TableColumn.DJ_KEY, TableColumn.DJ_CUES];
+
+/**
+ * Widths "Auto fit columns" won't squeeze a column below (#258): room for `11A · F#m`,
+ * eight pads and a count, "Rekordbox", a BPM. Narrower than this, a DJ column says
+ * nothing, and BPM squeezed to "1…" beside them was no better.
+ */
+export const AUTO_FIT_MIN_WIDTHS: Partial<Record<TableColumn, number>> = {
+    [TableColumn.BPM]: 64,
+    [TableColumn.DJ_CUES]: 72,
+    [TableColumn.DJ_GRID]: 64,
+    [TableColumn.DJ_KEY]: 90,
+    [TableColumn.DJ_SOURCE]: 90,
+};
 
 export const PLAYLIST_SONG_TABLE_COLUMNS: DefaultTableColumn[] = SONG_TABLE_COLUMNS;
 
