@@ -16,8 +16,10 @@ import { rawStreamUrl } from '/@/renderer/features/dj/utils/raw-stream';
 // out of it: a 10-minute stereo track is ~200 MB of float32 at 44.1 kHz.
 
 const DECODE_RATE = 22_050;
-// ~150 peaks a second: a peak every ~7 ms, finer than the detail view's closest zoom.
-const WINDOW = 147;
+// ~345 peaks a second, a peak every ~2.9 ms: at the detail view's closest zoom (2 s) a
+// 1000 px view on a 2x screen is still ~1 peak per two device pixels, and the drawing
+// interpolates the rest (#268). 150 a second went blocky there.
+const WINDOW = 64;
 // Band edges, Hz. Roughly where Rekordbox's and Serato's 3-band waveforms split
 // (kick and bass / vocals and synths / hats and air), so DJs read it without learning.
 const LOW_MID_HZ = 200;
@@ -56,6 +58,9 @@ export const computePeaks = async (
     const low = new Float32Array(n);
     const mid = new Float32Array(n);
     const high = new Float32Array(n);
+    // The full band, unfiltered: its peak and its RMS (the waveform's solid body).
+    const full = new Float32Array(n);
+    const squares = new Float32Array(n);
 
     const lowpass = biquad('lowpass', LOW_MID_HZ, sampleRate);
     const midHighpass = biquad('highpass', LOW_MID_HZ, sampleRate);
@@ -73,6 +78,9 @@ export const computePeaks = async (
             const l = Math.abs(lowpass(x));
             const m = Math.abs(midLowpass(midHighpass(x)));
             const h = Math.abs(highpass(x));
+            const f = Math.abs(x);
+            squares[w] += x * x;
+            if (f > full[w]) full[w] = f;
             if (l > low[w]) low[w] = l;
             if (m > mid[w]) mid[w] = m;
             if (h > high[w]) high[w] = h;
@@ -83,21 +91,35 @@ export const computePeaks = async (
         }
     }
 
-    let max = 0;
-    for (const band of [low, mid, high]) for (const v of band) if (v > max) max = v;
-    const toBytes = (band: Float32Array) => {
+    const rms = new Float32Array(n);
+    for (let w = 0; w < n; w++) {
+        rms[w] = Math.sqrt(squares[w] / Math.min(WINDOW, length - w * WINDOW));
+    }
+
+    const maxOf = (bands: Float32Array[]) => {
+        let max = 0;
+        for (const band of bands) for (const v of band) if (v > max) max = v;
+        return max;
+    };
+    const toBytes = (band: Float32Array, max: number) => {
         const out = new Uint8Array(band.length);
         if (max > 0)
             for (let i = 0; i < band.length; i++) out[i] = Math.round((band[i] / max) * 255);
         return out;
     };
+    // The bands against each other, so they keep their proportions; the full band and
+    // its RMS against the full band's loudest peak.
+    const bandMax = maxOf([low, mid, high]);
+    const fullMax = maxOf([full]);
 
     return {
         durationSeconds: length / sampleRate,
-        high: toBytes(high),
-        low: toBytes(low),
-        mid: toBytes(mid),
+        full: toBytes(full, fullMax),
+        high: toBytes(high, bandMax),
+        low: toBytes(low, bandMax),
+        mid: toBytes(mid, bandMax),
         peaksPerSecond: sampleRate / WINDOW,
+        rms: toBytes(rms, fullMax),
     };
 };
 

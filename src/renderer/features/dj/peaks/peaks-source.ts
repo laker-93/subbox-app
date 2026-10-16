@@ -13,12 +13,19 @@ import { Song } from '/@/shared/types/domain-types';
  */
 export interface DjPeaks {
     durationSeconds: number;
+    /**
+     * The unfiltered signal's peak and RMS, 0-255 against its own loudest peak (#268):
+     * the height of the RGB and Blue waveforms, and the solid body inside them. A source
+     * without them draws from the bands instead.
+     */
+    full?: Uint8Array;
     high: Uint8Array;
     low: Uint8Array;
     mid: Uint8Array;
     /** An MP3's first-frame tag, read off the same bytes; WebKit's offset needs it (#252). */
     mp3Tag?: Mp3Tag | null;
     peaksPerSecond: number;
+    rms?: Uint8Array;
 }
 
 export interface PeaksRequest {
