@@ -584,7 +584,12 @@
             "syncHint": "DJ mode shows the cues, loops and grids your Rekordbox or Serato library brings with it.",
             "title": "DJ mode",
             "turnOn": "Turn on DJ mode",
-            "turnedOn": "DJ mode is on. You can turn it off in Settings."
+            "turnedOn": "DJ mode is on. You can turn it off in Settings.",
+            "waveformColors": "Waveform colours",
+            "waveformColorsBands": "3-band",
+            "waveformColorsBlue": "Blue",
+            "waveformColorsDescription": "How the prep view colours a track's waveform: low, mid and high layered in three colours (as Rekordbox's 3-band), one waveform coloured red for bass, green for mids and blue for highs (as Serato's), or one waveform in blue (as Rekordbox's Blue). Applies on this device only.",
+            "waveformColorsRgb": "RGB"
         },
         "djPrep": {
             "addLoop": "Add loop at playhead",

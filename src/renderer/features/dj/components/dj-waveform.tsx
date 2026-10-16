@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import styles from './dj-waveform.module.css';
 
+import { useWaveformColors } from '/@/renderer/features/dj/hooks/use-waveform-colors';
 import { DjPeaks } from '/@/renderer/features/dj/peaks/peaks-source';
 import { DjMarks, djMarks, EMPTY_MARKS } from '/@/renderer/features/dj/utils/dj-marks';
 import { TrackOffsetContext } from '/@/renderer/features/dj/utils/dj-offset';
@@ -14,6 +15,7 @@ import {
     drawPlayhead,
     fitCanvas,
     View,
+    WaveformColors,
 } from '/@/renderer/features/dj/utils/draw-waveform';
 import { DjCuedata } from '/@/shared/api/pymix/pymix-types';
 import { Spinner } from '/@/shared/components/spinner/spinner';
@@ -28,6 +30,79 @@ import { Text } from '/@/shared/components/text/text';
 const MIN_ZOOM_SECONDS = 2;
 const MAX_ZOOM_SECONDS = 64;
 const DEFAULT_ZOOM_SECONDS = 8;
+
+// Past this the shown time jumps to the player's rather than easing there: a seek, or a
+// loop wrapping round.
+const SNAP_SECONDS = 0.15;
+// How quickly the shown time eases onto the player's, ms.
+const EASE_MS = 120;
+// Canvases wider than this fail in some browsers.
+const MAX_LAYER_COLUMNS = 16_384;
+
+/**
+ * The peaks, drawn once into an offscreen canvas and copied onto the view on each
+ * frame (#268): drawing every column every frame was most of a frame's work.
+ */
+interface PeaksLayer {
+    canvas: HTMLCanvasElement;
+    columns: number;
+    firstColumn: number;
+    key: string;
+}
+
+const renderLayer = (
+    layer: null | PeaksLayer,
+    key: string,
+    peaks: DjPeaks,
+    colors: WaveformColors,
+    firstColumn: number,
+    columns: number,
+    secondsPerColumn: number,
+    height: number,
+    top: number,
+    peaksHeight: number,
+): PeaksLayer => {
+    const canvas = layer?.canvas ?? document.createElement('canvas');
+    if (canvas.width !== columns || canvas.height !== height) {
+        canvas.width = columns;
+        canvas.height = height;
+    }
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        ctx.clearRect(0, 0, columns, height);
+        drawPeaks(ctx, peaks, colors, {
+            columns,
+            firstColumn,
+            height: peaksHeight,
+            secondsPerColumn,
+            top,
+        });
+    }
+    return { canvas, columns, firstColumn, key };
+};
+
+/** Copy `columns` columns of a layer, from `firstColumn`, onto the view at its left edge. */
+const blitLayer = (
+    ctx: CanvasRenderingContext2D,
+    layer: PeaksLayer,
+    firstColumn: number,
+    columns: number,
+) => {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(
+        layer.canvas,
+        firstColumn - layer.firstColumn,
+        0,
+        columns,
+        layer.canvas.height,
+        0,
+        0,
+        columns,
+        layer.canvas.height,
+    );
+    ctx.restore();
+};
 
 /** The detail view's editing gestures (#241). Every time is decode seconds. */
 export interface DjWaveformEditing {
@@ -55,6 +130,11 @@ export interface DjWaveformProps {
     peaks: DjPeaks | null;
     /** The player's position, decode seconds. Extrapolated between updates while playing. */
     position: number;
+    /**
+     * The player's position right now, decode seconds, read on every frame while
+     * playing. Smoother than `position`, which only arrives a few times a second.
+     */
+    readPosition?: () => number;
     showDetail?: boolean;
 }
 
@@ -70,8 +150,10 @@ export const DjWaveform = ({
     overviewHeight = 56,
     peaks,
     position,
+    readPosition,
     showDetail = true,
 }: DjWaveformProps) => {
+    const [colors] = useWaveformColors();
     const duration = peaks?.durationSeconds || durationSeconds || 0;
     const marks = useMemo(
         () => (duration ? djMarks(cuedata, duration, offset) : EMPTY_MARKS),
@@ -84,12 +166,15 @@ export const DjWaveform = ({
     const detailCanvas = useRef<HTMLCanvasElement>(null);
     const [zoomSeconds, setZoomSeconds] = useState(DEFAULT_ZOOM_SECONDS);
 
-    // The player reports its position a few times a second; the detail view scrolls
-    // smoothly by running on from the last report while playing.
-    const clock = useRef({ at: 0, position });
+    // The player reports its position a few times a second, and each report is a
+    // render late by the time it lands here. Snapping the view to each one made it
+    // lurch (#268), so the shown time (`clock`) runs on by itself while playing and eases
+    // onto the player's: `readPosition` when there is one, else the last report run on.
+    const reported = useRef({ at: 0, position });
     useEffect(() => {
-        clock.current = { at: performance.now(), position };
+        reported.current = { at: performance.now(), position };
     }, [position, isPlaying]);
+    const clock = useRef({ at: 0, position });
     const drag = useRef<null | { position: number; startX: number }>(null);
     // An edit in progress on the detail view: drawn as it would land, applied on release.
     const gesture = useRef<
@@ -127,23 +212,66 @@ export const DjWaveform = ({
     const [seeks, setSeeks] = useState(0);
     const now = useCallback(() => {
         if (drag.current) return drag.current.position;
-        const { at, position: p } = clock.current;
-        const t = isPlaying ? p + (performance.now() - at) / 1000 : p;
+        const ts = performance.now();
+        const r = reported.current;
+        const target =
+            readPosition?.() ?? (isPlaying ? r.position + (ts - r.at) / 1000 : r.position);
+        let t = target;
+        if (isPlaying) {
+            const c = clock.current;
+            const ran = c.position + (ts - c.at) / 1000;
+            const error = target - ran;
+            // Several calls a frame barely move it: the easing is by time, not by call.
+            t =
+                Math.abs(error) > SNAP_SECONDS
+                    ? target
+                    : ran + error * (1 - Math.exp(-(ts - c.at) / EASE_MS));
+        }
+        clock.current = { at: ts, position: t };
         return Math.min(Math.max(t, 0), duration || t);
-    }, [duration, isPlaying]);
+    }, [duration, isPlaying, readPosition]);
+
+    const overviewLayer = useRef<null | PeaksLayer>(null);
+    const detailLayer = useRef<null | PeaksLayer>(null);
+    // The peaks each layer was drawn from: a new track's are a new object.
+    const overviewPeaks = useRef<DjPeaks | null>(null);
+    const detailPeaks = useRef<DjPeaks | null>(null);
 
     const drawOverview = useCallback(() => {
         const canvas = overviewCanvas.current;
         if (!canvas || !overview.width || !duration) return;
         const ctx = fitCanvas(canvas, overview.width, overviewHeight);
         if (!ctx) return;
+        const ratio = window.devicePixelRatio || 1;
         const view: View = {
             height: overviewHeight,
+            pixelRatio: ratio,
             secondsPerPx: duration / overview.width,
             startSeconds: 0,
             width: overview.width,
         };
-        if (peaks) drawPeaks(ctx, view, peaks, 4, overviewHeight - 8);
+        if (peaks) {
+            const columns = canvas.width;
+            const key = `${colors}:${columns}:${canvas.height}:${duration}`;
+            let layer = overviewLayer.current;
+            if (!layer || layer.key !== key || overviewPeaks.current !== peaks) {
+                layer = renderLayer(
+                    layer,
+                    key,
+                    peaks,
+                    colors,
+                    0,
+                    columns,
+                    duration / columns,
+                    canvas.height,
+                    4 * ratio,
+                    (overviewHeight - 8) * ratio,
+                );
+                overviewLayer.current = layer;
+                overviewPeaks.current = peaks;
+            }
+            blitLayer(ctx, layer, 0, columns);
+        }
         const drawn = shown();
         drawLoops(ctx, view, drawn, false);
         const t = now();
@@ -157,7 +285,17 @@ export const DjWaveform = ({
         }
         drawCues(ctx, view, drawn, false);
         drawPlayhead(ctx, view, t);
-    }, [duration, now, overview.width, overviewHeight, peaks, shown, showDetail, zoomSeconds]);
+    }, [
+        colors,
+        duration,
+        now,
+        overview.width,
+        overviewHeight,
+        peaks,
+        shown,
+        showDetail,
+        zoomSeconds,
+    ]);
 
     const drawDetail = useCallback(() => {
         const canvas = detailCanvas.current;
@@ -165,21 +303,57 @@ export const DjWaveform = ({
         const ctx = fitCanvas(canvas, detail.width, detailHeight);
         if (!ctx) return;
         const t = now();
-        const secondsPerPx = zoomSeconds / detail.width;
+        const ratio = window.devicePixelRatio || 1;
+        const columns = canvas.width;
+        const secondsPerColumn = zoomSeconds / columns;
+        // The left edge on a whole column of the track, so every column always covers
+        // the same stretch of it and the peaks hold still as they scroll (#268).
+        const firstColumn = Math.round((t - zoomSeconds / 2) / secondsPerColumn);
         const view: View = {
             height: detailHeight,
-            secondsPerPx,
-            startSeconds: t - zoomSeconds / 2,
+            pixelRatio: ratio,
+            secondsPerPx: secondsPerColumn * ratio,
+            startSeconds: firstColumn * secondsPerColumn,
             width: detail.width,
         };
-        if (peaks) drawPeaks(ctx, view, peaks, 14, detailHeight - 30);
+        if (peaks) {
+            const key = `${colors}:${columns}:${canvas.height}:${zoomSeconds}`;
+            let layer = detailLayer.current;
+            if (
+                !layer ||
+                layer.key !== key ||
+                detailPeaks.current !== peaks ||
+                firstColumn < layer.firstColumn ||
+                firstColumn + columns > layer.firstColumn + layer.columns
+            ) {
+                // A view's width either side, so it's redrawn once a view's width of
+                // scrolling rather than on every frame.
+                const margin = Math.max(0, Math.floor((MAX_LAYER_COLUMNS - columns) / 2));
+                const pad = Math.min(columns, margin);
+                layer = renderLayer(
+                    layer,
+                    key,
+                    peaks,
+                    colors,
+                    firstColumn - pad,
+                    columns + pad * 2,
+                    secondsPerColumn,
+                    canvas.height,
+                    14 * ratio,
+                    (detailHeight - 30) * ratio,
+                );
+                detailLayer.current = layer;
+                detailPeaks.current = peaks;
+            }
+            blitLayer(ctx, layer, firstColumn, columns);
+        }
         const drawn = shown();
         // Over the peaks: the fill is translucent, and under them it would be hidden.
         drawLoops(ctx, view, drawn, true);
         drawGrid(ctx, view, drawn);
         drawCues(ctx, view, drawn, true);
         drawPlayhead(ctx, view, t);
-    }, [detail.width, detailHeight, duration, now, peaks, shown, zoomSeconds]);
+    }, [colors, detail.width, detailHeight, duration, now, peaks, shown, zoomSeconds]);
 
     // Redraw on every frame while playing or dragging; otherwise when something changes.
     useEffect(() => {
@@ -204,7 +378,9 @@ export const DjWaveform = ({
     // Move the playhead at once rather than when the player next reports: a paused
     // player may not report a seek until it plays again.
     const seek = (seconds: number) => {
-        clock.current = { at: performance.now(), position: seconds };
+        const at = performance.now();
+        clock.current = { at, position: seconds };
+        reported.current = { at, position: seconds };
         setSeeks((n) => n + 1);
         onSeek(seconds);
     };

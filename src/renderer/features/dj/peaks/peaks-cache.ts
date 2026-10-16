@@ -4,12 +4,13 @@ import { DjPeaks, PeaksRequest } from '/@/renderer/features/dj/peaks/peaks-sourc
 
 // Subbox-only: client-decoded peaks, cached per device so a track is decoded once
 // (subbox-app#237). Its own IndexedDB database, not React Query's persisted cache:
-// a 10-minute track's peaks are a few hundred KB, and that cache is loaded whole at
+// a 10-minute track's peaks are about 1 MB, and that cache is loaded whole at
 // start-up.
 
 // Bump when the peaks computation changes, so old entries are never drawn.
 // 2: peaks carry the MP3 tag (#252).
-const PEAKS_VERSION = 2;
+// 3: ~345 peaks a second, and the full band's peak and RMS (#268).
+const PEAKS_VERSION = 3;
 const MAX_ENTRIES = 300;
 const INDEX_KEY = '__index';
 

@@ -23,6 +23,7 @@ import { useDjMode } from '/@/renderer/features/dj/hooks/use-dj-mode';
 import { useDjPeaks } from '/@/renderer/features/dj/hooks/use-dj-peaks';
 import { usePrepAudio } from '/@/renderer/features/dj/hooks/use-prep-audio';
 import { useTrackDj } from '/@/renderer/features/dj/hooks/use-track-dj';
+import { useWaveformColors } from '/@/renderer/features/dj/hooks/use-waveform-colors';
 import { PrepListEntry, PrepLocationState, prepPath } from '/@/renderer/features/dj/prep/prep-list';
 import { setPrepSession } from '/@/renderer/features/dj/prep/prep-session.store';
 import {
@@ -40,6 +41,7 @@ import {
     markContext,
     TrackOffsetContext,
 } from '/@/renderer/features/dj/utils/dj-offset';
+import { WaveformColors } from '/@/renderer/features/dj/utils/draw-waveform';
 import {
     appName,
     formatAudioFormat,
@@ -148,6 +150,7 @@ const DjPrepRoute = () => {
     const durationMs = (peaks.peaks?.durationSeconds ?? 0) * 1000 || song?.duration || 0;
 
     // --- editing (#241) ---
+    const [waveformColors, setWaveformColors] = useWaveformColors();
     const [snapMode, setSnapMode] = useLocalStorage<SnapMode>({
         defaultValue: 'beat',
         key: 'dj_prep_snap',
@@ -389,26 +392,41 @@ const DjPrepRoute = () => {
                         {t('page.djPrep.notInLibrary')}
                     </Text>
                 )}
-                {editing && (
-                    <Group gap="sm" wrap="nowrap">
-                        <Text isMuted size="sm">
-                            {t('page.djPrep.snap')}
-                        </Text>
-                        <SegmentedControl
-                            data={[
-                                { label: t('page.djPrep.snapOff'), value: 'off' },
-                                { label: t('page.djPrep.snapBeat'), value: 'beat' },
-                                { label: t('page.djPrep.snapBar'), value: 'bar' },
-                            ]}
-                            onChange={(value) => setSnapMode(value as SnapMode)}
-                            size="xs"
-                            value={snapMode}
-                        />
-                        <Text isMuted size="xs">
-                            {t('page.djPrep.waveformHint')}
-                        </Text>
-                    </Group>
-                )}
+                <Group gap="sm" justify="space-between">
+                    {editing ? (
+                        <Group gap="sm" wrap="nowrap">
+                            <Text isMuted size="sm">
+                                {t('page.djPrep.snap')}
+                            </Text>
+                            <SegmentedControl
+                                data={[
+                                    { label: t('page.djPrep.snapOff'), value: 'off' },
+                                    { label: t('page.djPrep.snapBeat'), value: 'beat' },
+                                    { label: t('page.djPrep.snapBar'), value: 'bar' },
+                                ]}
+                                onChange={(value) => setSnapMode(value as SnapMode)}
+                                size="xs"
+                                value={snapMode}
+                            />
+                            <Text isMuted size="xs">
+                                {t('page.djPrep.waveformHint')}
+                            </Text>
+                        </Group>
+                    ) : (
+                        <span />
+                    )}
+                    <SegmentedControl
+                        aria-label={t('page.djMode.waveformColors')}
+                        data={[
+                            { label: t('page.djMode.waveformColorsBands'), value: 'bands' },
+                            { label: t('page.djMode.waveformColorsRgb'), value: 'rgb' },
+                            { label: t('page.djMode.waveformColorsBlue'), value: 'blue' },
+                        ]}
+                        onChange={(value) => setWaveformColors(value as WaveformColors)}
+                        size="xs"
+                        value={waveformColors}
+                    />
+                </Group>
                 <DjWaveform
                     cuedata={dj?.cuedata}
                     detailHeight={140}
@@ -421,6 +439,7 @@ const DjPrepRoute = () => {
                     overviewHeight={64}
                     peaks={peaks.peaks}
                     position={audio.position}
+                    readPosition={audio.readPosition}
                 />
                 {dj && (
                     <div className={styles.panels}>

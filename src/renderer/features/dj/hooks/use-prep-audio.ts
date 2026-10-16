@@ -25,6 +25,8 @@ export interface PrepAudio {
     playLoop: (start: number, end: number) => void;
     /** Decode seconds. Updated a few times a second while playing. */
     position: number;
+    /** Decode seconds, read off the element now: for drawing every frame. */
+    readPosition: () => number;
     seek: (seconds: number) => void;
     toggle: () => void;
 }
@@ -182,5 +184,17 @@ export const usePrepAudio = (src: null | string): PrepAudio => {
         [play, setLoop],
     );
 
-    return { auditioning, isPlaying, pause, play, playLoop, position, seek, toggle };
+    const readPosition = useCallback(() => audioRef.current?.currentTime ?? 0, []);
+
+    return {
+        auditioning,
+        isPlaying,
+        pause,
+        play,
+        playLoop,
+        position,
+        readPosition,
+        seek,
+        toggle,
+    };
 };
