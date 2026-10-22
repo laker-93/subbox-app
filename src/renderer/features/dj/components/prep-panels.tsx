@@ -182,7 +182,9 @@ const SlotMenu = ({
                     variant="subtle"
                 />
             </DropdownMenu.Target>
-            <DropdownMenu.Dropdown>
+            {/* A loop's menu runs to ~18 items: on a short window it scrolls rather than
+                running off the screen, where nothing in it can be reached. */}
+            <DropdownMenu.Dropdown style={{ maxHeight: 'min(70vh, 520px)', overflowY: 'auto' }}>
                 {children}
                 <DropdownMenu.Label>{t('page.djPrep.moveTo')}</DropdownMenu.Label>
                 {Array.from({ length: count }, (_, to) => to)
@@ -195,7 +197,9 @@ const SlotMenu = ({
                         </DropdownMenu.Item>
                     ))}
                 <DropdownMenu.Divider />
-                <DropdownMenu.Item onClick={onDelete}>{t('common.delete')}</DropdownMenu.Item>
+                <DropdownMenu.Item onClick={onDelete}>
+                    {t('common.delete', { postProcess: 'sentenceCase' })}
+                </DropdownMenu.Item>
             </DropdownMenu.Dropdown>
         </DropdownMenu>
     );
@@ -222,20 +226,28 @@ const beatsLong = (beats: BeatMark[], seconds: number, count: number) => {
 
 type Pad = PadEntry<DjCue, DjLoop>;
 
-/** The button that activates a loop, and exits it while it's the active one. */
+/**
+ * The button that activates a loop, and exits it while it's the active one. Two pads can
+ * hold the same range, so the pad pressed is kept as well as the range playing.
+ */
 const LoopButton = ({
+    activePad,
     audio,
     end,
     label,
+    onActivate,
     start,
 }: {
+    activePad: null | string;
     audio: PrepAudio;
     end: number;
     label: string;
+    onActivate: (pad: string) => void;
     start: number;
 }) => {
     const { t } = useTranslation();
-    const active = audio.activeLoop?.start === start && audio.activeLoop?.end === end;
+    const active =
+        activePad === label && audio.activeLoop?.start === start && audio.activeLoop?.end === end;
     const text = active
         ? t('page.djPrep.exitLoop')
         : t('page.djPrep.activateLoop', { slot: label });
@@ -244,7 +256,16 @@ const LoopButton = ({
             aria-label={text}
             aria-pressed={active}
             icon="mediaRepeat"
-            onClick={() => (active ? audio.exitLoop() : audio.playLoop(start, end))}
+            // A filled icon: without a fill it draws nothing.
+            iconProps={{ fill: active ? 'contrast' : 'primary' }}
+            onClick={() => {
+                if (active) {
+                    audio.exitLoop();
+                    return;
+                }
+                onActivate(label);
+                audio.playLoop(start, end);
+            }}
             size="xs"
             tooltip={{ label: text }}
             variant={active ? 'filled' : 'subtle'}
@@ -274,6 +295,7 @@ export const PrepPads = ({
     const placed = padIndex(layout);
     const freePad = layout.pads.indexOf(null);
     const [bars, setBars] = useState('4');
+    const [activePad, setActivePad] = useState<null | string>(null);
     const beatsPerBar = gridSummary(dj.cuedata, durationMs).beatsPerBar ?? 4;
 
     const decode = (ms: number, origin: null | string | undefined) =>
@@ -460,9 +482,11 @@ export const PrepPads = ({
                     </Text>
                 )}
                 <LoopButton
+                    activePad={activePad}
                     audio={audio}
                     end={end}
                     label={letter || formatDjTime(loop.start)}
+                    onActivate={setActivePad}
                     start={start}
                 />
             </>
@@ -634,6 +658,7 @@ export const PrepPads = ({
                                     aria-label={t('page.djPrep.setLoop', { slot: letter })}
                                     disabled={!canLoop}
                                     icon="mediaRepeat"
+                                    iconProps={{ fill: canLoop ? 'primary' : 'muted' }}
                                     onClick={() => setLoopAtPlayhead(pad, entry)}
                                     size="xs"
                                     tooltip={{ label: t('page.djPrep.setLoop', { slot: letter }) }}
@@ -663,7 +688,9 @@ export const PrepPads = ({
                                 {loopRow(entry.loop, null)}
                                 {editing && (
                                     <ActionIcon
-                                        aria-label={t('common.delete')}
+                                        aria-label={t('common.delete', {
+                                            postProcess: 'sentenceCase',
+                                        })}
                                         icon="delete"
                                         onClick={() => editing.editor.apply(clear(entry))}
                                         size="xs"
