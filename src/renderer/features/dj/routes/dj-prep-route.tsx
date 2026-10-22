@@ -12,11 +12,10 @@ import { useIsDemoSession } from '/@/renderer/config/demo-config';
 import { DjWaveform, DjWaveformEditing } from '/@/renderer/features/dj/components/dj-waveform';
 import { KeptEdits, PrepHistory } from '/@/renderer/features/dj/components/prep-history';
 import {
-    PrepCues,
     PrepEditing,
     PrepGrid,
-    PrepLoops,
     PrepMemoryCues,
+    PrepPads,
 } from '/@/renderer/features/dj/components/prep-panels';
 import { useDjEdit } from '/@/renderer/features/dj/hooks/use-dj-edit';
 import { useDjMode } from '/@/renderer/features/dj/hooks/use-dj-mode';
@@ -32,7 +31,7 @@ import {
     snapSeconds,
     toStoredMs,
 } from '/@/renderer/features/dj/utils/dj-edit';
-import { djMarks } from '/@/renderer/features/dj/utils/dj-marks';
+import { djMarks, placePads } from '/@/renderer/features/dj/utils/dj-marks';
 import {
     codecOf,
     currentEngine,
@@ -69,8 +68,8 @@ import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
 import { PlayerStatus } from '/@/shared/types/types';
 
 // Subbox-only: one track's prep view (subbox-app#239, design-dj-ui §5.2). The waveform
-// with everything the DJ apps stored on it, the eight pads, loops, memory cues and the
-// grid, playable from the original file. Cues and loops are edited here (#241): on the
+// with everything the DJ apps stored on it, the eight pads (each a cue or a loop), memory
+// cues and the grid, playable from the original file. Cues and loops are edited here (#241): on the
 // panels, or on the waveform (drag a flag, double-click for a cue, shift-drag for a
 // loop), each change one versioned write, with undo and a history. The grid is #245.
 //
@@ -178,11 +177,15 @@ const DjPrepRoute = () => {
     }, [beats, canEdit, context, dj, editor, snapMode]);
     const waveformEditing = useMemo((): DjWaveformEditing | null => {
         if (!editing || !dj) return null;
-        const firstFree = (taken: number[]) =>
-            Array.from({ length: 8 }, (_, i) => i).find((i) => !taken.includes(i));
+        // Cues and loops share the eight pads (#269). A free pad holds no stored cue or
+        // loop on its slot, so a new one stored there is on that pad.
+        const freePad = () => {
+            const pad = placePads(dj.cuedata.cues, dj.cuedata.loops).pads.indexOf(null);
+            return pad === -1 ? null : pad;
+        };
         return {
             onCueAdd: (seconds) => {
-                const slot = firstFree(dj.cuedata.cues.map((c) => c.index));
+                const slot = freePad();
                 if (slot == null) {
                     toast.warn({ message: t('page.djPrep.padsFull') as string });
                     return;
@@ -206,9 +209,9 @@ const DjPrepRoute = () => {
                 });
             },
             onLoopDraw: (start, end) => {
-                const slot = firstFree(dj.cuedata.loops.map((l) => l.index));
+                const slot = freePad();
                 if (slot == null) {
-                    toast.warn({ message: t('page.djPrep.loopsFull') as string });
+                    toast.warn({ message: t('page.djPrep.padsFull') as string });
                     return;
                 }
                 editing.editor.apply({
@@ -263,7 +266,7 @@ const DjPrepRoute = () => {
             return;
         }
         setPrepSession({
-            auditioning: Boolean(audio.auditioning),
+            auditioning: Boolean(audio.activeLoop),
             durationSeconds: sessionDuration,
             formatTime,
             isPlaying: audio.isPlaying,
@@ -277,7 +280,7 @@ const DjPrepRoute = () => {
         });
     }, [
         active,
-        audio.auditioning,
+        audio.activeLoop,
         audio.isPlaying,
         audio.position,
         formatTime,
@@ -447,14 +450,7 @@ const DjPrepRoute = () => {
                             {editing && (
                                 <KeptEdits dj={dj} editor={editor} restamp={editing.restamp} />
                             )}
-                            <PrepCues
-                                audio={audio}
-                                context={context}
-                                dj={dj}
-                                durationMs={durationMs}
-                                editing={editing}
-                            />
-                            <PrepLoops
+                            <PrepPads
                                 audio={audio}
                                 context={context}
                                 dj={dj}
