@@ -16,6 +16,9 @@ import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
 // surfaces: imports, exports and what the server computes are the same either way.
 
 const OFF: UserSettings = { dj_mode: false, dj_mode_offered: false };
+// The trial shows what subbox does, and its library carries cues and grids for it: a demo
+// visitor starts in DJ mode, with nothing to offer, and can still switch it off in Settings.
+const DEMO_DEFAULT: UserSettings = { dj_mode: true, dj_mode_offered: true };
 
 export const useDjMode = () => {
     const queryClient = useQueryClient();
@@ -35,7 +38,7 @@ export const useDjMode = () => {
     });
     const onDevice = isDemo || query.data === null;
     const [deviceSettings, setDeviceSettings] = useLocalStorage<UserSettings>({
-        defaultValue: OFF,
+        defaultValue: isDemo ? DEMO_DEFAULT : OFF,
         key: `dj_mode:${serverId || 'local'}`,
     });
 
