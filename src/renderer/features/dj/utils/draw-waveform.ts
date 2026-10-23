@@ -188,7 +188,7 @@ export const drawLoops = (
             ctx.font = '10px sans-serif';
             ctx.textBaseline = 'bottom';
             ctx.fillText(
-                `Loop ${loop.label}${loop.name ? ` ${loop.name}` : ''}`,
+                ['Loop', loop.label, loop.name].filter(Boolean).join(' '),
                 x0 + 3,
                 view.height - 2,
             );

@@ -10,7 +10,7 @@ import {
 } from '/@/renderer/components/item-list/item-table-list/item-table-list-column';
 import { useDjSummary } from '/@/renderer/features/dj/hooks/use-dj-summary';
 import { useKeyNotation } from '/@/renderer/features/dj/hooks/use-key-notation';
-import { padColor } from '/@/renderer/features/dj/utils/dj-marks';
+import { padColor, placePads } from '/@/renderer/features/dj/utils/dj-marks';
 import { appName } from '/@/renderer/features/dj/utils/format-dj';
 import { formatKey } from '/@/renderer/features/dj/utils/musical-key';
 import { subboxIdOf } from '/@/renderer/features/dj/utils/subbox-id';
@@ -22,8 +22,6 @@ import { Song } from '/@/shared/types/domain-types';
 // Subbox-only: the song table's DJ columns (subbox-app#240, design-dj-ui §5.3), from
 // POST /tracks/dj/summary. Plain labels, no header sort: pymix can't sort on them yet
 // (A6, §10 Q3). Each fits one 24 px row, for #133's DJ view preset.
-
-const PADS = 8;
 
 const useRowSummary = (props: ItemTableListInnerColumn) => {
     const item = (props.getRowItem?.(props.rowIndex) ??
@@ -68,27 +66,31 @@ export const DjKeyColumn = (props: ItemTableListInnerColumn) => {
 };
 
 const CuePads = ({ summary }: { summary: DjTrackSummary }) => {
-    const cues = new Map(summary.cue_pads.map((pad) => [pad.slot, pad.color]));
-    const loops = new Map(summary.loop_pads.map((pad) => [pad.slot, pad.color]));
+    // The same pads as the prep view (#269): a Serato loop whose slot is a cue's pad shows
+    // on the lowest free one, as a Rekordbox export would put it.
+    const { pads } = placePads(
+        summary.cue_pads.map((pad) => ({ ...pad, index: pad.slot })),
+        summary.loop_pads.map((pad) => ({ ...pad, index: pad.slot })),
+    );
     return (
         <span className={styles.pads}>
-            {Array.from({ length: PADS }, (_, slot) => {
-                if (cues.has(slot)) {
+            {pads.map((entry, slot) => {
+                if (entry?.kind === 'cue') {
                     return (
                         <span
                             className={styles.pad}
                             key={slot}
-                            style={{ background: padColor(cues.get(slot), slot) }}
+                            style={{ background: padColor(entry.cue.color, slot) }}
                         />
                     );
                 }
-                if (loops.has(slot)) {
+                if (entry?.kind === 'loop') {
                     return (
                         <span
                             className={styles.pad}
                             data-loop
                             key={slot}
-                            style={{ borderColor: padColor(loops.get(slot), slot) }}
+                            style={{ borderColor: padColor(entry.loop.color, slot) }}
                         />
                     );
                 }

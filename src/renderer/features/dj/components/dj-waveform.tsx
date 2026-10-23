@@ -201,6 +201,7 @@ export const DjWaveform = ({
                     endSeconds: end,
                     label: '+',
                     name: '',
+                    pad: null,
                     slot: -1,
                     startSeconds: start,
                 },

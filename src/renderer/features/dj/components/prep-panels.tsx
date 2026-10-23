@@ -4,10 +4,17 @@ import { useTranslation } from 'react-i18next';
 import styles from './prep-panels.module.css';
 
 import i18n from '/@/i18n/i18n';
-import { DjEditor } from '/@/renderer/features/dj/hooks/use-dj-edit';
+import { DjEdit, DjEditor } from '/@/renderer/features/dj/hooks/use-dj-edit';
 import { PrepAudio } from '/@/renderer/features/dj/hooks/use-prep-audio';
 import { CUE_PALETTE } from '/@/renderer/features/dj/utils/dj-edit';
-import { BeatMark, PAD_LETTERS, padColor } from '/@/renderer/features/dj/utils/dj-marks';
+import {
+    BeatMark,
+    PAD_LETTERS,
+    padColor,
+    PadEntry,
+    padIndex,
+    placePads,
+} from '/@/renderer/features/dj/utils/dj-marks';
 import {
     djToDecodeSeconds,
     markContext,
@@ -31,10 +38,11 @@ import { Select } from '/@/shared/components/select/select';
 import { Stack } from '/@/shared/components/stack/stack';
 import { TextInput } from '/@/shared/components/text-input/text-input';
 import { Text } from '/@/shared/components/text/text';
+import { toast } from '/@/shared/components/toast/toast';
 
 // Subbox-only: the prep view's panels (subbox-app#239, design-dj-ui §5.2): the eight
-// hot cue pads, the loops, memory cues and the grid. With `editing` (#241), pads and
-// loops are set, named, coloured, moved and deleted here, one PATCH each. Times are shown as the
+// pads, each a hot cue or a loop (#269), memory cues and the grid. With `editing` (#241),
+// pads are set, named, coloured, moved, turned between cue and loop, and deleted here. Times are shown as the
 // DJ app shows them; play buttons convert to decode time through dj-offset, each mark
 // through its own origin's app (#252).
 
@@ -174,7 +182,9 @@ const SlotMenu = ({
                     variant="subtle"
                 />
             </DropdownMenu.Target>
-            <DropdownMenu.Dropdown>
+            {/* A loop's menu runs to ~18 items: on a short window it scrolls rather than
+                running off the screen, where nothing in it can be reached. */}
+            <DropdownMenu.Dropdown style={{ maxHeight: 'min(70vh, 520px)', overflowY: 'auto' }}>
                 {children}
                 <DropdownMenu.Label>{t('page.djPrep.moveTo')}</DropdownMenu.Label>
                 {Array.from({ length: count }, (_, to) => to)
@@ -187,137 +197,14 @@ const SlotMenu = ({
                         </DropdownMenu.Item>
                     ))}
                 <DropdownMenu.Divider />
-                <DropdownMenu.Item onClick={onDelete}>{t('common.delete')}</DropdownMenu.Item>
+                <DropdownMenu.Item onClick={onDelete}>
+                    {t('common.delete', { postProcess: 'sentenceCase' })}
+                </DropdownMenu.Item>
             </DropdownMenu.Dropdown>
         </DropdownMenu>
     );
 };
 
-export const PrepCues = ({
-    audio,
-    context,
-    dj,
-    editing,
-}: PanelProps & { editing?: null | PrepEditing }) => {
-    const { t } = useTranslation();
-    const bySlot = new Map(dj.cuedata.cues.map((cue) => [cue.index, cue]));
-    const occupied = new Set(bySlot.keys());
-
-    // Every write of a cue sends the whole of it, in the edit's clock (restamp).
-    const writeCue = (cue: DjCue, changes: Partial<DjCue>, slot = cue.index) =>
-        editing?.editor.apply({
-            cue: {
-                slot,
-                value: {
-                    color: cue.color ?? undefined,
-                    name: cue.name ?? undefined,
-                    position: editing.restamp(cue.position, cue.origin),
-                    ...changes,
-                },
-            },
-        });
-    const setAtPlayhead = (slot: number, cue?: DjCue) => {
-        if (!editing) return;
-        const position = editing.toStored(editing.snap(audio.position));
-        if (cue) writeCue(cue, { position });
-        else editing.editor.apply({ cue: { slot, value: { position } } });
-    };
-
-    return (
-        <Panel title={t('page.djPrep.hotCues')}>
-            <Stack gap={2}>
-                {Array.from(PAD_LETTERS).map((letter, slot) => {
-                    const cue = bySlot.get(slot);
-                    const color = cue ? padColor(cue.color, slot) : null;
-                    return (
-                        <Group className={styles.row} gap="sm" key={letter} wrap="nowrap">
-                            {editing && cue && color ? (
-                                <ColorPicker
-                                    color={color}
-                                    label={t('page.djPrep.cueColor', { slot: letter })}
-                                    onPick={(c) => writeCue(cue, { color: c })}
-                                />
-                            ) : (
-                                <Swatch color={color} />
-                            )}
-                            <Text className={styles.slot} fw={600}>
-                                {letter}
-                            </Text>
-                            <Text className={styles.time} isMuted={!cue}>
-                                {cue ? formatDjTime(cue.position) : '—'}
-                            </Text>
-                            {editing && cue ? (
-                                <NameInput
-                                    label={t('page.djPrep.cueName', { slot: letter })}
-                                    name={cue.name}
-                                    onCommit={(name) => writeCue(cue, { name: name || undefined })}
-                                />
-                            ) : (
-                                <Text className={styles.name} isMuted truncate>
-                                    {cue?.name || ''}
-                                </Text>
-                            )}
-                            {editing && (
-                                <ActionIcon
-                                    aria-label={t('page.djPrep.setCue', { slot: letter })}
-                                    icon="arrowDownToLine"
-                                    onClick={() => setAtPlayhead(slot, cue)}
-                                    size="xs"
-                                    tooltip={{ label: t('page.djPrep.setCue', { slot: letter }) }}
-                                    variant="subtle"
-                                />
-                            )}
-                            {cue && (
-                                <ActionIcon
-                                    aria-label={t('page.djPrep.playCue', { slot: letter })}
-                                    icon="mediaPlay"
-                                    onClick={() =>
-                                        audio.play(
-                                            djToDecodeSeconds(
-                                                cue.position,
-                                                markContext(context, cue.origin),
-                                            ),
-                                        )
-                                    }
-                                    size="xs"
-                                    variant="subtle"
-                                />
-                            )}
-                            {editing && cue && (
-                                <SlotMenu
-                                    count={PAD_LETTERS.length}
-                                    label={t('page.djPrep.cueMenu', { slot: letter })}
-                                    labelOf={(to) => PAD_LETTERS[to]}
-                                    occupied={occupied}
-                                    onDelete={() =>
-                                        editing.editor.apply({ cue: { slot, value: null } })
-                                    }
-                                    onMove={(to) =>
-                                        editing.editor.apply({
-                                            cue: {
-                                                from_slot: slot,
-                                                slot: to,
-                                                value: {
-                                                    position: editing.restamp(
-                                                        cue.position,
-                                                        cue.origin,
-                                                    ),
-                                                },
-                                            },
-                                        })
-                                    }
-                                    slot={slot}
-                                />
-                            )}
-                        </Group>
-                    );
-                })}
-            </Stack>
-        </Panel>
-    );
-};
-
-const LOOP_SLOTS = 8;
 const LOOP_BARS = [1, 2, 4, 8, 16, 32];
 
 /**
@@ -337,7 +224,65 @@ const beatsLong = (beats: BeatMark[], seconds: number, count: number) => {
     return end == null ? null : end - beats[nearest].seconds;
 };
 
-export const PrepLoops = ({
+type Pad = PadEntry<DjCue, DjLoop>;
+
+/**
+ * The button that activates a loop, and exits it while it's the active one. Two pads can
+ * hold the same range, so the pad pressed is kept as well as the range playing.
+ */
+const LoopButton = ({
+    activePad,
+    audio,
+    end,
+    label,
+    onActivate,
+    start,
+}: {
+    activePad: null | string;
+    audio: PrepAudio;
+    end: number;
+    label: string;
+    onActivate: (pad: string) => void;
+    start: number;
+}) => {
+    const { t } = useTranslation();
+    const active =
+        activePad === label && audio.activeLoop?.start === start && audio.activeLoop?.end === end;
+    const text = active
+        ? t('page.djPrep.exitLoop')
+        : t('page.djPrep.activateLoop', { slot: label });
+    return (
+        <ActionIcon
+            aria-label={text}
+            aria-pressed={active}
+            icon="mediaRepeat"
+            // A filled icon: without a fill it draws nothing.
+            iconProps={{ fill: active ? 'contrast' : 'primary' }}
+            onClick={() => {
+                if (active) {
+                    audio.exitLoop();
+                    return;
+                }
+                onActivate(label);
+                audio.playLoop(start, end);
+            }}
+            size="xs"
+            tooltip={{ label: text }}
+            variant={active ? 'filled' : 'subtle'}
+        />
+    );
+};
+
+/**
+ * The eight pads, A-H, as Rekordbox shows them (subbox-app#269): each empty, a hot cue,
+ * or a loop. Which pad a stored cue or loop is on is placePads' answer, the one a
+ * Rekordbox export writes. A Serato loop left without a pad is listed under them.
+ *
+ * An edit stores a mark on the pad it's put on. pymix edits one cue or one loop per
+ * version, so putting a cue on a loop's pad (or the reverse) is two versions: the one
+ * clearing the pad, then the one setting it.
+ */
+export const PrepPads = ({
     audio,
     context,
     dj,
@@ -345,26 +290,84 @@ export const PrepLoops = ({
     editing,
 }: PanelProps & { editing?: null | PrepEditing }) => {
     const { t } = useTranslation();
-    const loops = [...dj.cuedata.loops].sort((a, b) => a.index - b.index);
-    const occupied = new Set(loops.map((loop) => loop.index));
-    const freeSlot = Array.from({ length: LOOP_SLOTS }, (_, i) => i).find((i) => !occupied.has(i));
+    const { cues, loops } = dj.cuedata;
+    const layout = placePads(cues, loops);
+    const placed = padIndex(layout);
+    const freePad = layout.pads.indexOf(null);
     const [bars, setBars] = useState('4');
+    const [activePad, setActivePad] = useState<null | string>(null);
     const beatsPerBar = gridSummary(dj.cuedata, durationMs).beatsPerBar ?? 4;
 
-    const writeLoop = (loop: DjLoop, changes: Partial<DjLoop>, slot = loop.index) =>
-        editing?.editor.apply({
-            loop: {
-                slot,
-                value: {
-                    active: loop.active ?? false,
-                    color: loop.color ?? undefined,
-                    end: editing.restamp(loop.end, loop.origin),
-                    name: loop.name ?? undefined,
-                    start: editing.restamp(loop.start, loop.origin),
-                    ...changes,
-                },
-            },
-        });
+    const decode = (ms: number, origin: null | string | undefined) =>
+        djToDecodeSeconds(ms, markContext(context, origin));
+
+    const cueValue = (cue: DjCue) =>
+        editing && {
+            color: cue.color ?? undefined,
+            name: cue.name ?? undefined,
+            position: editing.restamp(cue.position, cue.origin),
+        };
+    const loopValue = (loop: DjLoop) =>
+        editing && {
+            active: loop.active ?? false,
+            color: loop.color ?? undefined,
+            end: editing.restamp(loop.end, loop.origin),
+            name: loop.name ?? undefined,
+            start: editing.restamp(loop.start, loop.origin),
+        };
+    const clear = (entry: Pad): DjEdit =>
+        entry.kind === 'cue'
+            ? { cue: { slot: entry.cue.index, value: null } }
+            : { loop: { slot: entry.loop.index, value: null } };
+
+    /** One version each, in order; stops at the first that isn't saved. */
+    const run = async (edits: DjEdit[]) => {
+        if (!editing) return;
+        for (const edit of edits) {
+            if (!(await editing.editor.apply(edit))) return;
+        }
+    };
+
+    /**
+     * What has to go before a `kind` is stored on `pad`, or null when it can't: the pad's
+     * occupant, unless the write replaces it anyway, and for a loop, a Serato loop stored
+     * on that slot but shown on another pad, which moves to the slot of the pad it's on
+     * (no change on screen) so the write doesn't replace it.
+     */
+    const makeRoom = (pad: number, kind: Pad['kind'], moving?: DjLoop): DjEdit[] | null => {
+        const edits: DjEdit[] = [];
+        const occupant = layout.pads[pad];
+        const replacedAnyway =
+            occupant &&
+            (occupant.kind === 'cue' ? occupant.cue.index : occupant.loop.index) === pad &&
+            occupant.kind === kind;
+        if (occupant && !replacedAnyway) edits.push(clear(occupant));
+        if (kind === 'loop') {
+            const holder = loops.find(
+                (l) => l.index === pad && l !== moving && placed.loops.get(l.index) !== pad,
+            );
+            if (holder) {
+                const to = placed.loops.get(holder.index);
+                if (to == null) {
+                    toast.warn({ message: t('page.djPrep.slotHeldBySeratoLoop') as string });
+                    return null;
+                }
+                const value = loopValue(holder);
+                if (value) edits.unshift({ loop: { from_slot: holder.index, slot: to, value } });
+            }
+        }
+        return edits;
+    };
+
+    const putCue = (pad: number, value: DjCue | Record<string, unknown>) => {
+        const before = makeRoom(pad, 'cue');
+        if (before) run([...before, { cue: { slot: pad, value } }]);
+    };
+    const putLoop = (pad: number, value: Record<string, unknown>) => {
+        const before = makeRoom(pad, 'loop');
+        if (before) run([...before, { loop: { slot: pad, value } }]);
+    };
+
     /** A loop `n` bars long from `startSeconds` (decode), on the grid; null without one. */
     const loopFrom = (startSeconds: number, n: number) => {
         if (!editing) return null;
@@ -373,145 +376,332 @@ export const PrepLoops = ({
         if (length == null) return null;
         return { end: editing.toStored(start + length), start: editing.toStored(start) };
     };
-    const addLoop = () => {
-        if (!editing || freeSlot == null) return;
+
+    const setCueAtPlayhead = (pad: number, entry: null | Pad) => {
+        if (!editing) return;
+        const position = editing.toStored(editing.snap(audio.position));
+        if (entry?.kind === 'cue') putCue(pad, { ...cueValue(entry.cue), position });
+        else putCue(pad, { position });
+    };
+    const setLoopAtPlayhead = (pad: number, entry: null | Pad) => {
         const range = loopFrom(audio.position, Number(bars));
-        if (range) editing.editor.apply({ loop: { slot: freeSlot, value: range } });
+        if (!range) return;
+        putLoop(pad, entry?.kind === 'loop' ? { ...loopValue(entry.loop), ...range } : range);
+    };
+    const toLoop = (pad: number, cue: DjCue) => {
+        const range = loopFrom(decode(cue.position, cue.origin), Number(bars));
+        if (range)
+            putLoop(pad, { color: cue.color ?? undefined, name: cue.name ?? undefined, ...range });
+    };
+    const toCue = (pad: number, loop: DjLoop) => {
+        if (!editing) return;
+        putCue(pad, {
+            color: loop.color ?? undefined,
+            name: loop.name ?? undefined,
+            position: editing.restamp(loop.start, loop.origin),
+        });
+    };
+    const move = (entry: Pad, to: number) => {
+        if (!editing) return;
+        if (entry.kind === 'cue') {
+            const before = makeRoom(to, 'cue');
+            const position = editing.restamp(entry.cue.position, entry.cue.origin);
+            if (before) {
+                run([
+                    ...before,
+                    { cue: { from_slot: entry.cue.index, slot: to, value: { position } } },
+                ]);
+            }
+            return;
+        }
+        const { loop } = entry;
+        const before = makeRoom(to, 'loop', loop);
+        const value = {
+            end: editing.restamp(loop.end, loop.origin),
+            start: editing.restamp(loop.start, loop.origin),
+        };
+        if (before) run([...before, { loop: { from_slot: loop.index, slot: to, value } }]);
+    };
+
+    const canLoop = Boolean(editing && editing.beats.length > 0);
+
+    const loopRow = (loop: DjLoop, pad: null | number) => {
+        const letter = pad != null ? PAD_LETTERS[pad] : '';
+        const start = decode(loop.start, loop.origin);
+        const end = decode(loop.end, loop.origin);
+        const loopLength = loopBars(dj.cuedata, loop.start, loop.end, durationMs);
+        const length = loopLength != null ? t('page.djPrep.bars', { count: loopLength }) : null;
+        const color = padColor(loop.color, pad ?? loop.index);
+        return (
+            <>
+                {editing && pad != null ? (
+                    <ColorPicker
+                        color={color}
+                        label={t('page.djPrep.loopColor', { slot: letter })}
+                        onPick={(c) => {
+                            const value = loopValue(loop);
+                            if (value)
+                                editing.editor.apply({
+                                    loop: { slot: loop.index, value: { ...value, color: c } },
+                                });
+                        }}
+                    />
+                ) : (
+                    <Swatch color={color} />
+                )}
+                <Text className={styles.slot} fw={600}>
+                    {letter}
+                </Text>
+                <Text className={styles.range}>
+                    {formatDjTime(loop.start)} – {formatDjTime(loop.end)}
+                </Text>
+                {editing && pad != null ? (
+                    <NameInput
+                        label={t('page.djPrep.loopName', { slot: letter })}
+                        name={loop.name}
+                        onCommit={(name) => {
+                            const value = loopValue(loop);
+                            if (value) {
+                                editing.editor.apply({
+                                    loop: {
+                                        slot: loop.index,
+                                        value: { ...value, name: name || undefined },
+                                    },
+                                });
+                            }
+                        }}
+                    />
+                ) : (
+                    <Text className={styles.name} isMuted truncate>
+                        {editing ? loop.name : [length, loop.name].filter(Boolean).join(' · ')}
+                    </Text>
+                )}
+                {editing && length && (
+                    <Text isMuted size="xs">
+                        {length}
+                    </Text>
+                )}
+                <LoopButton
+                    activePad={activePad}
+                    audio={audio}
+                    end={end}
+                    label={letter || formatDjTime(loop.start)}
+                    onActivate={setActivePad}
+                    start={start}
+                />
+            </>
+        );
     };
 
     return (
-        <Panel title={t('page.djPrep.loops')}>
-            {loops.length === 0 && (
-                <Text isMuted size="sm">
-                    {t('page.djPrep.noLoops')}
-                </Text>
-            )}
+        <Panel title={t('page.djPrep.hotCues')}>
             <Stack gap={2}>
-                {loops.map((loop) => {
-                    const loopContext = markContext(context, loop.origin);
-                    const start = djToDecodeSeconds(loop.start, loopContext);
-                    const end = djToDecodeSeconds(loop.end, loopContext);
-                    const playing =
-                        audio.isPlaying &&
-                        audio.auditioning?.start === start &&
-                        audio.auditioning?.end === end;
-                    const loopLength = loopBars(dj.cuedata, loop.start, loop.end, durationMs);
-                    const color = padColor(loop.color, loop.index);
+                {layout.pads.map((entry, pad) => {
+                    const letter = PAD_LETTERS[pad];
+                    const cue = entry?.kind === 'cue' ? entry.cue : null;
+                    const color = cue ? padColor(cue.color, pad) : null;
                     return (
-                        <Group className={styles.row} gap="sm" key={loop.index} wrap="nowrap">
-                            {editing ? (
-                                <ColorPicker
-                                    color={color}
-                                    label={t('page.djPrep.loopColor', { slot: loop.index + 1 })}
-                                    onPick={(c) => writeLoop(loop, { color: c })}
-                                />
+                        <Group
+                            className={styles.row}
+                            data-kind={entry?.kind}
+                            gap="sm"
+                            key={letter}
+                            wrap="nowrap"
+                        >
+                            {entry?.kind === 'loop' ? (
+                                loopRow(entry.loop, pad)
                             ) : (
-                                <Swatch color={color} />
+                                <>
+                                    {editing && cue && color ? (
+                                        <ColorPicker
+                                            color={color}
+                                            label={t('page.djPrep.cueColor', { slot: letter })}
+                                            onPick={(c) => {
+                                                const value = cueValue(cue);
+                                                if (value)
+                                                    editing.editor.apply({
+                                                        cue: {
+                                                            slot: cue.index,
+                                                            value: { ...value, color: c },
+                                                        },
+                                                    });
+                                            }}
+                                        />
+                                    ) : (
+                                        <Swatch color={color} />
+                                    )}
+                                    <Text className={styles.slot} fw={600}>
+                                        {letter}
+                                    </Text>
+                                    <Text className={styles.time} isMuted={!cue}>
+                                        {cue ? formatDjTime(cue.position) : '—'}
+                                    </Text>
+                                    {editing && cue ? (
+                                        <NameInput
+                                            label={t('page.djPrep.cueName', { slot: letter })}
+                                            name={cue.name}
+                                            onCommit={(name) => {
+                                                const value = cueValue(cue);
+                                                if (value) {
+                                                    editing.editor.apply({
+                                                        cue: {
+                                                            slot: cue.index,
+                                                            value: {
+                                                                ...value,
+                                                                name: name || undefined,
+                                                            },
+                                                        },
+                                                    });
+                                                }
+                                            }}
+                                        />
+                                    ) : (
+                                        <Text className={styles.name} isMuted truncate>
+                                            {cue?.name || ''}
+                                        </Text>
+                                    )}
+                                    {cue && (
+                                        <ActionIcon
+                                            aria-label={t('page.djPrep.playCue', { slot: letter })}
+                                            icon="mediaPlay"
+                                            onClick={() =>
+                                                audio.play(decode(cue.position, cue.origin))
+                                            }
+                                            size="xs"
+                                            variant="subtle"
+                                        />
+                                    )}
+                                </>
                             )}
-                            <Text className={styles.slot} fw={600}>
-                                {loop.index + 1}
-                            </Text>
-                            <Text className={styles.range}>
-                                {formatDjTime(loop.start)} – {formatDjTime(loop.end)}
-                            </Text>
-                            {editing ? (
-                                <NameInput
-                                    label={t('page.djPrep.loopName', { slot: loop.index + 1 })}
-                                    name={loop.name}
-                                    onCommit={(name) =>
-                                        writeLoop(loop, { name: name || undefined })
-                                    }
-                                />
-                            ) : (
-                                <Text className={styles.name} isMuted truncate>
-                                    {[
-                                        loopLength != null
-                                            ? t('page.djPrep.bars', { count: loopLength })
-                                            : null,
-                                        loop.name,
-                                    ]
-                                        .filter(Boolean)
-                                        .join(' · ')}
-                                </Text>
-                            )}
-                            {editing && loopLength != null && (
-                                <Text isMuted size="xs">
-                                    {t('page.djPrep.bars', { count: loopLength })}
-                                </Text>
-                            )}
-                            <ActionIcon
-                                aria-label={t('page.djPrep.playLoop', { slot: loop.index + 1 })}
-                                icon="mediaPlay"
-                                onClick={() => {
-                                    // Plays on through the loop's end; pausing first drops
-                                    // an audition, which would otherwise keep wrapping.
-                                    if (audio.auditioning) audio.pause();
-                                    audio.play(start);
-                                }}
-                                size="xs"
-                                tooltip={{
-                                    label: t('page.djPrep.playLoop', { slot: loop.index + 1 }),
-                                }}
-                                variant="subtle"
-                            />
-                            <ActionIcon
-                                aria-label={
-                                    playing
-                                        ? t('page.djPrep.stopLoop')
-                                        : t('page.djPrep.auditionLoop', { slot: loop.index + 1 })
-                                }
-                                aria-pressed={playing}
-                                icon={playing ? 'mediaStop' : 'mediaRepeat'}
-                                onClick={() =>
-                                    playing ? audio.pause() : audio.playLoop(start, end)
-                                }
-                                size="xs"
-                                tooltip={{
-                                    label: playing
-                                        ? t('page.djPrep.stopLoop')
-                                        : t('page.djPrep.auditionLoop', { slot: loop.index + 1 }),
-                                }}
-                                variant={playing ? 'filled' : 'subtle'}
-                            />
                             {editing && (
+                                <ActionIcon
+                                    aria-label={t('page.djPrep.setCue', { slot: letter })}
+                                    icon="arrowDownToLine"
+                                    onClick={() => setCueAtPlayhead(pad, entry)}
+                                    size="xs"
+                                    tooltip={{ label: t('page.djPrep.setCue', { slot: letter }) }}
+                                    variant="subtle"
+                                />
+                            )}
+                            {editing && entry && (
                                 <SlotMenu
-                                    count={LOOP_SLOTS}
-                                    label={t('page.djPrep.loopMenu', { slot: loop.index + 1 })}
-                                    labelOf={(to) => t('page.djPrep.loopSlot', { slot: to + 1 })}
-                                    occupied={occupied}
-                                    onDelete={() =>
-                                        editing.editor.apply({
-                                            loop: { slot: loop.index, value: null },
-                                        })
+                                    count={PAD_LETTERS.length}
+                                    label={t(
+                                        entry.kind === 'cue'
+                                            ? 'page.djPrep.cueMenu'
+                                            : 'page.djPrep.loopMenu',
+                                        { slot: letter },
+                                    )}
+                                    labelOf={(to) => PAD_LETTERS[to]}
+                                    occupied={
+                                        new Set(layout.pads.flatMap((p, i) => (p ? [i] : [])))
                                     }
-                                    onMove={(to) => writeLoop(loop, {}, to)}
-                                    slot={loop.index}
+                                    onDelete={() => editing.editor.apply(clear(entry))}
+                                    onMove={(to) => move(entry, to)}
+                                    slot={pad}
                                 >
-                                    {editing.beats.length > 0 && (
+                                    {entry.kind === 'cue' && (
+                                        <DropdownMenu.Item
+                                            disabled={!canLoop}
+                                            onClick={() => toLoop(pad, entry.cue)}
+                                        >
+                                            {t('page.djPrep.makeLoop', { count: Number(bars) })}
+                                        </DropdownMenu.Item>
+                                    )}
+                                    {entry.kind === 'loop' && (
                                         <>
-                                            <DropdownMenu.Label>
-                                                {t('page.djPrep.length')}
-                                            </DropdownMenu.Label>
-                                            {LOOP_BARS.map((n) => (
-                                                <DropdownMenu.Item
-                                                    key={n}
-                                                    onClick={() => {
-                                                        const range = loopFrom(start, n);
-                                                        if (range) writeLoop(loop, range);
-                                                    }}
-                                                >
-                                                    {t('page.djPrep.bars', { count: n })}
-                                                </DropdownMenu.Item>
-                                            ))}
-                                            <DropdownMenu.Divider />
+                                            <DropdownMenu.Item
+                                                onClick={() => toCue(pad, entry.loop)}
+                                            >
+                                                {t('page.djPrep.makeCue')}
+                                            </DropdownMenu.Item>
+                                            {canLoop && (
+                                                <>
+                                                    <DropdownMenu.Label>
+                                                        {t('page.djPrep.length')}
+                                                    </DropdownMenu.Label>
+                                                    {LOOP_BARS.map((n) => (
+                                                        <DropdownMenu.Item
+                                                            key={n}
+                                                            onClick={() => {
+                                                                const { loop } = entry;
+                                                                const range = loopFrom(
+                                                                    decode(loop.start, loop.origin),
+                                                                    n,
+                                                                );
+                                                                const value = loopValue(loop);
+                                                                if (range && value) {
+                                                                    editing.editor.apply({
+                                                                        loop: {
+                                                                            slot: loop.index,
+                                                                            value: {
+                                                                                ...value,
+                                                                                ...range,
+                                                                            },
+                                                                        },
+                                                                    });
+                                                                }
+                                                            }}
+                                                        >
+                                                            {t('page.djPrep.bars', { count: n })}
+                                                        </DropdownMenu.Item>
+                                                    ))}
+                                                </>
+                                            )}
                                         </>
                                     )}
+                                    <DropdownMenu.Divider />
                                 </SlotMenu>
+                            )}
+                            {editing && !entry && (
+                                <ActionIcon
+                                    aria-label={t('page.djPrep.setLoop', { slot: letter })}
+                                    disabled={!canLoop}
+                                    icon="mediaRepeat"
+                                    iconProps={{ fill: canLoop ? 'primary' : 'muted' }}
+                                    onClick={() => setLoopAtPlayhead(pad, entry)}
+                                    size="xs"
+                                    tooltip={{ label: t('page.djPrep.setLoop', { slot: letter }) }}
+                                    variant="subtle"
+                                />
                             )}
                         </Group>
                     );
                 })}
             </Stack>
+            {layout.overflow.length > 0 && (
+                <Stack gap={2} mt="xs">
+                    <Text fw={600} size="xs">
+                        {t('page.djPrep.seratoLoops')}
+                    </Text>
+                    <Text isMuted size="xs">
+                        {t('page.djPrep.seratoLoopsHint')}
+                    </Text>
+                    {layout.overflow.map((entry) =>
+                        entry.kind === 'loop' ? (
+                            <Group
+                                className={styles.row}
+                                gap="sm"
+                                key={`loop-${entry.loop.index}`}
+                                wrap="nowrap"
+                            >
+                                {loopRow(entry.loop, null)}
+                                {editing && (
+                                    <ActionIcon
+                                        aria-label={t('common.delete', {
+                                            postProcess: 'sentenceCase',
+                                        })}
+                                        icon="delete"
+                                        onClick={() => editing.editor.apply(clear(entry))}
+                                        size="xs"
+                                        variant="subtle"
+                                    />
+                                )}
+                            </Group>
+                        ) : null,
+                    )}
+                </Stack>
+            )}
             {editing && (
                 <Stack gap={4} mt="xs">
                     <Group gap="xs" wrap="nowrap">
@@ -527,8 +717,8 @@ export const PrepLoops = ({
                             w={110}
                         />
                         <Button
-                            disabled={freeSlot == null || editing.beats.length === 0}
-                            onClick={addLoop}
+                            disabled={freePad === -1 || !canLoop}
+                            onClick={() => setLoopAtPlayhead(freePad, null)}
                             size="compact-xs"
                             variant="default"
                         >
@@ -536,9 +726,7 @@ export const PrepLoops = ({
                         </Button>
                     </Group>
                     <Text isMuted size="xs">
-                        {editing.beats.length === 0
-                            ? t('page.djPrep.addLoopNoGrid')
-                            : t('page.djPrep.addLoopHint')}
+                        {canLoop ? t('page.djPrep.addLoopHint') : t('page.djPrep.addLoopNoGrid')}
                     </Text>
                 </Stack>
             )}

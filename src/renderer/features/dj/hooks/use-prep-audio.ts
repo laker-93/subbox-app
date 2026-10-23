@@ -15,13 +15,16 @@ import { PlayerStatus } from '/@/shared/types/types';
 // gain node, so the visualizers and the chosen output device follow it as well.
 
 export interface PrepAudio {
-    /** The loop being auditioned, decode seconds. */
-    auditioning: null | { end: number; start: number };
+    /** The active loop, decode seconds: playback wraps from its end to its start. */
+    activeLoop: null | { end: number; start: number };
+    /** Release the active loop; playback carries on through its end. */
+    exitLoop: () => void;
     isPlaying: boolean;
+    /** Pause. An active loop stays active, as on a DJ deck. */
     pause: () => void;
     /** Play from `seconds`, or from where it is. */
     play: (seconds?: number) => void;
-    /** Play `start`–`end` on repeat until paused or seeked out of. */
+    /** Activate `start`–`end` and play from `start`, until exited or seeked out of. */
     playLoop: (start: number, end: number) => void;
     /** Decode seconds. Updated a few times a second while playing. */
     position: number;
@@ -44,13 +47,13 @@ export const usePrepAudio = (src: null | string): PrepAudio => {
     const { webAudio } = useWebAudio();
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const loopRef = useRef<null | { end: number; start: number }>(null);
-    const [auditioning, setAuditioning] = useState<PrepAudio['auditioning']>(null);
+    const [activeLoop, setActiveLoop] = useState<PrepAudio['activeLoop']>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [position, setPosition] = useState(0);
 
-    const setLoop = useCallback((loop: PrepAudio['auditioning']) => {
+    const setLoop = useCallback((loop: PrepAudio['activeLoop']) => {
         loopRef.current = loop;
-        setAuditioning(loop);
+        setActiveLoop(loop);
     }, []);
 
     useEffect(() => {
@@ -167,8 +170,9 @@ export const usePrepAudio = (src: null | string): PrepAudio => {
 
     const pause = useCallback(() => {
         audioRef.current?.pause();
-        setLoop(null);
-    }, [setLoop]);
+    }, []);
+
+    const exitLoop = useCallback(() => setLoop(null), [setLoop]);
 
     const toggle = useCallback(() => {
         if (audioRef.current?.paused) play();
@@ -187,7 +191,8 @@ export const usePrepAudio = (src: null | string): PrepAudio => {
     const readPosition = useCallback(() => audioRef.current?.currentTime ?? 0, []);
 
     return {
-        auditioning,
+        activeLoop,
+        exitLoop,
         isPlaying,
         pause,
         play,

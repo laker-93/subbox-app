@@ -28,7 +28,9 @@ const useFieldLabel = () => {
     return (field: string) => {
         const [kind, slot] = field.split(':');
         if (kind === 'cue') return t('page.djPrep.fieldCue', { slot: PAD_LETTERS[+slot] ?? slot });
-        if (kind === 'loop') return t('page.djPrep.fieldLoop', { slot: +slot + 1 });
+        if (kind === 'loop') {
+            return t('page.djPrep.fieldLoop', { slot: PAD_LETTERS[+slot] ?? slot });
+        }
         return (
             {
                 bpm: t('page.djPrep.bpm'),
