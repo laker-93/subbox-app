@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sub-box Getting Started</title>
+<meta name="description" content="Install Sub-box and upload your Rekordbox or Serato library.">
+<style>
+/* Layout: one reading column, a sticky bar that switches between the four guides,
+   three parts in order, each a numbered list of steps with the app's own screens. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --line: #dcdfe5; --fg: #14161a; --muted: #5b6372;
+  --accent: #2b5cf0; --accent-fg: #ffffff; --accent-soft: #e6ecfe; --note: #fff6e0; --note-line: #f0d48a;
+  --shot-bg: #0c0d0f;
+  /* System fonts only: a font CDN would send every visitor's IP to a third party
+     that sub-box.net's privacy notice doesn't name. */
+  --display: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c0d0f; --surface: #15171b; --line: #272b33; --fg: #eceef2; --muted: #9aa2b0;
+  --accent: #4772ff; --accent-fg: #ffffff; --accent-soft: #18213d; --note: #241f12; --note-line: #5a4a1f;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0c0d0f; --surface: #15171b; --line: #272b33; --fg: #eceef2; --muted: #9aa2b0;
+  --accent: #4772ff; --accent-fg: #ffffff; --accent-soft: #18213d; --note: #241f12; --note-line: #5a4a1f;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 17px/1.6 var(--body); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.bar-in, .wrap { max-width: 780px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-in { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding-block: 10px; }
+.mark { display: flex; align-items: center; gap: 8px; font: 700 18px/1 var(--display); color: var(--fg); text-decoration: none; margin-right: auto; }
+.mark svg { width: 22px; height: 22px; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.seg a { padding: 4px 11px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--muted); text-decoration: none; }
+.seg a[aria-current="page"] { background: var(--accent-soft); color: var(--fg); }
+.seg a:hover { color: var(--fg); }
+
+.wrap { padding-block: 40px 72px; display: grid; gap: 48px; }
+header.hero { display: grid; gap: 14px; }
+.eyebrow { font: 600 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(30px, 6vw, 42px)/1.12 var(--display); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+h2 { font: 700 24px/1.25 var(--display); margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 62ch; }
+.need { margin: 0; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 6px; }
+.need strong { font-weight: 600; }
+.need ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+
+section.part { display: grid; gap: 20px; }
+.part-head { display: grid; gap: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
+.part-head .eyebrow { padding-top: 22px; }
+ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; display: grid; gap: 26px; }
+ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 0 14px; }
+ol.steps > li::before { content: counter(step); grid-row: 1 / span 20; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent); color: var(--accent-fg); font: 600 15px/1 var(--body); font-variant-numeric: tabular-nums; margin-top: 1px; }
+ol.steps > li > * { grid-column: 2; min-width: 0; }
+ol.steps p { margin: 0 0 8px; max-width: 64ch; }
+ol.steps p:last-child { margin-bottom: 0; }
+ol.steps ul { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 4px; }
+
+.ui { display: inline-block; padding: 0 7px; border-radius: 5px; background: var(--accent); color: var(--accent-fg); font-weight: 600; font-size: .92em; line-height: 1.6; white-space: nowrap; }
+.menu { font-family: var(--mono); font-size: .86em; padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); white-space: normal; }
+.menu i { font-style: normal; color: var(--muted); padding: 0 2px; }
+code, .file { font-family: var(--mono); font-size: .86em; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere; }
+.quote { font-weight: 600; }
+
+figure { margin: 12px 0 4px; display: grid; gap: 8px; }
+figure img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--shot-bg); }
+figure.narrow img { max-width: 360px; }
+figure.mid img { max-width: 540px; }
+figcaption { font-size: 14px; color: var(--muted); }
+
+.note { margin: 10px 0 2px; padding: 12px 14px; border-radius: 10px; background: var(--note); border: 1px solid var(--note-line); font-size: 15.5px; display: grid; gap: 6px; }
+.note p { margin: 0; }
+.note strong { font-weight: 600; }
+.cmd { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.cmd code { flex: 1 1 240px; padding: 8px 10px; font-size: 14px; }
+.cmd button { font: 600 14px/1 var(--body); padding: 0 14px; min-height: 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font-weight: 600; text-decoration: none; margin: 4px 0 8px; }
+.btn:hover { filter: brightness(1.08); }
+.btn.alt { background: var(--surface); color: var(--fg); border: 1px solid var(--line); }
+p:has(> .btn) { display: flex; flex-wrap: wrap; gap: 0 10px; }
+/* Matches the numbered amber outlines drawn on the screenshots. */
+.n { display: inline-grid; place-items: center; width: 1.35em; height: 1.35em; border-radius: 50%; background: #ffb020; color: #14161a; font-weight: 700; font-size: .8em; vertical-align: .1em; }
+
+details { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 0 16px; }
+details + details { margin-top: 10px; }
+summary { cursor: pointer; padding: 13px 0; font-weight: 600; }
+details p { margin: 0 0 14px; max-width: 64ch; }
+footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line); padding-top: 22px; }
+
+/* Chooser */
+.choose { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.card { display: grid; gap: 6px; padding: 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); text-decoration: none; }
+.card:hover { border-color: var(--accent); }
+.card b { font: 700 19px/1.3 var(--display); }
+.card span { color: var(--muted); font-size: 15px; }
+@media (max-width: 560px) { .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="bar"><div class="bar-in"><a class="mark" href=""><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="4" fill="currentColor" opacity=".12"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 10v4M8 7v10M11 9v6M14 5v14M17 8v8M20 11v2"/></g></svg>Sub-box</a></div></div>
+<main class="wrap">
+<header class="hero">
+<div class="eyebrow">Getting started</div>
+<h1>Get your DJ library onto Sub-box</h1>
+<p class="lede">Pick your computer and your DJ software. Each guide takes you from downloading the app to seeing your playlists in Sub-box, in about ten minutes plus upload time.</p>
+</header>
+<div class="choose"><a class="card" href="setup/mac-rekordbox.html"><b>Rekordbox on Mac</b><span>Install on a Mac, then upload your Rekordbox playlists.</span></a><a class="card" href="setup/windows-rekordbox.html"><b>Rekordbox on Windows</b><span>Install on Windows, then upload your Rekordbox playlists.</span></a><a class="card" href="setup/mac-serato.html"><b>Serato on Mac</b><span>Install on a Mac, then upload your Serato crates.</span></a><a class="card" href="setup/windows-serato.html"><b>Serato on Windows</b><span>Install on Windows, then upload your Serato crates.</span></a></div>
+<footer>Stuck? Ask on the Sub-box <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>.</footer>
+</main>
+</body>
+</html>
