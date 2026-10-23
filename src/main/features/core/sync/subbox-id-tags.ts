@@ -218,9 +218,31 @@ export function writeSubboxId(filePath: string, id: string): void {
             id3.addFrame(frame);
         }
 
+        if (file.tagTypes & TagLib.TagTypes.Id3v2) {
+            dropUnparsedUfidFrames(file.getTag(TagLib.TagTypes.Id3v2, false) as TagLib.Id3v2Tag);
+        }
         file.save();
     } finally {
         file?.dispose();
+    }
+}
+
+/**
+ * Remove UFID frames TagLib could not parse, so the tag can be saved at all.
+ *
+ * Jamendo (and some taggers) write `UFID:http://musicbrainz.org` with an empty
+ * identifier: the owner, its NUL terminator, and nothing after. TagLib's field
+ * split drops the trailing empty field, gives up parsing, and leaves `owner`
+ * undefined — then throws "Argument null: text was not provided" when `save()`
+ * re-renders the frame. The frame carries no identifier, so dropping it loses
+ * nothing (#275).
+ */
+function dropUnparsedUfidFrames(id3: TagLib.Id3v2Tag): void {
+    const frames = id3.getFramesByClassType<TagLib.Id3v2UniqueFileIdentifierFrame>(
+        TagLib.Id3v2FrameClassType.UniqueFileIdentifierFrame,
+    );
+    for (const frame of frames) {
+        if (frame.owner === undefined || frame.identifier === undefined) id3.removeFrame(frame);
     }
 }
 
