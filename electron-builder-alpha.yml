@@ -1,6 +1,6 @@
 appId: org.jeffvli.subbox
 productName: Subbox
-artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+artifactName: ${productName}-${os}-${arch}.${ext}
 electronVersion: 39.4.0
 directories:
     buildResources: assets
