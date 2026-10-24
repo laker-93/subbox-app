@@ -133,15 +133,15 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 
 <li><p><strong>Allow it.</strong> Open <span class="menu">System Settings<i>›</i>Privacy & Security</span> and scroll down. Next to <span class="quote">“Subbox” was blocked</span>, click <span class="quote">Open Anyway</span>, enter your Mac password, then click <span class="quote">Open Anyway</span> again. Sub-box opens.</p>
 <div class="note"><p><strong>Why?</strong> Sub-box isn’t from the App Store yet, so macOS asks you to confirm you trust it. You only do this once.</p></div>
-<details><summary>My Mac says Subbox “is damaged and can’t be opened”</summary>
-<p>It’s the same check, worded more harshly. Open Terminal (Applications › Utilities), paste this line, press Return, then open Sub-box again:</p>
+<details><summary>Still not working?</summary>
+<p>Open Terminal (Applications › Utilities), paste this line, press Return, then open Sub-box again:</p>
 <div class="cmd"><code id="xattr">xattr -cr /Applications/Subbox.app</code><button type="button" data-copy="xattr">Copy</button></div>
 <p></p></details></li></ol>
 <p class="lede">When a new version comes out, Sub-box tells you. Get it with the same download button and repeat steps 2 to 4.</p></section>
 
 <section class="part" aria-labelledby="p2"><div class="part-head"><div class="eyebrow">Part 2 of 3</div><h2 id="p2">Sign in</h2></div>
 <ol class="steps">
-<li><p><strong>Click <span class="ui">Login</span></strong> on the Sub-box start screen. No account yet? Click <span class="quote">Request an invite</span> under it.</p>
+<li><p><strong>Click <span class="ui">Login</span></strong></p>
 <figure><img src="img/landing.png" alt="The Sub-box start screen, with the Login button outlined" loading="lazy"></figure></li>
 <li><p><strong>Enter your username and password</strong> and click <span class="ui">Login</span>. Leave <span class="quote">Remember me</span> ticked so you stay signed in.</p>
 <figure class="narrow"><img src="img/login.png" alt="The login box, with the Login button outlined" loading="lazy"></figure></li></ol></section>
