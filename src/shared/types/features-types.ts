@@ -3,6 +3,7 @@
 export enum ServerFeature {
     ALBUM_YES_NO_RATING_FILTER = 'albumYesNoRatingFilter',
     BFR = 'bfr',
+    CANONICAL_IDS = 'canonicalIds',
     LYRICS_MULTIPLE_STRUCTURED = 'lyricsMultipleStructured',
     LYRICS_SINGLE_STRUCTURED = 'lyricsSingleStructured',
     MUSIC_FOLDER_MULTISELECT = 'musicFolderMultiselect',
