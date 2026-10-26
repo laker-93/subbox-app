@@ -27,6 +27,7 @@ export const logMsg = {
         autoPlayTriggered: 'Auto play triggered',
         cancelledFetch: 'Cancelled fetch',
         clearQueue: 'Cleared queue',
+        clearQueuePreCanonicalIds: 'Dropped a queue saved before the server re-encoded its ids',
         clearSelected: 'Cleared selected',
         decreaseVolume: 'Decreased volume',
         increaseVolume: 'Increased volume',

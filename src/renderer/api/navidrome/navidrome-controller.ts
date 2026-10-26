@@ -30,6 +30,9 @@ import { ServerFeature } from '/@/shared/types/features-types';
 const VERSION_INFO: VersionInfo = [
     // Why 2? Subsonic controller will return 1 for its own implementation
     // Use 2 to denote that Navidrome's own API has a different endpoint
+    // 0.64.0 re-encoded every id; a queue persisted from before it names songs that
+    // no longer exist (use-drop-pre-canonical-queue.ts).
+    ['0.64.0', { [ServerFeature.CANONICAL_IDS]: [1] }],
     ['0.60.4', { [ServerFeature.TRACK_YES_NO_RATING_FILTER]: [1] }],
     ['0.57.0', { [ServerFeature.SERVER_PLAY_QUEUE]: [2] }],
     ['0.56.0', { [ServerFeature.TRACK_ALBUM_ARTIST_SEARCH]: [1] }],
