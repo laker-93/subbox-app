@@ -133,7 +133,18 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
             selectAll(previews.map((p) => playlistKey(p)));
             setLocalStep('preview');
         } catch (err: any) {
-            setLocalError(err?.message || 'Failed to parse XML');
+            // Main-process extractPlaylists() throws 'Invalid root node' / 'Invalid
+            // track' / 'Invalid trackReference' for anything that isn't a real
+            // Rekordbox collection XML (wrong schema, truncated/corrupt, or a
+            // non-XML file with an .xml extension). Electron's IPC bridge wraps
+            // that as "Error invoking remote method '...': Error: <message>" —
+            // shown to the user verbatim otherwise.
+            const message: string = err?.message || '';
+            setLocalError(
+                /Invalid root node|Invalid track(Reference)?/.test(message)
+                    ? "This doesn't look like a Rekordbox collection XML. In Rekordbox, use File → Export Collection in xml format, then select that file."
+                    : message || 'Failed to parse XML',
+            );
             setLocalStep('idle');
         }
     }, [selectAll]);
