@@ -98,6 +98,13 @@ export async function uploadFileViaTus(args: {
     trackName: string;
 }): Promise<void> {
     const { fbAuth, filebrowserUrl, filePath, onProgress, stagingPath, trackName } = args;
+    // Fail fast and cleanly on a file this process can't read (permission denied, a
+    // cloud-sync placeholder, a lock held by another app). `statSync` above would
+    // succeed even on a chmod-000 file (it only needs directory traverse permission,
+    // not read access to the file itself) — if left to tus-js-client, each retry
+    // opens the file itself via its own internal fs.createReadStream with no error
+    // listener, which throws as an uncaught exception instead of rejecting here.
+    fs.accessSync(filePath, fs.constants.R_OK);
     const fileSize = fs.statSync(filePath).size;
     // Encode each path segment individually so `/` separators remain real slashes in
     // the URL. Using encodeURIComponent on the whole path encodes `/` as `%2F` which
@@ -132,6 +139,16 @@ export async function uploadFileViaTus(args: {
 
         await new Promise<void>((resolve, reject) => {
             const fileStream = fs.createReadStream(filePath);
+            // tus-js-client's Node FileReader sees this is a ReadStream with a `.path`
+            // and reads the file itself via that path (FileSource), never consuming
+            // `fileStream` as a stream — so when creating `fileStream` fails to open
+            // the file (permission denied, deleted/locked between the pre-upload
+            // existsSync check and here), the resulting 'error' event has no listener
+            // and Node rethrows it as an uncaught exception. The global handler in
+            // src/main/index.ts swallows that, but the ipc call this promise belongs
+            // to then never resolves, hanging the renderer forever instead of failing
+            // just this one track (found live via a chmod'd-unreadable fixture file).
+            fileStream.on('error', reject);
             const uploader = new tus.Upload(fileStream as unknown as Buffer, {
                 ...tusOptions(fbAuth),
                 chunkSize: CHUNK_SIZE,
