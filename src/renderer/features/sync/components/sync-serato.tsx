@@ -138,7 +138,17 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                 selectAll(previews.map(crateKey));
                 setLocalStep('preview');
             } catch (err: any) {
-                setLocalError(err?.message || 'Failed to read the Serato library');
+                // Main-process readCrateTree() throws 'no SubCrates folder in <path>' when
+                // the remembered seratoFolder (persisted across sessions, #see useSeratoFolder
+                // above) no longer has one -- moved, renamed, or an external drive that isn't
+                // mounted right now. Electron's IPC bridge wraps that as "Error invoking
+                // remote method '...': Error: <message>" -- shown to the user verbatim otherwise.
+                const message: string = err?.message || '';
+                setLocalError(
+                    /no SubCrates folder in/.test(message)
+                        ? "Can't find a _Serato_ folder there any more. It may have moved, been renamed, or be on a drive that isn't connected -- choose it again under the cog."
+                        : message || 'Failed to read the Serato library',
+                );
                 setLocalStep('idle');
             }
         },
