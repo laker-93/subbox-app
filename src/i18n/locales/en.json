@@ -761,6 +761,7 @@
                 "statusError": "sub-box can't access this wishlist sheet",
                 "statusChecking": "checking sheet access..."
             },
+            "inboxNeedsInfo": "needs an artist and title before it can be matched",
             "inboxRawNote": "raw note",
             "openInLibrary": "go to track in library",
             "resolving": "resolving…",
