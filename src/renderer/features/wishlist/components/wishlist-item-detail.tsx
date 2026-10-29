@@ -122,12 +122,19 @@ export const WishlistItemDetail = ({ item }: WishlistItemDetailProps) => {
 
     const candidate = candidates?.[candidateIndex];
     const isInbox = item.status === 'inbox';
+    // Mirrors wishlist-row.tsx's isRawNote: an inbox item is either an unprocessed sheet-sync
+    // note, or a hand-typed artist/title pair still missing one field (no raw_note at all —
+    // see CreateWishlistRequest, which has no raw_note param). The two need different copy, or
+    // the half-typed-pair case shows "raw note" for an item that was never a note.
+    const isRawNote = isInbox && Boolean(item.raw_note);
 
     if (isInbox) {
         return (
             <Stack gap="xs" p="sm">
                 <Text isMuted size="sm">
-                    {t('page.wishlist.inboxRawNote', { postProcess: 'sentenceCase' })}
+                    {t(isRawNote ? 'page.wishlist.inboxRawNote' : 'page.wishlist.inboxNeedsInfo', {
+                        postProcess: 'sentenceCase',
+                    })}
                 </Text>
                 <Group gap="xs" wrap="wrap">
                     <Button onClick={handleEditEntry} size="sm" variant="default">
