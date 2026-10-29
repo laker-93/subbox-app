@@ -1,7 +1,7 @@
 // Screenshots for the onboarding guides, cropped and annotated, written straight to the
 // guides' img/ names. Drives a dev-mode Electron build against the local dev stack.
 //
-//   APP=<build>/main/index.js FIXTURE=<fixture root> OUT=<dir> node guide-shots.mjs rekordbox|serato
+//   APP=<build>/main/index.js FIXTURE=<fixture root> OUT=<dir> node guide-shots.mjs rekordbox|serato|folder
 //
 // Click targets get a numbered amber outline, drawn into the page before the shot, so
 // the image needs no editing afterwards.
@@ -14,10 +14,11 @@ const { _electron: electron } = await import(`${QA}/node_modules/playwright/inde
 const { performLogin } = await import(`${QA}/scripts/ui-snapshot-shared.mjs`);
 
 const FORMAT = process.argv[2];
-const P = FORMAT === 'rekordbox' ? 'rb' : 'se';
+const P = { folder: 'wa', rekordbox: 'rb', serato: 'se' }[FORMAT];
 const { APP, FIXTURE, OUT } = process.env;
 const XML = path.join(FIXTURE, 'rb/rekordbox.xml');
 const SERATO = path.join(FIXTURE, 'serato/_Serato_');
+const FOLDER = path.join(FIXTURE, 'folder/Music');
 const credentials = { password: 'GuideShots2026pass', username: 'guide231026' };
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -25,6 +26,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const REWRITES = [
     [XML, '/Users/you/Documents/rekordbox.xml'],
     [SERATO, '/Users/you/Music/_Serato_'],
+    [FOLDER, '/Users/you/Music/New Music'],
     [FIXTURE, '/Users/you'],
 ];
 
@@ -112,7 +114,7 @@ await app.evaluate(
     async ({ dialog }, target) => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
     },
-    FORMAT === 'serato' ? SERATO : XML,
+    { folder: FOLDER, rekordbox: XML, serato: SERATO }[FORMAT],
 );
 
 page = await app.firstWindow();
@@ -156,6 +158,48 @@ await page.waitForTimeout(3000);
 
 const syncLabel = await radioLabel('sync');
 await syncLabel.click();
+
+if (FORMAT === 'folder') {
+    const watchTab = page.getByRole('button', { name: /^watch$/i }).first();
+    await watchTab.waitFor({ timeout: 30_000 });
+    await watchTab.click();
+    await page.waitForTimeout(800);
+    const select = page.getByRole('button', { name: /select directory/i });
+    await shot('wa-start', { clip: { height: 300, width: 1280, x: 0, y: 0 }, marks: [syncLabel, watchTab, select] });
+    await select.first().click();
+    await page.waitForTimeout(800);
+    const start = page.getByRole('button', { name: /start watching/i });
+    await shot('wa-ready', { clip: { height: 300, width: 1280, x: 0, y: 0 }, marks: [start] });
+    await start.first().click();
+    // "Watching for new files" also shows before the first pass has found anything,
+    // so wait for an upload to start, then for the folder to go idle again.
+    await page
+        .getByText(/^uploading \d+\/\d+/i)
+        .first()
+        .waitFor({ timeout: 60_000 });
+    await page
+        .getByText(/watching for new files/i)
+        .first()
+        .waitFor({ timeout: 600_000 });
+    await page.waitForTimeout(1000);
+    await shot('wa-done', { clip: { height: 220, width: 760, x: 0, y: 130 } });
+    // pymix imports what landed in the watch folder on its own schedule; give it
+    // time before the library is shot.
+    await page.waitForTimeout(90_000);
+    await (await radioLabel('library')).click();
+    await page.waitForTimeout(3000);
+    const tracks = page.getByText(/^tracks$/i).first();
+    await tracks.click();
+    await page.waitForTimeout(5000);
+    await shot('wa-library', { clip: { height: 680, width: 1280, x: 0, y: 0 }, marks: [tracks] });
+    await (await radioLabel('sync')).click();
+    await page.waitForTimeout(800);
+    await page.getByRole('button', { name: /^watch$/i }).first().click();
+    await page.getByRole('button', { name: /stop watching/i }).first().click();
+    await page.waitForTimeout(800);
+    await app.close();
+    process.exit(0);
+}
 const uploadTab = page.getByRole('button', { name: /^upload$/i }).first();
 await uploadTab.waitFor({ timeout: 30_000 });
 await uploadTab.click();

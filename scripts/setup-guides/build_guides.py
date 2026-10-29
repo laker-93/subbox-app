@@ -1,4 +1,7 @@
-"""Build the four Sub-box onboarding guides plus a chooser page.
+"""Build the six Sub-box onboarding guides plus a chooser page.
+
+One per computer (Mac, Windows) × starting point: a plain folder of music, which needs no
+DJ software, or a Rekordbox or Serato library.
 
 Writes <out>/site/ (every page a full HTML document, ready for www.sub-box.net) and
 <out>/artifact/ (the chooser as a bare body for the Artifact skeleton, the guides as
@@ -23,7 +26,8 @@ HOME = "index.html"
 GUIDES = ""
 
 OS_NAME = {"mac": "Mac", "windows": "Windows"}
-SW_NAME = {"rekordbox": "Rekordbox", "serato": "Serato"}
+SW_NAME = {"folder": "Folder", "rekordbox": "Rekordbox", "serato": "Serato"}
+SOFTWARE = ("folder", "rekordbox", "serato")
 
 HEAD = """<title>{title}</title>
 <meta name="description" content="{desc}">
@@ -72,9 +76,6 @@ header.hero { display: grid; gap: 14px; }
 h1 { font: 700 clamp(30px, 6vw, 42px)/1.12 var(--display); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
 h2 { font: 700 24px/1.25 var(--display); margin: 0; text-wrap: balance; }
 .lede { margin: 0; color: var(--muted); max-width: 62ch; }
-.need { margin: 0; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 6px; }
-.need strong { font-weight: 600; }
-.need ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
 
 section.part { display: grid; gap: 20px; }
 .part-head { display: grid; gap: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
@@ -160,7 +161,7 @@ def bar(os_=None, sw=None):
     if os_:
         inner += seg([("mac", "Mac", "Computer"), ("windows", "Windows", "Computer")], os_,
                      lambda k: page_name(k, sw))
-        inner += seg([("rekordbox", "Rekordbox", "DJ software"), ("serato", "Serato", "DJ software")], sw,
+        inner += seg([(k, SW_NAME[k], "Starting point") for k in SOFTWARE], sw,
                      lambda k: page_name(os_, k))
     return f'<div class="bar"><div class="bar-in">{inner}</div></div>'
 
@@ -193,8 +194,8 @@ def install_mac():
 
 <li><p><strong>Allow it.</strong> Open {menu("System Settings", "Privacy & Security")} and scroll down. Next to <span class="quote">“Subbox” was blocked</span>, click <span class="quote">Open Anyway</span>, enter your Mac password, then click <span class="quote">Open Anyway</span> again. Sub-box opens.</p>
 <div class="note"><p><strong>Why?</strong> Sub-box isn’t from the App Store yet, so macOS asks you to confirm you trust it. You only do this once.</p></div>
-<details><summary>My Mac says Subbox “is damaged and can’t be opened”</summary>
-<p>It’s the same check, worded more harshly. Open Terminal (Applications › Utilities), paste this line, press Return, then open Sub-box again:</p>
+<details><summary>Still not working?</summary>
+<p>Open Terminal (Applications › Utilities), paste this line, press Return, then open Sub-box again:</p>
 <div class="cmd"><code id="xattr">xattr -cr /Applications/Subbox.app</code><button type="button" data-copy="xattr">Copy</button></div>
 <p></p></details></li>"""
 
@@ -213,7 +214,7 @@ def install_windows():
 
 def sign_in():
     return f"""
-<li><p><strong>Click {ui("Login")}</strong> on the Sub-box start screen. No account yet? Click <span class="quote">Request an invite</span> under it.</p>
+<li><p><strong>Click {ui("Login")}</strong></p>
 {fig("landing", "The Sub-box start screen, with the Login button outlined")}</li>
 <li><p><strong>Enter your username and password</strong> and click {ui("Login")}. Leave <span class="quote">Remember me</span> ticked so you stay signed in.</p>
 {fig("login", "The login box, with the Login button outlined", size="narrow")}</li>"""
@@ -226,9 +227,12 @@ def mac_allow(folders):
 
 def upload_rekordbox(os_):
     allow = mac_allow("Documents or Music") if os_ == "mac" else ""
+    # Taken by hand in Rekordbox on a Mac (#281); there's no Windows one.
+    export = (fig("rb-export", "Rekordbox on a Mac with the File menu open and Export Collection in xml format highlighted") + "\n"
+              if os_ == "mac" else "")
     return f"""
 <li><p><strong>Export your collection from Rekordbox.</strong> In Rekordbox, choose {menu("File", "Export Collection in xml format")} and save the file in your Documents folder.</p>
-<div class="note"><p>Sub-box finds each track where Rekordbox says it is, so don’t move or rename music files before you upload.</p></div></li>
+{export}<div class="note"><p>Sub-box finds each track where Rekordbox says it is, so don’t move or rename music files before you upload.</p></div></li>
 
 <li><p><strong>Pick the file in Sub-box.</strong> Click <span class="quote">Sync</span> at the top right <span class="n">1</span>, choose <span class="quote">Rekordbox</span> <span class="n">2</span>, then click {ui("Select XML File")} <span class="n">3</span> and pick the file you just saved.</p>
 {fig("rb-start", "The Sync screen: Sync, Rekordbox and Select XML File outlined and numbered 1 to 3")}{allow}</li>
@@ -265,16 +269,56 @@ def upload_serato(os_):
 {fig("se-playlist", "The Warm Up playlist open inside the Gigs folder, each track showing 3 cues")}</li>"""
 
 
+def upload_folder(os_):
+    allow = mac_allow("Music, Downloads or Documents") if os_ == "mac" else ""
+    return f"""
+<li><p><strong>Choose a folder of music.</strong> Click <span class="quote">Sync</span> at the top right <span class="n">1</span>, choose <span class="quote">Watch</span> <span class="n">2</span>, then click {ui("Select Directory")} <span class="n">3</span> and pick a folder with some of your tracks in it. Folders inside it are included.</p>
+{fig("wa-start", "The Sync screen: Sync, Watch and Select Directory outlined and numbered 1 to 3")}{allow}
+<div class="note"><p><strong>Start small.</strong> A folder with a few favourite tracks is enough to try Sub-box. You can point it at a bigger folder later.</p></div></li>
+
+<li><p><strong>Click {ui("Start Watching")}.</strong> Sub-box starts uploading every track in the folder.</p>
+{fig("wa-ready", "The Watch screen with the chosen folder and the Start Watching button outlined")}
+<div class="note"><p>Your files stay where they are. Sub-box doesn’t move, rename or convert them. It does add a small ID tag to each file it uploads, so it can recognise that track later.</p></div></li>
+
+<li><p><strong>Wait for <span class="quote">Watching for new files…</span></strong> While it works it shows <span class="quote">Uploading 3/8</span> and the file it’s on. Keep Sub-box open until it finishes.</p>
+{fig("wa-done", "The Watch screen showing Stop Watching and the message Watching for new files", size="mid")}</li>
+
+<li><p><strong>Find your tracks.</strong> Click <span class="quote">Library</span> at the top right, then <span class="quote">Tracks</span> in the sidebar. Sub-box sorts each upload into your library, so the last tracks can take a minute or two to appear.</p>
+{fig("wa-library", "The Tracks page listing the 8 uploaded tracks, with Tracks outlined in the sidebar")}</li>
+
+<li><p><strong>Add more any time.</strong> While Sub-box is open, anything new you save into that folder is uploaded automatically, and it carries on watching the next time you open the app. Click <span class="quote">Stop Watching</span> to turn it off.</p></li>"""
+
+
+def troubleshooting_folder():
+    return f"""
+<details><summary>Some files “could not be read and were not uploaded”</summary>
+<p>Sub-box couldn’t open those files to tag them, usually because they are damaged or still being copied. Everything else uploads normally. Sub-box tries them again on every pass, so a file that finishes copying is picked up by itself.</p></details>
+<details><summary>Nothing uploads</summary>
+<p>Sub-box uploads MP3, FLAC, WAV, AAC, M4A, OGG, Opus and WMA files. It skips folders whose name starts with a dot. Check the folder you chose has music of those kinds in it, then click <span class="quote">Stop Watching</span> and <span class="quote">Start Watching</span> again.</p></details>
+<details><summary>It says “Error uploading”</summary>
+<p>Take a screenshot and send it to us on <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>. Nothing in your folder is changed by a failed upload, and Sub-box tries again on its next pass.</p></details>"""
+
+
+def next_steps(os_):
+    links = " or ".join(f'<a href="{page_name(os_, s)}">{SW_NAME[s]}</a>' for s in ("rekordbox", "serato"))
+    return f"""
+<section class="part" aria-labelledby="p5"><div class="part-head"><div class="eyebrow">When you’re ready</div><h2 id="p5">Bring in your playlists and cue points</h2></div>
+<p class="lede">A folder brings in tracks. If you use {links}, upload your library from there too and Sub-box adds your playlists, folders, cue points and beatgrids.</p></section>"""
+
+
 def troubleshooting(sw):
-    fix = ("In Rekordbox, find the missing files (they show a warning icon), then export the collection again."
-           if sw == "rekordbox" else
-           "In Serato, use <span class=\"quote\">Relocate Lost Files</span> to find them.")
     container = "playlist" if sw == "rekordbox" else "crate"
+    if sw == "rekordbox":
+        # The Rekordbox screen's own words (sync-rekordbox.tsx), which differ from Serato's (#283).
+        skipped = """<details><summary>Some tracks are “skipped (file not found, or already uploaded)”</summary>
+<p>This covers two different things: a file that was moved or deleted after Rekordbox last saw it, or a track you already uploaded in an earlier sync (harmless). Everything else uploaded normally. If you think a track is missing, check Rekordbox for a warning icon on it, export the collection again, then put the fixed tracks in a new playlist and upload just that one.</p></details>"""
+    else:
+        skipped = f"""<details><summary>Some tracks “could not be read from this computer”</summary>
+<p>Those files were moved or deleted after Serato last saw them. Everything else uploaded normally. In Serato, use <span class="quote">Relocate Lost Files</span> to find them. Then put the fixed tracks in a new crate and upload just that one.</p></details>"""
     return f"""
 <details><summary>It says “Storage Limit Reached”</summary>
 <p>The playlists you ticked add up to more than the space on your account. Nothing was uploaded. Go back, untick some {container}s and try again.</p></details>
-<details><summary>Some tracks “could not be read from this computer”</summary>
-<p>Those files were moved or deleted after {SW_NAME[sw]} last saw them. Everything else uploaded normally. {fix} Then put the fixed tracks in a new {container} and upload just that one.</p></details>
+{skipped}
 <details><summary>The upload failed</summary>
 <p>Click <span class="quote">Copy details</span> on the error screen and paste it to us on <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>. Your library isn’t changed by a failed upload, so it’s safe to click <span class="quote">Retry</span>.</p></details>
 <details><summary>I want to add more music later</summary>
@@ -282,23 +326,30 @@ def troubleshooting(sw):
 
 
 def guide(os_, sw):
-    title = f"Sub-box for {SW_NAME[sw]} on {OS_NAME[os_]}"
-    desc = f"Install the Sub-box desktop app on a {OS_NAME[os_]} and upload your {SW_NAME[sw]} playlists."
     install = install_mac() if os_ == "mac" else install_windows()
-    upload = upload_rekordbox(os_) if sw == "rekordbox" else upload_serato(os_)
-    thing = "playlists" if sw == "rekordbox" else "crates"
-    computer = "Mac" if os_ == "mac" else "Windows PC"
+    if sw == "folder":
+        title = f"Sub-box from a music folder on {OS_NAME[os_]}"
+        desc = f"Install the Sub-box desktop app on a {OS_NAME[os_]} and upload a folder of music. No DJ software needed."
+        eyebrow = f"{OS_NAME[os_]} · Music folder"
+        h1 = "Upload a music folder to Sub-box"
+        part3 = "Upload a folder of music"
+        upload, trouble, after = upload_folder(os_), troubleshooting_folder(), next_steps(os_)
+    else:
+        thing = "playlists" if sw == "rekordbox" else "crates"
+        title = f"Sub-box for {SW_NAME[sw]} on {OS_NAME[os_]}"
+        desc = f"Install the Sub-box desktop app on a {OS_NAME[os_]} and upload your {SW_NAME[sw]} playlists."
+        eyebrow = f"{OS_NAME[os_]} · {SW_NAME[sw]}"
+        h1 = f"Export from {SW_NAME[sw]} to Sub-box"
+        part3 = f"Upload your {SW_NAME[sw]} {thing}"
+        upload = upload_rekordbox(os_) if sw == "rekordbox" else upload_serato(os_)
+        trouble, after = troubleshooting(sw), ""
     update = ("When a new version comes out, Sub-box tells you. Get it with the same download button and repeat steps 2 to 4."
               if os_ == "mac" else "Sub-box checks for new versions when it starts.")
     body = f"""{bar(os_, sw)}
 <main class="wrap">
 <header class="hero">
-<div class="eyebrow">Getting started · {OS_NAME[os_]} · {SW_NAME[sw]}</div>
-<h1>Put your {SW_NAME[sw]} {thing} on Sub-box</h1>
-<p class="lede">Install the Sub-box app, sign in, and upload your {SW_NAME[sw]} {thing} with their tracks, cue points and folders. Setting up takes about ten minutes; the upload depends on how much music you send.</p>
-<div class="need"><strong>You’ll need</strong><ul>
-<li>Your Sub-box username and password. Sub-box is in private beta: no account yet? Click <span class="quote">Request an invite</span> on the app’s start screen.</li>
-<li>Your {SW_NAME[sw]} library on this {computer}, with the music files where {SW_NAME[sw]} expects them.</li></ul></div>
+<div class="eyebrow">Getting started · {eyebrow}</div>
+<h1>{h1}</h1>
 </header>
 
 <section class="part" aria-labelledby="p1"><div class="part-head"><div class="eyebrow">Part 1 of 3</div><h2 id="p1">Install Sub-box</h2></div>
@@ -308,42 +359,52 @@ def guide(os_, sw):
 <section class="part" aria-labelledby="p2"><div class="part-head"><div class="eyebrow">Part 2 of 3</div><h2 id="p2">Sign in</h2></div>
 <ol class="steps">{sign_in()}</ol></section>
 
-<section class="part" aria-labelledby="p3"><div class="part-head"><div class="eyebrow">Part 3 of 3</div><h2 id="p3">Upload your {SW_NAME[sw]} {thing}</h2></div>
+<section class="part" aria-labelledby="p3"><div class="part-head"><div class="eyebrow">Part 3 of 3</div><h2 id="p3">{part3}</h2></div>
 <ol class="steps">{upload}</ol></section>
 
 <section class="part" aria-labelledby="p4"><div class="part-head"><div class="eyebrow">If something goes wrong</div><h2 id="p4">Common problems</h2></div>
-<div>{troubleshooting(sw)}</div></section>
-
-<footer>Stuck? Ask on the Sub-box <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>. Using different software or a different computer? Switch guide at the top of the page.</footer>
+<div>{trouble}</div></section>
+{after}
+<footer>Stuck? Ask on the Sub-box <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>. Starting from somewhere else, or on a different computer? Switch guide at the top of the page.</footer>
 </main>
 {COPY_JS}"""
     return HEAD.replace("{title}", title).replace("{desc}", desc), body
 
 
 def chooser():
-    cards = "".join(
+    def on(o):
+        return "a Mac" if o == "mac" else "Windows"
+    start = "".join(
+        f'<a class="card" href="{GUIDES}{page_name(o, "folder")}"><b>A music folder on {OS_NAME[o]}</b>'
+        f'<span>Install on {on(o)}, then upload a folder of tracks. No DJ software needed.</span></a>'
+        for o in ("mac", "windows"))
+    dj = "".join(
         f'<a class="card" href="{GUIDES}{page_name(o, s)}"><b>{SW_NAME[s]} on {OS_NAME[o]}</b>'
-        f'<span>Install on {"a Mac" if o == "mac" else "Windows"}, then upload your {SW_NAME[s]} '
-        f'{"playlists" if s == "rekordbox" else "crates"}.</span></a>'
+        f'<span>Install on {on(o)}, then upload your {SW_NAME[s]} '
+        f'{"playlists" if s == "rekordbox" else "crates"} with their cue points.</span></a>'
         for s in ("rekordbox", "serato") for o in ("mac", "windows"))
     body = f"""{bar()}
 <main class="wrap">
 <header class="hero">
 <div class="eyebrow">Getting started</div>
-<h1>Get your DJ library onto Sub-box</h1>
-<p class="lede">Pick your computer and your DJ software. Each guide takes you from downloading the app to seeing your playlists in Sub-box, in about ten minutes plus upload time.</p>
+<h1>Get your music onto Sub-box</h1>
+<p class="lede">The quickest start is a folder of tracks: no DJ software needed. Each guide takes you from downloading the app to hearing your music in Sub-box, in about ten minutes plus upload time.</p>
 </header>
-<div class="choose">{cards}</div>
+<section class="part" aria-labelledby="c1"><div class="part-head"><div class="eyebrow">Start here</div><h2 id="c1">Upload a folder of music</h2></div>
+<div class="choose">{start}</div></section>
+<section class="part" aria-labelledby="c2"><div class="part-head"><div class="eyebrow">Use Rekordbox or Serato?</div><h2 id="c2">Bring your playlists and cue points</h2></div>
+<div class="choose">{dj}</div></section>
 <footer>Stuck? Ask on the Sub-box <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>.</footer>
 </main>"""
-    return HEAD.replace("{title}", "Sub-box Getting Started").replace("{desc}", "Install Sub-box and upload your Rekordbox or Serato library."), body
+    return HEAD.replace("{title}", "Sub-box Getting Started").replace("{desc}", "Install Sub-box and upload a folder of music, or your Rekordbox or Serato library."), body
 
 
 def full_doc(head, body):
     return f'<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n{head}\n</head>\n<body>\n{body}\n</body>\n</html>\n'
 
 
-USED = {"landing", "login"} | {f"{p}-{n}" for p in ("rb", "se") for n in ("start", "preview", "done", "playlist")} | {"se-settings"}
+USED = ({"landing", "login"} | {f"{p}-{n}" for p in ("rb", "se") for n in ("start", "preview", "done", "playlist")}
+        | {"rb-export", "se-settings"} | {f"wa-{n}" for n in ("start", "ready", "done", "library")})
 
 VIEWPORT_META = '<meta name="claude:viewport-fit-sides" content="cover">\n'
 
@@ -364,7 +425,7 @@ def write(target, chooser_path, guide_dir):
     head = head.replace("{viewport_meta}", meta)
     (d / chooser_path).write_text(full_doc(head, body) if target != "artifact" else f"{head}\n{body}\n")
     for o in ("mac", "windows"):
-        for s in ("rekordbox", "serato"):
+        for s in SOFTWARE:
             head, body = guide(o, s)
             (g / page_name(o, s)).write_text(full_doc(head.replace("{viewport_meta}", meta), body))
 

@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sub-box from a music folder on Mac</title>
+<meta name="description" content="Install the Sub-box desktop app on a Mac and upload a folder of music. No DJ software needed.">
+<style>
+/* Layout: one reading column, a sticky bar that switches between the four guides,
+   three parts in order, each a numbered list of steps with the app's own screens. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --line: #dcdfe5; --fg: #14161a; --muted: #5b6372;
+  --accent: #2b5cf0; --accent-fg: #ffffff; --accent-soft: #e6ecfe; --note: #fff6e0; --note-line: #f0d48a;
+  --shot-bg: #0c0d0f;
+  /* System fonts only: a font CDN would send every visitor's IP to a third party
+     that sub-box.net's privacy notice doesn't name. */
+  --display: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c0d0f; --surface: #15171b; --line: #272b33; --fg: #eceef2; --muted: #9aa2b0;
+  --accent: #4772ff; --accent-fg: #ffffff; --accent-soft: #18213d; --note: #241f12; --note-line: #5a4a1f;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0c0d0f; --surface: #15171b; --line: #272b33; --fg: #eceef2; --muted: #9aa2b0;
+  --accent: #4772ff; --accent-fg: #ffffff; --accent-soft: #18213d; --note: #241f12; --note-line: #5a4a1f;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 17px/1.6 var(--body); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.bar-in, .wrap { max-width: 780px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-in { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding-block: 10px; }
+.mark { display: flex; align-items: center; gap: 8px; font: 700 18px/1 var(--display); color: var(--fg); text-decoration: none; margin-right: auto; }
+.mark svg { width: 22px; height: 22px; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.seg a { padding: 4px 11px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--muted); text-decoration: none; }
+.seg a[aria-current="page"] { background: var(--accent-soft); color: var(--fg); }
+.seg a:hover { color: var(--fg); }
+
+.wrap { padding-block: 40px 72px; display: grid; gap: 48px; }
+header.hero { display: grid; gap: 14px; }
+.eyebrow { font: 600 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(30px, 6vw, 42px)/1.12 var(--display); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+h2 { font: 700 24px/1.25 var(--display); margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 62ch; }
+
+section.part { display: grid; gap: 20px; }
+.part-head { display: grid; gap: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
+.part-head .eyebrow { padding-top: 22px; }
+ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; display: grid; gap: 26px; }
+ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 0 14px; }
+ol.steps > li::before { content: counter(step); grid-row: 1 / span 20; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent); color: var(--accent-fg); font: 600 15px/1 var(--body); font-variant-numeric: tabular-nums; margin-top: 1px; }
+ol.steps > li > * { grid-column: 2; min-width: 0; }
+ol.steps p { margin: 0 0 8px; max-width: 64ch; }
+ol.steps p:last-child { margin-bottom: 0; }
+ol.steps ul { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 4px; }
+
+.ui { display: inline-block; padding: 0 7px; border-radius: 5px; background: var(--accent); color: var(--accent-fg); font-weight: 600; font-size: .92em; line-height: 1.6; white-space: nowrap; }
+.menu { font-family: var(--mono); font-size: .86em; padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); white-space: normal; }
+.menu i { font-style: normal; color: var(--muted); padding: 0 2px; }
+code, .file { font-family: var(--mono); font-size: .86em; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere; }
+.quote { font-weight: 600; }
+
+figure { margin: 12px 0 4px; display: grid; gap: 8px; }
+figure img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--shot-bg); }
+figure.narrow img { max-width: 360px; }
+figure.mid img { max-width: 540px; }
+figcaption { font-size: 14px; color: var(--muted); }
+
+.note { margin: 10px 0 2px; padding: 12px 14px; border-radius: 10px; background: var(--note); border: 1px solid var(--note-line); font-size: 15.5px; display: grid; gap: 6px; }
+.note p { margin: 0; }
+.note strong { font-weight: 600; }
+.cmd { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.cmd code { flex: 1 1 240px; padding: 8px 10px; font-size: 14px; }
+.cmd button { font: 600 14px/1 var(--body); padding: 0 14px; min-height: 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font-weight: 600; text-decoration: none; margin: 4px 0 8px; }
+.btn:hover { filter: brightness(1.08); }
+.btn.alt { background: var(--surface); color: var(--fg); border: 1px solid var(--line); }
+p:has(> .btn) { display: flex; flex-wrap: wrap; gap: 0 10px; }
+/* Matches the numbered amber outlines drawn on the screenshots. */
+.n { display: inline-grid; place-items: center; width: 1.35em; height: 1.35em; border-radius: 50%; background: #ffb020; color: #14161a; font-weight: 700; font-size: .8em; vertical-align: .1em; }
+
+details { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 0 16px; }
+details + details { margin-top: 10px; }
+summary { cursor: pointer; padding: 13px 0; font-weight: 600; }
+details p { margin: 0 0 14px; max-width: 64ch; }
+footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line); padding-top: 22px; }
+
+/* Chooser */
+.choose { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.card { display: grid; gap: 6px; padding: 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); text-decoration: none; }
+.card:hover { border-color: var(--accent); }
+.card b { font: 700 19px/1.3 var(--display); }
+.card span { color: var(--muted); font-size: 15px; }
+@media (max-width: 560px) { .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="bar"><div class="bar-in"><a class="mark" href="../setup.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="4" fill="currentColor" opacity=".12"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 10v4M8 7v10M11 9v6M14 5v14M17 8v8M20 11v2"/></g></svg>Sub-box</a><nav class="seg" aria-label="Computer"><a href="mac-folder.html" aria-current="page">Mac</a><a href="windows-folder.html">Windows</a></nav><nav class="seg" aria-label="Starting point"><a href="mac-folder.html" aria-current="page">Folder</a><a href="mac-rekordbox.html">Rekordbox</a><a href="mac-serato.html">Serato</a></nav></div></div>
+<main class="wrap">
+<header class="hero">
+<div class="eyebrow">Getting started · Mac · Music folder</div>
+<h1>Upload a music folder to Sub-box</h1>
+</header>
+
+<section class="part" aria-labelledby="p1"><div class="part-head"><div class="eyebrow">Part 1 of 3</div><h2 id="p1">Install Sub-box</h2></div>
+<ol class="steps">
+<li><p><strong>Download Sub-box.</strong> Click the button for your Mac:</p>
+<p><a class="btn" href="https://github.com/laker-93/subbox-app/releases/latest/download/Subbox-mac-arm64.dmg">Download for Apple silicon (M1 or later)</a>
+<a class="btn alt" href="https://github.com/laker-93/subbox-app/releases/latest/download/Subbox-mac-x64.dmg">Download for Intel Mac</a></p>
+<details><summary>Not sure which Mac you have?</summary>
+<p>Click the Apple menu, then <span class="menu">About This Mac</span>. <span class="quote">Chip: Apple M1</span> (or M2, M3, M4…) means Apple silicon. <span class="quote">Processor: Intel</span> means Intel.</p></details></li>
+
+<li><p><strong>Install it.</strong> Open the <span class="file">.dmg</span> you downloaded and drag <span class="quote">Subbox</span> onto the <span class="quote">Applications</span> folder in the same window.</p></li>
+
+<li><p><strong>Open it once.</strong> Double-click <span class="quote">Subbox</span> in your Applications folder. Your Mac stops it with a message that starts <span class="quote">“Subbox” Not Opened</span> or <span class="quote">Apple could not verify…</span>. Click <span class="quote">Done</span>, not Move to Trash.</p></li>
+
+<li><p><strong>Allow it.</strong> Open <span class="menu">System Settings<i>›</i>Privacy & Security</span> and scroll down. Next to <span class="quote">“Subbox” was blocked</span>, click <span class="quote">Open Anyway</span>, enter your Mac password, then click <span class="quote">Open Anyway</span> again. Sub-box opens.</p>
+<div class="note"><p><strong>Why?</strong> Sub-box isn’t from the App Store yet, so macOS asks you to confirm you trust it. You only do this once.</p></div>
+<details><summary>Still not working?</summary>
+<p>Open Terminal (Applications › Utilities), paste this line, press Return, then open Sub-box again:</p>
+<div class="cmd"><code id="xattr">xattr -cr /Applications/Subbox.app</code><button type="button" data-copy="xattr">Copy</button></div>
+<p></p></details></li></ol>
+<p class="lede">When a new version comes out, Sub-box tells you. Get it with the same download button and repeat steps 2 to 4.</p></section>
+
+<section class="part" aria-labelledby="p2"><div class="part-head"><div class="eyebrow">Part 2 of 3</div><h2 id="p2">Sign in</h2></div>
+<ol class="steps">
+<li><p><strong>Click <span class="ui">Login</span></strong></p>
+<figure><img src="img/landing.png" alt="The Sub-box start screen, with the Login button outlined" loading="lazy"></figure></li>
+<li><p><strong>Enter your username and password</strong> and click <span class="ui">Login</span>. Leave <span class="quote">Remember me</span> ticked so you stay signed in.</p>
+<figure class="narrow"><img src="img/login.png" alt="The login box, with the Login button outlined" loading="lazy"></figure></li></ol></section>
+
+<section class="part" aria-labelledby="p3"><div class="part-head"><div class="eyebrow">Part 3 of 3</div><h2 id="p3">Upload a folder of music</h2></div>
+<ol class="steps">
+<li><p><strong>Choose a folder of music.</strong> Click <span class="quote">Sync</span> at the top right <span class="n">1</span>, choose <span class="quote">Watch</span> <span class="n">2</span>, then click <span class="ui">Select Directory</span> <span class="n">3</span> and pick a folder with some of your tracks in it. Folders inside it are included.</p>
+<figure><img src="img/wa-start.png" alt="The Sync screen: Sync, Watch and Select Directory outlined and numbered 1 to 3" loading="lazy"></figure><div class="note"><p>If your Mac asks whether Sub-box can access your Music, Downloads or Documents folder, click <span class="quote">Allow</span>.</p></div>
+<div class="note"><p><strong>Start small.</strong> A folder with a few favourite tracks is enough to try Sub-box. You can point it at a bigger folder later.</p></div></li>
+
+<li><p><strong>Click <span class="ui">Start Watching</span>.</strong> Sub-box starts uploading every track in the folder.</p>
+<figure><img src="img/wa-ready.png" alt="The Watch screen with the chosen folder and the Start Watching button outlined" loading="lazy"></figure>
+<div class="note"><p>Your files stay where they are. Sub-box doesn’t move, rename or convert them. It does add a small ID tag to each file it uploads, so it can recognise that track later.</p></div></li>
+
+<li><p><strong>Wait for <span class="quote">Watching for new files…</span></strong> While it works it shows <span class="quote">Uploading 3/8</span> and the file it’s on. Keep Sub-box open until it finishes.</p>
+<figure class="mid"><img src="img/wa-done.png" alt="The Watch screen showing Stop Watching and the message Watching for new files" loading="lazy"></figure></li>
+
+<li><p><strong>Find your tracks.</strong> Click <span class="quote">Library</span> at the top right, then <span class="quote">Tracks</span> in the sidebar. Sub-box sorts each upload into your library, so the last tracks can take a minute or two to appear.</p>
+<figure><img src="img/wa-library.png" alt="The Tracks page listing the 8 uploaded tracks, with Tracks outlined in the sidebar" loading="lazy"></figure></li>
+
+<li><p><strong>Add more any time.</strong> While Sub-box is open, anything new you save into that folder is uploaded automatically, and it carries on watching the next time you open the app. Click <span class="quote">Stop Watching</span> to turn it off.</p></li></ol></section>
+
+<section class="part" aria-labelledby="p4"><div class="part-head"><div class="eyebrow">If something goes wrong</div><h2 id="p4">Common problems</h2></div>
+<div>
+<details><summary>Some files “could not be read and were not uploaded”</summary>
+<p>Sub-box couldn’t open those files to tag them, usually because they are damaged or still being copied. Everything else uploads normally. Sub-box tries them again on every pass, so a file that finishes copying is picked up by itself.</p></details>
+<details><summary>Nothing uploads</summary>
+<p>Sub-box uploads MP3, FLAC, WAV, AAC, M4A, OGG, Opus and WMA files. It skips folders whose name starts with a dot. Check the folder you chose has music of those kinds in it, then click <span class="quote">Stop Watching</span> and <span class="quote">Start Watching</span> again.</p></details>
+<details><summary>It says “Error uploading”</summary>
+<p>Take a screenshot and send it to us on <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>. Nothing in your folder is changed by a failed upload, and Sub-box tries again on its next pass.</p></details></div></section>
+
+<section class="part" aria-labelledby="p5"><div class="part-head"><div class="eyebrow">When you’re ready</div><h2 id="p5">Bring in your playlists and cue points</h2></div>
+<p class="lede">A folder brings in tracks. If you use <a href="mac-rekordbox.html">Rekordbox</a> or <a href="mac-serato.html">Serato</a>, upload your library from there too and Sub-box adds your playlists, folders, cue points and beatgrids.</p></section>
+<footer>Stuck? Ask on the Sub-box <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>. Starting from somewhere else, or on a different computer? Switch guide at the top of the page.</footer>
+</main>
+<script>
+document.querySelectorAll('[data-copy]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var code = document.getElementById(b.getAttribute('data-copy'));
+    var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1600); };
+    var select = function () { var r = document.createRange(); r.selectNodeContents(code); var s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+    try { navigator.clipboard.writeText(code.textContent).then(done, select); } catch (e) { select(); }
+  });
+});
+</script>
+</body>
+</html>
