@@ -1,7 +1,7 @@
 """Build the six Sub-box onboarding guides plus a chooser page.
 
-One per computer (Mac, Windows) × starting point: a plain folder of music, which needs no
-DJ software, or a Rekordbox or Serato library.
+One per computer (Mac, Windows) × starting point: a quick start, dropping a few tracks
+into the app (no DJ software needed), or a Rekordbox or Serato library.
 
 Writes <out>/site/ (every page a full HTML document, ready for www.sub-box.net) and
 <out>/artifact/ (the chooser as a bare body for the Artifact skeleton, the guides as
@@ -26,8 +26,8 @@ HOME = "index.html"
 GUIDES = ""
 
 OS_NAME = {"mac": "Mac", "windows": "Windows"}
-SW_NAME = {"folder": "Folder", "rekordbox": "Rekordbox", "serato": "Serato"}
-SOFTWARE = ("folder", "rekordbox", "serato")
+SW_NAME = {"quick-start": "Quick start", "rekordbox": "Rekordbox", "serato": "Serato"}
+SOFTWARE = ("quick-start", "rekordbox", "serato")
 
 HEAD = """<title>{title}</title>
 <meta name="description" content="{desc}">
@@ -269,41 +269,51 @@ def upload_serato(os_):
 {fig("se-playlist", "The Warm Up playlist open inside the Gigs folder, each track showing 3 cues")}</li>"""
 
 
-def upload_folder(os_):
+def upload_drop(os_):
+    return f"""
+<li><p><strong>Open the drop box.</strong> Click <span class="quote">Sync</span> at the top right <span class="n">1</span>, then <span class="quote">Watch</span> <span class="n">2</span>. Under the folder watcher there’s a box that says <span class="quote">Drop audio files or a folder here</span> <span class="n">3</span>.</p>
+{fig("dz-start", "The Sync screen: Sync, Watch and the Drop Files box outlined and numbered 1 to 3")}
+<div class="note"><p>Using Sub-box in a web browser instead? The same box is under {menu("Sync", "Add Files")}.</p></div></li>
+
+<li><p><strong>Drag a few tracks onto the box.</strong> A handful of favourites is enough to try Sub-box. You can also drop a whole folder, or click {ui("Choose Files")} or {ui("Choose Folder")} instead of dragging.</p>
+<div class="note"><p>Your files stay as they are. Sub-box uploads a copy and doesn’t change the files on your computer.</p></div></li>
+
+<li><p><strong>Wait for <span class="quote">tracks added to your library</span>.</strong> It shows <span class="quote">Uploading</span>, then <span class="quote">Importing</span> while Sub-box sorts the tracks into your library. Keep Sub-box open until it finishes.</p>
+{fig("dz-done", "The Drop Files box with the message 4 tracks added to your library")}</li>
+
+<li><p><strong>Find your tracks.</strong> Click <span class="quote">Library</span> at the top right, then <span class="quote">Tracks</span> in the sidebar. Click one to play it.</p>
+{fig("dz-library", "The Tracks page listing the 4 dropped tracks, with Tracks outlined in the sidebar")}</li>"""
+
+
+def watch_folder(os_):
     allow = mac_allow("Music, Downloads or Documents") if os_ == "mac" else ""
     return f"""
-<li><p><strong>Choose a folder of music.</strong> Click <span class="quote">Sync</span> at the top right <span class="n">1</span>, choose <span class="quote">Watch</span> <span class="n">2</span>, then click {ui("Select Directory")} <span class="n">3</span> and pick a folder with some of your tracks in it. Folders inside it are included.</p>
-{fig("wa-start", "The Sync screen: Sync, Watch and Select Directory outlined and numbered 1 to 3")}{allow}
-<div class="note"><p><strong>Start small.</strong> A folder with a few favourite tracks is enough to try Sub-box. You can point it at a bigger folder later.</p></div></li>
-
-<li><p><strong>Click {ui("Start Watching")}.</strong> Sub-box starts uploading every track in the folder.</p>
-{fig("wa-ready", "The Watch screen with the chosen folder and the Start Watching button outlined")}
-<div class="note"><p>Your files stay where they are. Sub-box doesn’t move, rename or convert them. It does add a small ID tag to each file it uploads, so it can recognise that track later.</p></div></li>
-
-<li><p><strong>Wait for <span class="quote">Watching for new files…</span></strong> While it works it shows <span class="quote">Uploading 3/8</span> and the file it’s on. Keep Sub-box open until it finishes.</p>
-{fig("wa-done", "The Watch screen showing Stop Watching and the message Watching for new files", size="mid")}</li>
-
-<li><p><strong>Find your tracks.</strong> Click <span class="quote">Library</span> at the top right, then <span class="quote">Tracks</span> in the sidebar. Sub-box sorts each upload into your library, so the last tracks can take a minute or two to appear.</p>
-{fig("wa-library", "The Tracks page listing the 8 uploaded tracks, with Tracks outlined in the sidebar")}</li>
-
-<li><p><strong>Add more any time.</strong> While Sub-box is open, anything new you save into that folder is uploaded automatically, and it carries on watching the next time you open the app. Click <span class="quote">Stop Watching</span> to turn it off.</p></li>"""
+<section class="part" aria-labelledby="p3b"><div class="part-head"><div class="eyebrow">Optional</div><h2 id="p3b">Upload new music automatically</h2></div>
+<p class="lede">If you save new tracks into one folder, Sub-box can watch it and upload anything that lands there.</p>
+<ol class="steps">
+<li><p><strong>Pick the folder.</strong> On the same <span class="quote">Watch</span> screen, click {ui("Select Directory")} <span class="n">1</span> and choose the folder (the button then reads <span class="quote">Change Directory</span>). Folders inside it are included. Then click {ui("Start Watching")} <span class="n">2</span>.</p>
+{fig("wa-ready", "The Watch screen with the chosen folder, Change Directory and Start Watching outlined and numbered 1 and 2")}{allow}
+<div class="note"><p>Sub-box uploads every track already in the folder, then each new one you save there, for as long as the app is open. It doesn’t move, rename or convert them, but it does add a small ID tag to each file so it can recognise the track later. Click <span class="quote">Stop Watching</span> to turn it off.</p></div></li>
+</ol></section>"""
 
 
-def troubleshooting_folder():
+def troubleshooting_drop():
     return f"""
-<details><summary>Some files “could not be read and were not uploaded”</summary>
-<p>Sub-box couldn’t open those files to tag them, usually because they are damaged or still being copied. Everything else uploads normally. Sub-box tries them again on every pass, so a file that finishes copying is picked up by itself.</p></details>
-<details><summary>Nothing uploads</summary>
-<p>Sub-box uploads MP3, FLAC, WAV, AAC, M4A, OGG, Opus and WMA files. It skips folders whose name starts with a dot. Check the folder you chose has music of those kinds in it, then click <span class="quote">Stop Watching</span> and <span class="quote">Start Watching</span> again.</p></details>
-<details><summary>It says “Error uploading”</summary>
-<p>Take a screenshot and send it to us on <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>. Nothing in your folder is changed by a failed upload, and Sub-box tries again on its next pass.</p></details>"""
+<details><summary>Some files were “skipped”</summary>
+<p>Sub-box uploads MP3, FLAC, WAV, AAC, M4A, OGG, Opus and WMA files. Anything else, empty files and folders whose name starts with a dot are skipped, and the list says why. Everything else uploads normally.</p></details>
+<details><summary>Some tracks “have not reached your library”</summary>
+<p>They uploaded, but Sub-box couldn’t add them to your library, usually because the file is damaged. Take a screenshot and send it to us on <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>.</p></details>
+<details><summary>It says “Storage Limit Reached”</summary>
+<p>What you dropped adds up to more than the space left on your account. Nothing was uploaded. Drop fewer tracks and try again.</p></details>
+<details><summary>A track shows up twice after I uploaded my Rekordbox or Serato library</summary>
+<p>Sub-box tags the copy it keeps, not the file on your computer, so it can’t tell that a dropped track and the same track from your DJ library are one track. If you plan to upload your library later, try Sub-box with tracks that aren’t in it, or delete the dropped copies afterwards.</p></details>"""
 
 
 def next_steps(os_):
     links = " or ".join(f'<a href="{page_name(os_, s)}">{SW_NAME[s]}</a>' for s in ("rekordbox", "serato"))
     return f"""
 <section class="part" aria-labelledby="p5"><div class="part-head"><div class="eyebrow">When you’re ready</div><h2 id="p5">Bring in your playlists and cue points</h2></div>
-<p class="lede">A folder brings in tracks. If you use {links}, upload your library from there too and Sub-box adds your playlists, folders, cue points and beatgrids.</p></section>"""
+<p class="lede">Dropping files brings in tracks. If you use {links}, upload your library from there and Sub-box adds your playlists, folders, cue points and beatgrids.</p></section>"""
 
 
 def troubleshooting(sw):
@@ -327,13 +337,14 @@ def troubleshooting(sw):
 
 def guide(os_, sw):
     install = install_mac() if os_ == "mac" else install_windows()
-    if sw == "folder":
-        title = f"Sub-box from a music folder on {OS_NAME[os_]}"
-        desc = f"Install the Sub-box desktop app on a {OS_NAME[os_]} and upload a folder of music. No DJ software needed."
-        eyebrow = f"{OS_NAME[os_]} · Music folder"
-        h1 = "Upload a music folder to Sub-box"
-        part3 = "Upload a folder of music"
-        upload, trouble, after = upload_folder(os_), troubleshooting_folder(), next_steps(os_)
+    if sw == "quick-start":
+        title = f"Try Sub-box on {OS_NAME[os_]}"
+        desc = f"Install the Sub-box desktop app on a {OS_NAME[os_]} and drag in a few tracks to try it. No DJ software needed."
+        eyebrow = f"{OS_NAME[os_]} · Quick start"
+        h1 = "Try Sub-box with a few tracks"
+        part3 = "Drop in a few tracks"
+        upload, trouble = upload_drop(os_), troubleshooting_drop()
+        extra, after = watch_folder(os_), next_steps(os_)
     else:
         thing = "playlists" if sw == "rekordbox" else "crates"
         title = f"Sub-box for {SW_NAME[sw]} on {OS_NAME[os_]}"
@@ -342,7 +353,7 @@ def guide(os_, sw):
         h1 = f"Export from {SW_NAME[sw]} to Sub-box"
         part3 = f"Upload your {SW_NAME[sw]} {thing}"
         upload = upload_rekordbox(os_) if sw == "rekordbox" else upload_serato(os_)
-        trouble, after = troubleshooting(sw), ""
+        trouble, extra, after = troubleshooting(sw), "", ""
     update = ("When a new version comes out, Sub-box tells you. Get it with the same download button and repeat steps 2 to 4."
               if os_ == "mac" else "Sub-box checks for new versions when it starts.")
     body = f"""{bar(os_, sw)}
@@ -361,6 +372,7 @@ def guide(os_, sw):
 
 <section class="part" aria-labelledby="p3"><div class="part-head"><div class="eyebrow">Part 3 of 3</div><h2 id="p3">{part3}</h2></div>
 <ol class="steps">{upload}</ol></section>
+{extra}
 
 <section class="part" aria-labelledby="p4"><div class="part-head"><div class="eyebrow">If something goes wrong</div><h2 id="p4">Common problems</h2></div>
 <div>{trouble}</div></section>
@@ -375,8 +387,8 @@ def chooser():
     def on(o):
         return "a Mac" if o == "mac" else "Windows"
     start = "".join(
-        f'<a class="card" href="{GUIDES}{page_name(o, "folder")}"><b>A music folder on {OS_NAME[o]}</b>'
-        f'<span>Install on {on(o)}, then upload a folder of tracks. No DJ software needed.</span></a>'
+        f'<a class="card" href="{GUIDES}{page_name(o, "quick-start")}"><b>Quick start on {OS_NAME[o]}</b>'
+        f'<span>Install on {on(o)}, then drag a few tracks into the app to try it. No DJ software needed.</span></a>'
         for o in ("mac", "windows"))
     dj = "".join(
         f'<a class="card" href="{GUIDES}{page_name(o, s)}"><b>{SW_NAME[s]} on {OS_NAME[o]}</b>'
@@ -388,15 +400,15 @@ def chooser():
 <header class="hero">
 <div class="eyebrow">Getting started</div>
 <h1>Get your music onto Sub-box</h1>
-<p class="lede">The quickest start is a folder of tracks: no DJ software needed. Each guide takes you from downloading the app to hearing your music in Sub-box, in about ten minutes plus upload time.</p>
+<p class="lede">Two ways in: drag a few tracks into the app to try it, or go straight to your Rekordbox or Serato library and bring its playlists and cue points with it. Each guide takes you from downloading the app to hearing your music in Sub-box, in about ten minutes plus upload time.</p>
 </header>
-<section class="part" aria-labelledby="c1"><div class="part-head"><div class="eyebrow">Start here</div><h2 id="c1">Upload a folder of music</h2></div>
+<section class="part" aria-labelledby="c1"><div class="part-head"><div class="eyebrow">Try it first</div><h2 id="c1">Drop in a few tracks</h2></div>
 <div class="choose">{start}</div></section>
 <section class="part" aria-labelledby="c2"><div class="part-head"><div class="eyebrow">Use Rekordbox or Serato?</div><h2 id="c2">Bring your playlists and cue points</h2></div>
 <div class="choose">{dj}</div></section>
 <footer>Stuck? Ask on the Sub-box <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>.</footer>
 </main>"""
-    return HEAD.replace("{title}", "Sub-box Getting Started").replace("{desc}", "Install Sub-box and upload a folder of music, or your Rekordbox or Serato library."), body
+    return HEAD.replace("{title}", "Sub-box Getting Started").replace("{desc}", "Install Sub-box and drag in a few tracks to try it, or upload your Rekordbox or Serato library."), body
 
 
 def full_doc(head, body):
@@ -404,7 +416,7 @@ def full_doc(head, body):
 
 
 USED = ({"landing", "login"} | {f"{p}-{n}" for p in ("rb", "se") for n in ("start", "preview", "done", "playlist")}
-        | {"rb-export", "se-settings"} | {f"wa-{n}" for n in ("start", "ready", "done", "library")})
+        | {"rb-export", "se-settings", "wa-ready"} | {f"dz-{n}" for n in ("start", "done", "library")})
 
 VIEWPORT_META = '<meta name="claude:viewport-fit-sides" content="cover">\n'
 

@@ -2,7 +2,7 @@
 
 Rekordbox: <root>/rb/Music/... + <root>/rb/rekordbox.xml
 Serato:    <root>/serato/Music/... + <root>/serato/_Serato_/SubCrates/*.crate
-Folder:    <root>/folder/Music/... (plain files, for the Watch guide)
+Folder:    <root>/folder/Music/... (plain files, for the quick-start guide)
 Copies are made, and their SUBBOX_ID tags stripped, so the originals are untouched
 and each upload is a fresh track.
 """
@@ -119,7 +119,7 @@ def build_serato() -> None:
     print("serato:", sorted(p.name for p in (serato / "SubCrates").iterdir()))
 
 
-# Tracks neither DJ fixture uses, so the folder guide's library looks different.
+# Tracks neither DJ fixture uses, so the quick-start guide's library looks different.
 FOLDER = ["Across The Fields", "Nature", "To The Moon", "Soul In Pills", "Nearfield - Weekend",
           "Baldych - Lunar Path", "Ambient Flight (Electro Vocal Mix)", "Bassballah-Warriors"]
 

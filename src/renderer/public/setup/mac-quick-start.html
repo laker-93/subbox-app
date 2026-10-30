@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sub-box from a music folder on Windows</title>
-<meta name="description" content="Install the Sub-box desktop app on a Windows and upload a folder of music. No DJ software needed.">
+<title>Try Sub-box on Mac</title>
+<meta name="description" content="Install the Sub-box desktop app on a Mac and drag in a few tracks to try it. No DJ software needed.">
 <style>
 /* Layout: one reading column, a sticky bar that switches between the four guides,
    three parts in order, each a numbered list of steps with the app's own screens. */
@@ -105,24 +105,32 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 </style>
 </head>
 <body>
-<div class="bar"><div class="bar-in"><a class="mark" href="../setup.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="4" fill="currentColor" opacity=".12"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 10v4M8 7v10M11 9v6M14 5v14M17 8v8M20 11v2"/></g></svg>Sub-box</a><nav class="seg" aria-label="Computer"><a href="mac-folder.html">Mac</a><a href="windows-folder.html" aria-current="page">Windows</a></nav><nav class="seg" aria-label="Starting point"><a href="windows-folder.html" aria-current="page">Folder</a><a href="windows-rekordbox.html">Rekordbox</a><a href="windows-serato.html">Serato</a></nav></div></div>
+<div class="bar"><div class="bar-in"><a class="mark" href="../setup.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="4" fill="currentColor" opacity=".12"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 10v4M8 7v10M11 9v6M14 5v14M17 8v8M20 11v2"/></g></svg>Sub-box</a><nav class="seg" aria-label="Computer"><a href="mac-quick-start.html" aria-current="page">Mac</a><a href="windows-quick-start.html">Windows</a></nav><nav class="seg" aria-label="Starting point"><a href="mac-quick-start.html" aria-current="page">Quick start</a><a href="mac-rekordbox.html">Rekordbox</a><a href="mac-serato.html">Serato</a></nav></div></div>
 <main class="wrap">
 <header class="hero">
-<div class="eyebrow">Getting started · Windows · Music folder</div>
-<h1>Upload a music folder to Sub-box</h1>
+<div class="eyebrow">Getting started · Mac · Quick start</div>
+<h1>Try Sub-box with a few tracks</h1>
 </header>
 
 <section class="part" aria-labelledby="p1"><div class="part-head"><div class="eyebrow">Part 1 of 3</div><h2 id="p1">Install Sub-box</h2></div>
 <ol class="steps">
-<li><p><strong>Download Sub-box.</strong> This one file works on every Windows PC.</p>
-<p><a class="btn" href="https://github.com/laker-93/subbox-app/releases/latest/download/Subbox-win.exe">Download for Windows</a></p>
-<p>If your browser says the file isn’t commonly downloaded, choose <span class="quote">Keep</span>. In Edge, that’s the <span class="quote">…</span> menu, then <span class="quote">Keep</span>, <span class="quote">Show more</span>, <span class="quote">Keep anyway</span>.</p></li>
+<li><p><strong>Download Sub-box.</strong> Click the button for your Mac:</p>
+<p><a class="btn" href="https://github.com/laker-93/subbox-app/releases/latest/download/Subbox-mac-arm64.dmg">Download for Apple silicon (M1 or later)</a>
+<a class="btn alt" href="https://github.com/laker-93/subbox-app/releases/latest/download/Subbox-mac-x64.dmg">Download for Intel Mac</a></p>
+<details><summary>Not sure which Mac you have?</summary>
+<p>Click the Apple menu, then <span class="menu">About This Mac</span>. <span class="quote">Chip: Apple M1</span> (or M2, M3, M4…) means Apple silicon. <span class="quote">Processor: Intel</span> means Intel.</p></details></li>
 
-<li><p><strong>Run it.</strong> Open the file you downloaded. Windows shows a blue box, <span class="quote">Windows protected your PC</span>. Click <span class="quote">More info</span>, then <span class="quote">Run anyway</span>.</p>
-<div class="note"><p><strong>Why?</strong> Sub-box isn’t signed with a Microsoft certificate yet, so Windows asks you to confirm you trust it. You only see this when installing.</p></div></li>
+<li><p><strong>Install it.</strong> Open the <span class="file">.dmg</span> you downloaded and drag <span class="quote">Subbox</span> onto the <span class="quote">Applications</span> folder in the same window.</p></li>
 
-<li><p><strong>Finish installing.</strong> Keep the default choices and click through to <span class="quote">Finish</span>. Sub-box opens, and there’s a shortcut on your desktop.</p></li></ol>
-<p class="lede">Sub-box checks for new versions when it starts.</p></section>
+<li><p><strong>Open it once.</strong> Double-click <span class="quote">Subbox</span> in your Applications folder. Your Mac stops it with a message that starts <span class="quote">“Subbox” Not Opened</span> or <span class="quote">Apple could not verify…</span>. Click <span class="quote">Done</span>, not Move to Trash.</p></li>
+
+<li><p><strong>Allow it.</strong> Open <span class="menu">System Settings<i>›</i>Privacy & Security</span> and scroll down. Next to <span class="quote">“Subbox” was blocked</span>, click <span class="quote">Open Anyway</span>, enter your Mac password, then click <span class="quote">Open Anyway</span> again. Sub-box opens.</p>
+<div class="note"><p><strong>Why?</strong> Sub-box isn’t from the App Store yet, so macOS asks you to confirm you trust it. You only do this once.</p></div>
+<details><summary>Still not working?</summary>
+<p>Open Terminal (Applications › Utilities), paste this line, press Return, then open Sub-box again:</p>
+<div class="cmd"><code id="xattr">xattr -cr /Applications/Subbox.app</code><button type="button" data-copy="xattr">Copy</button></div>
+<p></p></details></li></ol>
+<p class="lede">When a new version comes out, Sub-box tells you. Get it with the same download button and repeat steps 2 to 4.</p></section>
 
 <section class="part" aria-labelledby="p2"><div class="part-head"><div class="eyebrow">Part 2 of 3</div><h2 id="p2">Sign in</h2></div>
 <ol class="steps">
@@ -131,35 +139,42 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 <li><p><strong>Enter your username and password</strong> and click <span class="ui">Login</span>. Leave <span class="quote">Remember me</span> ticked so you stay signed in.</p>
 <figure class="narrow"><img src="img/login.png" alt="The login box, with the Login button outlined" loading="lazy"></figure></li></ol></section>
 
-<section class="part" aria-labelledby="p3"><div class="part-head"><div class="eyebrow">Part 3 of 3</div><h2 id="p3">Upload a folder of music</h2></div>
+<section class="part" aria-labelledby="p3"><div class="part-head"><div class="eyebrow">Part 3 of 3</div><h2 id="p3">Drop in a few tracks</h2></div>
 <ol class="steps">
-<li><p><strong>Choose a folder of music.</strong> Click <span class="quote">Sync</span> at the top right <span class="n">1</span>, choose <span class="quote">Watch</span> <span class="n">2</span>, then click <span class="ui">Select Directory</span> <span class="n">3</span> and pick a folder with some of your tracks in it. Folders inside it are included.</p>
-<figure><img src="img/wa-start.png" alt="The Sync screen: Sync, Watch and Select Directory outlined and numbered 1 to 3" loading="lazy"></figure>
-<div class="note"><p><strong>Start small.</strong> A folder with a few favourite tracks is enough to try Sub-box. You can point it at a bigger folder later.</p></div></li>
+<li><p><strong>Open the drop box.</strong> Click <span class="quote">Sync</span> at the top right <span class="n">1</span>, then <span class="quote">Watch</span> <span class="n">2</span>. Under the folder watcher there’s a box that says <span class="quote">Drop audio files or a folder here</span> <span class="n">3</span>.</p>
+<figure><img src="img/dz-start.png" alt="The Sync screen: Sync, Watch and the Drop Files box outlined and numbered 1 to 3" loading="lazy"></figure>
+<div class="note"><p>Using Sub-box in a web browser instead? The same box is under <span class="menu">Sync<i>›</i>Add Files</span>.</p></div></li>
 
-<li><p><strong>Click <span class="ui">Start Watching</span>.</strong> Sub-box starts uploading every track in the folder.</p>
-<figure><img src="img/wa-ready.png" alt="The Watch screen with the chosen folder and the Start Watching button outlined" loading="lazy"></figure>
-<div class="note"><p>Your files stay where they are. Sub-box doesn’t move, rename or convert them. It does add a small ID tag to each file it uploads, so it can recognise that track later.</p></div></li>
+<li><p><strong>Drag a few tracks onto the box.</strong> A handful of favourites is enough to try Sub-box. You can also drop a whole folder, or click <span class="ui">Choose Files</span> or <span class="ui">Choose Folder</span> instead of dragging.</p>
+<div class="note"><p>Your files stay as they are. Sub-box uploads a copy and doesn’t change the files on your computer.</p></div></li>
 
-<li><p><strong>Wait for <span class="quote">Watching for new files…</span></strong> While it works it shows <span class="quote">Uploading 3/8</span> and the file it’s on. Keep Sub-box open until it finishes.</p>
-<figure class="mid"><img src="img/wa-done.png" alt="The Watch screen showing Stop Watching and the message Watching for new files" loading="lazy"></figure></li>
+<li><p><strong>Wait for <span class="quote">tracks added to your library</span>.</strong> It shows <span class="quote">Uploading</span>, then <span class="quote">Importing</span> while Sub-box sorts the tracks into your library. Keep Sub-box open until it finishes.</p>
+<figure><img src="img/dz-done.png" alt="The Drop Files box with the message 4 tracks added to your library" loading="lazy"></figure></li>
 
-<li><p><strong>Find your tracks.</strong> Click <span class="quote">Library</span> at the top right, then <span class="quote">Tracks</span> in the sidebar. Sub-box sorts each upload into your library, so the last tracks can take a minute or two to appear.</p>
-<figure><img src="img/wa-library.png" alt="The Tracks page listing the 8 uploaded tracks, with Tracks outlined in the sidebar" loading="lazy"></figure></li>
+<li><p><strong>Find your tracks.</strong> Click <span class="quote">Library</span> at the top right, then <span class="quote">Tracks</span> in the sidebar. Click one to play it.</p>
+<figure><img src="img/dz-library.png" alt="The Tracks page listing the 4 dropped tracks, with Tracks outlined in the sidebar" loading="lazy"></figure></li></ol></section>
 
-<li><p><strong>Add more any time.</strong> While Sub-box is open, anything new you save into that folder is uploaded automatically, and it carries on watching the next time you open the app. Click <span class="quote">Stop Watching</span> to turn it off.</p></li></ol></section>
+<section class="part" aria-labelledby="p3b"><div class="part-head"><div class="eyebrow">Optional</div><h2 id="p3b">Upload new music automatically</h2></div>
+<p class="lede">If you save new tracks into one folder, Sub-box can watch it and upload anything that lands there.</p>
+<ol class="steps">
+<li><p><strong>Pick the folder.</strong> On the same <span class="quote">Watch</span> screen, click <span class="ui">Select Directory</span> <span class="n">1</span> and choose the folder (the button then reads <span class="quote">Change Directory</span>). Folders inside it are included. Then click <span class="ui">Start Watching</span> <span class="n">2</span>.</p>
+<figure><img src="img/wa-ready.png" alt="The Watch screen with the chosen folder, Change Directory and Start Watching outlined and numbered 1 and 2" loading="lazy"></figure><div class="note"><p>If your Mac asks whether Sub-box can access your Music, Downloads or Documents folder, click <span class="quote">Allow</span>.</p></div>
+<div class="note"><p>Sub-box uploads every track already in the folder, then each new one you save there, for as long as the app is open. It doesn’t move, rename or convert them, but it does add a small ID tag to each file so it can recognise the track later. Click <span class="quote">Stop Watching</span> to turn it off.</p></div></li>
+</ol></section>
 
 <section class="part" aria-labelledby="p4"><div class="part-head"><div class="eyebrow">If something goes wrong</div><h2 id="p4">Common problems</h2></div>
 <div>
-<details><summary>Some files “could not be read and were not uploaded”</summary>
-<p>Sub-box couldn’t open those files to tag them, usually because they are damaged or still being copied. Everything else uploads normally. Sub-box tries them again on every pass, so a file that finishes copying is picked up by itself.</p></details>
-<details><summary>Nothing uploads</summary>
-<p>Sub-box uploads MP3, FLAC, WAV, AAC, M4A, OGG, Opus and WMA files. It skips folders whose name starts with a dot. Check the folder you chose has music of those kinds in it, then click <span class="quote">Stop Watching</span> and <span class="quote">Start Watching</span> again.</p></details>
-<details><summary>It says “Error uploading”</summary>
-<p>Take a screenshot and send it to us on <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>. Nothing in your folder is changed by a failed upload, and Sub-box tries again on its next pass.</p></details></div></section>
+<details><summary>Some files were “skipped”</summary>
+<p>Sub-box uploads MP3, FLAC, WAV, AAC, M4A, OGG, Opus and WMA files. Anything else, empty files and folders whose name starts with a dot are skipped, and the list says why. Everything else uploads normally.</p></details>
+<details><summary>Some tracks “have not reached your library”</summary>
+<p>They uploaded, but Sub-box couldn’t add them to your library, usually because the file is damaged. Take a screenshot and send it to us on <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>.</p></details>
+<details><summary>It says “Storage Limit Reached”</summary>
+<p>What you dropped adds up to more than the space left on your account. Nothing was uploaded. Drop fewer tracks and try again.</p></details>
+<details><summary>A track shows up twice after I uploaded my Rekordbox or Serato library</summary>
+<p>Sub-box tags the copy it keeps, not the file on your computer, so it can’t tell that a dropped track and the same track from your DJ library are one track. If you plan to upload your library later, try Sub-box with tracks that aren’t in it, or delete the dropped copies afterwards.</p></details></div></section>
 
 <section class="part" aria-labelledby="p5"><div class="part-head"><div class="eyebrow">When you’re ready</div><h2 id="p5">Bring in your playlists and cue points</h2></div>
-<p class="lede">A folder brings in tracks. If you use <a href="windows-rekordbox.html">Rekordbox</a> or <a href="windows-serato.html">Serato</a>, upload your library from there too and Sub-box adds your playlists, folders, cue points and beatgrids.</p></section>
+<p class="lede">Dropping files brings in tracks. If you use <a href="mac-rekordbox.html">Rekordbox</a> or <a href="mac-serato.html">Serato</a>, upload your library from there and Sub-box adds your playlists, folders, cue points and beatgrids.</p></section>
 <footer>Stuck? Ask on the Sub-box <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>. Starting from somewhere else, or on a different computer? Switch guide at the top of the page.</footer>
 </main>
 <script>

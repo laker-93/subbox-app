@@ -1,11 +1,11 @@
 # The setup guides
 
-Six step-by-step guides for new users: install the desktop app, sign in, and upload music. One per combination of Mac/Windows × starting point, plus a page that picks between them. The starting points are a plain **folder** of music (Sync → Watch, no DJ software needed), **Rekordbox** and **Serato**. The chooser puts the folder guides first, so nobody has to have a DJ library to hand before they can try Sub-box.
+Six step-by-step guides for new users: install the desktop app, sign in, and upload music. One per combination of Mac/Windows × starting point, plus a page that picks between them. The starting points are a **quick start**, dragging a few tracks onto the Sync → Watch dropzone (no DJ software needed; it also covers watching a folder, as an optional extra), **Rekordbox** and **Serato**. The chooser puts the quick-start guides first, so nobody has to have a DJ library to hand before they can try Sub-box.
 
 | URL | File |
 | --- | --- |
 | `https://www.sub-box.net/setup.html` | `src/renderer/public/setup.html` (the chooser) |
-| `https://www.sub-box.net/setup/mac-folder.html` (and the other five) | `src/renderer/public/setup/*.html` |
+| `https://www.sub-box.net/setup/mac-quick-start.html` (and the other five) | `src/renderer/public/setup/*.html` |
 | screenshots | `src/renderer/public/setup/img/*.png` |
 
 They are served exactly like the legal pages (`docs/LEGAL_PAGES.md`): Vite's `publicDir` copies them into `out/web/`, the `Dockerfile` bakes them into the nginx image, and `ng.conf.template`'s `try_files $uri` serves them before the SPA fallback. The PWA service worker is scoped to `/assets/`, so it never intercepts them. Link the explicit filename; a bare `/setup/` falls through to the app.
@@ -20,11 +20,11 @@ They are served exactly like the legal pages (`docs/LEGAL_PAGES.md`): Vite's `pu
 
 These files are generated; don't hand-edit them. The tools are in `scripts/setup-guides/`:
 
-1. `make_guide_fixture.py <dir>` (run with pymix's venv) builds a small Rekordbox XML and Serato crate library from the CC demo library, with three hot cues per track, plus a plain folder of eight other tracks for the folder guides. Rebuild it before every run: an upload writes a SUBBOX_ID tag into the files.
-2. `guide-shots.mjs rekordbox|serato|folder` drives a dev-mode build against the local dev stack as the `guide231026` user, and writes the cropped screenshots with their numbered click outlines. Reset that user's library before each run (`feishin-qa/scripts/qa/reset-library.mjs`). It needs `APP`, `FIXTURE` and `OUT`.
+1. `make_guide_fixture.py <dir>` (run with pymix's venv) builds a small Rekordbox XML and Serato crate library from the CC demo library, with three hot cues per track, plus a plain folder of eight other tracks for the quick-start guides (four are dropped, the folder is shown ready to watch). Rebuild it before every run: an upload writes a SUBBOX_ID tag into the files.
+2. `guide-shots.mjs rekordbox|serato|quick-start` drives a dev-mode build against the local dev stack as the `guide231026` user, and writes the cropped screenshots with their numbered click outlines. Reset that user's library before each run (`feishin-qa/scripts/qa/reset-library.mjs`). It needs `APP`, `FIXTURE` and `OUT`.
 3. `python3 build_guides.py <dir>` (expects the screenshots in `<dir>/img/`) writes the pages. Copy `<dir>/app/` over `src/renderer/public/`.
 
-Retake the screenshots when the Sync → Upload or Sync → Watch screens change. `rb-export.png` is the one exception: it is Rekordbox's own File menu, taken by hand, and the script doesn't make it.
+Retake the screenshots when the Sync → Upload or Sync → Watch screens (dropzone included) change. `rb-export.png` is the one exception: it is Rekordbox's own File menu, taken by hand, and the script doesn't make it.
 
 Edit `build_guides.py`, not the HTML. A hand edit to the pages is lost at the next rebuild.
 
