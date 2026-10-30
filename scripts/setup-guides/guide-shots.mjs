@@ -110,12 +110,9 @@ const app = await electron.launch({
     args: [APP, `--user-data-dir=${fs.mkdtempSync(path.join(os.tmpdir(), 'guide-'))}`],
     env: { ...process.env, DISABLE_AUTO_UPDATES: '1', NODE_ENV: 'development' },
 });
-await app.evaluate(
-    async ({ dialog }, target) => {
-        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
-    },
-    { 'quick-start': FOLDER, rekordbox: XML, serato: SERATO }[FORMAT],
-);
+await app.evaluate(async ({ dialog }, target) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
+}, { 'quick-start': FOLDER, rekordbox: XML, serato: SERATO }[FORMAT]);
 
 page = await app.firstWindow();
 await page.waitForLoadState('load');
@@ -166,7 +163,12 @@ if (FORMAT === 'quick-start') {
     await page.waitForTimeout(800);
     const dropzone = page.getByTestId('sync-dropzone');
     const dzBox = await dropzone.boundingBox();
-    const toDropzone = { height: Math.min(800, Math.ceil(dzBox.y + dzBox.height + 24)), width: 1280, x: 0, y: 0 };
+    const toDropzone = {
+        height: Math.min(800, Math.ceil(dzBox.y + dzBox.height + 24)),
+        width: 1280,
+        x: 0,
+        y: 0,
+    };
     await shot('dz-start', { clip: toDropzone, marks: [syncLabel, watchTab, dropzone] });
     // Choose Files' hidden input takes the same path through the upload as a drop.
     const drop = fs
@@ -197,7 +199,10 @@ if (FORMAT === 'quick-start') {
     // already in, and the guide's library shot is taken.
     await (await radioLabel('sync')).click();
     await page.waitForTimeout(800);
-    await page.getByRole('button', { name: /^watch$/i }).first().click();
+    await page
+        .getByRole('button', { name: /^watch$/i })
+        .first()
+        .click();
     await page.waitForTimeout(800);
     const select = page.getByRole('button', { name: /select directory/i });
     await select.first().click();
@@ -205,7 +210,10 @@ if (FORMAT === 'quick-start') {
     // Once a folder is chosen, Select Directory reads Change Directory.
     const change = page.getByRole('button', { name: /change directory/i });
     const start = page.getByRole('button', { name: /start watching/i });
-    await shot('wa-ready', { clip: { height: 380, width: 1280, x: 0, y: 0 }, marks: [change, start] });
+    await shot('wa-ready', {
+        clip: { height: 380, width: 1280, x: 0, y: 0 },
+        marks: [change, start],
+    });
     await app.close();
     process.exit(0);
 }
