@@ -1,7 +1,7 @@
 // Screenshots for the onboarding guides, cropped and annotated, written straight to the
 // guides' img/ names. Drives a dev-mode Electron build against the local dev stack.
 //
-//   APP=<build>/main/index.js FIXTURE=<fixture root> OUT=<dir> node guide-shots.mjs rekordbox|serato
+//   APP=<build>/main/index.js FIXTURE=<fixture root> OUT=<dir> node guide-shots.mjs rekordbox|serato|quick-start
 //
 // Click targets get a numbered amber outline, drawn into the page before the shot, so
 // the image needs no editing afterwards.
@@ -14,10 +14,11 @@ const { _electron: electron } = await import(`${QA}/node_modules/playwright/inde
 const { performLogin } = await import(`${QA}/scripts/ui-snapshot-shared.mjs`);
 
 const FORMAT = process.argv[2];
-const P = FORMAT === 'rekordbox' ? 'rb' : 'se';
+const P = { 'quick-start': 'dz', rekordbox: 'rb', serato: 'se' }[FORMAT];
 const { APP, FIXTURE, OUT } = process.env;
 const XML = path.join(FIXTURE, 'rb/rekordbox.xml');
 const SERATO = path.join(FIXTURE, 'serato/_Serato_');
+const FOLDER = path.join(FIXTURE, 'folder/Music');
 const credentials = { password: 'GuideShots2026pass', username: 'guide231026' };
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -25,6 +26,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const REWRITES = [
     [XML, '/Users/you/Documents/rekordbox.xml'],
     [SERATO, '/Users/you/Music/_Serato_'],
+    [FOLDER, '/Users/you/Music/New Music'],
     [FIXTURE, '/Users/you'],
 ];
 
@@ -108,12 +110,9 @@ const app = await electron.launch({
     args: [APP, `--user-data-dir=${fs.mkdtempSync(path.join(os.tmpdir(), 'guide-'))}`],
     env: { ...process.env, DISABLE_AUTO_UPDATES: '1', NODE_ENV: 'development' },
 });
-await app.evaluate(
-    async ({ dialog }, target) => {
-        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
-    },
-    FORMAT === 'serato' ? SERATO : XML,
-);
+await app.evaluate(async ({ dialog }, target) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] });
+}, { 'quick-start': FOLDER, rekordbox: XML, serato: SERATO }[FORMAT]);
 
 page = await app.firstWindow();
 await page.waitForLoadState('load');
@@ -156,6 +155,68 @@ await page.waitForTimeout(3000);
 
 const syncLabel = await radioLabel('sync');
 await syncLabel.click();
+
+if (FORMAT === 'quick-start') {
+    const watchTab = page.getByRole('button', { name: /^watch$/i }).first();
+    await watchTab.waitFor({ timeout: 30_000 });
+    await watchTab.click();
+    await page.waitForTimeout(800);
+    const dropzone = page.getByTestId('sync-dropzone');
+    const dzBox = await dropzone.boundingBox();
+    const toDropzone = {
+        height: Math.min(800, Math.ceil(dzBox.y + dzBox.height + 24)),
+        width: 1280,
+        x: 0,
+        y: 0,
+    };
+    await shot('dz-start', { clip: toDropzone, marks: [syncLabel, watchTab, dropzone] });
+    // Choose Files' hidden input takes the same path through the upload as a drop.
+    const drop = fs
+        .readdirSync(FOLDER, { recursive: true })
+        .filter((f) => f.endsWith('.mp3'))
+        .sort()
+        .slice(0, 4)
+        .map((f) => path.join(FOLDER, f));
+    await page.getByTestId('sync-dropzone-files').setInputFiles(drop);
+    await page
+        .getByText(/added to your library/i)
+        .first()
+        .waitFor({ timeout: 600_000 });
+    await page.waitForTimeout(1000);
+    const status = page.getByTestId('sync-dropzone-status');
+    const top = await around(dropzone, { padX: 24, padY: 24 });
+    const bottom = await around(status, { padX: 24, padY: 24 });
+    await shot('dz-done', {
+        clip: { ...top, height: bottom.y + bottom.height - top.y },
+    });
+    await (await radioLabel('library')).click();
+    await page.waitForTimeout(3000);
+    const tracks = page.getByText(/^tracks$/i).first();
+    await tracks.click();
+    await page.waitForTimeout(5000);
+    await shot('dz-library', { clip: { height: 680, width: 1280, x: 0, y: 0 }, marks: [tracks] });
+    // The watcher is only shot ready to start, never started: the dropped tracks are
+    // already in, and the guide's library shot is taken.
+    await (await radioLabel('sync')).click();
+    await page.waitForTimeout(800);
+    await page
+        .getByRole('button', { name: /^watch$/i })
+        .first()
+        .click();
+    await page.waitForTimeout(800);
+    const select = page.getByRole('button', { name: /select directory/i });
+    await select.first().click();
+    await page.waitForTimeout(800);
+    // Once a folder is chosen, Select Directory reads Change Directory.
+    const change = page.getByRole('button', { name: /change directory/i });
+    const start = page.getByRole('button', { name: /start watching/i });
+    await shot('wa-ready', {
+        clip: { height: 380, width: 1280, x: 0, y: 0 },
+        marks: [change, start],
+    });
+    await app.close();
+    process.exit(0);
+}
 const uploadTab = page.getByRole('button', { name: /^upload$/i }).first();
 await uploadTab.waitFor({ timeout: 30_000 });
 await uploadTab.click();

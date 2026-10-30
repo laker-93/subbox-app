@@ -100,12 +100,19 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 .card:hover { border-color: var(--accent); }
 .card b { font: 700 19px/1.3 var(--display); }
 .card span { color: var(--muted); font-size: 15px; }
-@media (max-width: 560px) { .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } }
+
+/* Overview */
+.feats { display: grid; gap: 14px; }
+.feat { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 16px; padding: 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.feat svg { grid-row: 1 / span 2; width: 40px; height: 40px; padding: 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.feat h3 { margin: 0; font: 700 18px/1.35 var(--display); text-wrap: balance; }
+.feat p { margin: 0; color: var(--muted); font-size: 16px; max-width: 64ch; }
+@media (max-width: 560px) { .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 </head>
 <body>
-<div class="bar"><div class="bar-in"><a class="mark" href="../setup.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="4" fill="currentColor" opacity=".12"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 10v4M8 7v10M11 9v6M14 5v14M17 8v8M20 11v2"/></g></svg>Sub-box</a><nav class="seg" aria-label="Computer"><a href="mac-rekordbox.html" aria-current="page">Mac</a><a href="windows-rekordbox.html">Windows</a></nav><nav class="seg" aria-label="DJ software"><a href="mac-rekordbox.html" aria-current="page">Rekordbox</a><a href="mac-serato.html">Serato</a></nav></div></div>
+<div class="bar"><div class="bar-in"><a class="mark" href="../setup.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="4" fill="currentColor" opacity=".12"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 10v4M8 7v10M11 9v6M14 5v14M17 8v8M20 11v2"/></g></svg>Sub-box</a><nav class="seg" aria-label="Computer"><a href="mac-rekordbox.html" aria-current="page">Mac</a><a href="windows-rekordbox.html">Windows</a></nav><nav class="seg" aria-label="Starting point"><a href="mac-quick-start.html">Quick start</a><a href="mac-rekordbox.html" aria-current="page">Rekordbox</a><a href="mac-serato.html">Serato</a></nav></div></div>
 <main class="wrap">
 <header class="hero">
 <div class="eyebrow">Getting started · Mac · Rekordbox</div>
@@ -157,6 +164,7 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 <li><p><strong>Find your playlists.</strong> Click <span class="quote">Library</span> at the top right. Your playlists are in the sidebar, in the same folders as in Rekordbox, with their cue points.</p>
 <figure><img src="img/rb-playlist.png" alt="The Warm Up playlist open inside the Gigs folder, each track showing 3 cues" loading="lazy"></figure></li></ol></section>
 
+
 <section class="part" aria-labelledby="p4"><div class="part-head"><div class="eyebrow">If something goes wrong</div><h2 id="p4">Common problems</h2></div>
 <div>
 <details><summary>It says “Storage Limit Reached”</summary>
@@ -168,7 +176,7 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 <details><summary>I want to add more music later</summary>
 <p>Do the upload part again and tick only the new playlists. Tracks you add to Rekordbox later need a new upload to appear in Sub-box.</p></details></div></section>
 
-<footer>Stuck? Ask on the Sub-box <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>. Using different software or a different computer? Switch guide at the top of the page.</footer>
+<footer>Stuck? Ask on the Sub-box <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>. Starting from somewhere else, or on a different computer? Switch guide at the top of the page.</footer>
 </main>
 <script>
 document.querySelectorAll('[data-copy]').forEach(function (b) {
