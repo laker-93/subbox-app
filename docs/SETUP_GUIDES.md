@@ -1,10 +1,11 @@
 # The setup guides
 
-Six step-by-step guides for new users: install the desktop app, sign in, and upload music. One per combination of Mac/Windows × starting point, plus a page that picks between them. The starting points are a **quick start**, dragging a few tracks onto the Sync → Watch dropzone (no DJ software needed; it also covers watching a folder, as an optional extra), **Rekordbox** and **Serato**. The chooser puts the quick-start guides first, so nobody has to have a DJ library to hand before they can try Sub-box.
+Six step-by-step guides for new users: install the desktop app, sign in, and upload music. One per combination of Mac/Windows × starting point, plus a page that picks between them and an overview of Sub-box's main features. The starting points are a **quick start**, dragging a few tracks onto the Sync → Watch dropzone (no DJ software needed; it also covers watching a folder, as an optional extra), **Rekordbox** and **Serato**. The chooser puts the quick-start guides first, so nobody has to have a DJ library to hand before they can try Sub-box.
 
 | URL | File |
 | --- | --- |
 | `https://www.sub-box.net/setup.html` | `src/renderer/public/setup.html` (the chooser) |
+| `https://www.sub-box.net/overview.html` | `src/renderer/public/overview.html` (what Sub-box does, for invite emails to link to) |
 | `https://www.sub-box.net/setup/mac-quick-start.html` (and the other five) | `src/renderer/public/setup/*.html` |
 | screenshots | `src/renderer/public/setup/img/*.png` |
 

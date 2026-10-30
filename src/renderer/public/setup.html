@@ -100,7 +100,14 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 .card:hover { border-color: var(--accent); }
 .card b { font: 700 19px/1.3 var(--display); }
 .card span { color: var(--muted); font-size: 15px; }
-@media (max-width: 560px) { .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } }
+
+/* Overview */
+.feats { display: grid; gap: 14px; }
+.feat { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 16px; padding: 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.feat svg { grid-row: 1 / span 2; width: 40px; height: 40px; padding: 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.feat h3 { margin: 0; font: 700 18px/1.35 var(--display); text-wrap: balance; }
+.feat p { margin: 0; color: var(--muted); font-size: 16px; max-width: 64ch; }
+@media (max-width: 560px) { .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 </head>
@@ -111,6 +118,7 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 <div class="eyebrow">Getting started</div>
 <h1>Get your music onto Sub-box</h1>
 <p class="lede">Two ways in: drag a few tracks into the app to try it, or go straight to your Rekordbox or Serato library and bring its playlists and cue points with it. Each guide takes you from downloading the app to hearing your music in Sub-box, in about ten minutes plus upload time.</p>
+<p class="lede">New to Sub-box? <a href="overview.html">See what it does</a>.</p>
 </header>
 <section class="part" aria-labelledby="c1"><div class="part-head"><div class="eyebrow">Try it first</div><h2 id="c1">Drop in a few tracks</h2></div>
 <div class="choose"><a class="card" href="setup/mac-quick-start.html"><b>Quick start on Mac</b><span>Install on a Mac, then drag a few tracks into the app to try it. No DJ software needed.</span></a><a class="card" href="setup/windows-quick-start.html"><b>Quick start on Windows</b><span>Install on Windows, then drag a few tracks into the app to try it. No DJ software needed.</span></a></div></section>
