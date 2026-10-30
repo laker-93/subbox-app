@@ -202,3 +202,56 @@ export const fbApiClient = (args: {
         jsonQuery: false,
     });
 };
+
+/**
+ * Filebrowser's resource routes take a path, not a single filename, which the
+ * ts-rest contract above can't express without encoding the slashes away. These go
+ * through the same axios instance so an expired fbToken still refreshes mid-upload.
+ */
+const resourceUrl = (baseUrl: string, resourcePath: string) =>
+    `${baseUrl}/api/resources/${resourcePath.split('/').map(encodeURIComponent).join('/')}`;
+
+export const fbResourceUpload = async (args: {
+    baseUrl: string;
+    body: Blob;
+    onUploadProgress?: (loadedBytes: number) => void;
+    resourcePath: string;
+    signal?: AbortSignal;
+    token?: string;
+}) => {
+    const { baseUrl, body, onUploadProgress, resourcePath, signal, token } = args;
+    await axiosClient.request({
+        data: body,
+        headers: {
+            'Content-Type': 'application/octet-stream',
+            ...(token && { 'X-Auth': token }),
+        },
+        method: 'POST',
+        onUploadProgress: (e) => onUploadProgress?.(e.loaded),
+        params: { override: false },
+        signal,
+        url: resourceUrl(baseUrl, resourcePath),
+    });
+};
+
+/** Whether a file or folder is still at `resourcePath`. */
+export const fbResourceExists = async (args: {
+    baseUrl: string;
+    resourcePath: string;
+    signal?: AbortSignal;
+    token?: string;
+}) => {
+    const { baseUrl, resourcePath, signal, token } = args;
+    try {
+        await axiosClient.request({
+            headers: token ? { 'X-Auth': token } : {},
+            method: 'GET',
+            signal,
+            url: resourceUrl(baseUrl, resourcePath),
+        });
+        return true;
+    } catch (e) {
+        if (isAxiosError(e) && e.response?.status === 404) return false;
+        throw e;
+    }
+};

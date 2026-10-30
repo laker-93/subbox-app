@@ -6,6 +6,7 @@ import { DjModeSyncHint } from '/@/renderer/features/dj/components/dj-mode-offer
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import { SyncDesktopOnly } from '/@/renderer/features/sync/components/shared';
 import { SyncDownload } from '/@/renderer/features/sync/components/sync-download';
+import { SyncDropzone } from '/@/renderer/features/sync/components/sync-dropzone';
 import { SyncExternalDrive } from '/@/renderer/features/sync/components/sync-external-drive';
 import { SyncUpload } from '/@/renderer/features/sync/components/sync-upload';
 import { SyncWatch } from '/@/renderer/features/sync/components/sync-watch';
@@ -15,6 +16,7 @@ import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
+import { Stack } from '/@/shared/components/stack/stack';
 
 type SyncTab = 'download' | 'external-drive' | 'upload' | 'watch';
 
@@ -77,14 +79,17 @@ export const SyncModePlaceholder = () => {
                     tooltip={{
                         label: isDemo
                             ? lockedTooltip
-                            : 'Watch a local folder. New audio files you drop in are uploaded to Sub-box automatically.',
+                            : electron
+                              ? 'Drop audio files here to upload them, or watch a local folder so new files you save there upload automatically.'
+                              : 'Drop audio files or a folder here to upload them to Sub-box.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
                     }}
                     variant={tab === 'watch' ? 'filled' : 'subtle'}
                 >
-                    Watch
+                    {/* There is no folder to watch on web; there the tab is only the dropzone. */}
+                    {electron ? 'Watch' : 'Add Files'}
                 </Button>
                 {electron && (
                     <Button
@@ -136,14 +141,17 @@ export const SyncModePlaceholder = () => {
                     (isDemo ? (
                         <InviteLockedPanel
                             description="The demo library is shared and read-only. With your own library, new tracks appear in Sub-box the moment you save them."
-                            title="Folder watching needs your own library"
+                            title="Adding music needs your own library"
                         />
-                    ) : electron ? (
-                        <SyncWatch />
                     ) : (
-                        <SyncDesktopOnly>
-                            Watch directory is only available in the desktop app.
-                        </SyncDesktopOnly>
+                        // Dropping files works on web too (#293); watching a folder
+                        // needs the filesystem, so it is desktop only.
+                        <div style={{ height: '100%', overflowY: 'auto' }}>
+                            {electron && <SyncWatch />}
+                            <Stack p="md">
+                                <SyncDropzone />
+                            </Stack>
+                        </div>
                     ))}
                 {tab === 'external-drive' && (
                     <Suspense
