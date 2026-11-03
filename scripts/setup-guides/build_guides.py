@@ -131,13 +131,22 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 .card b { font: 700 19px/1.3 var(--display); }
 .card span { color: var(--muted); font-size: 15px; }
 
-/* Overview */
-.feats { display: grid; gap: 14px; }
-.feat { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 16px; padding: 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
-.feat svg { grid-row: 1 / span 2; width: 40px; height: 40px; padding: 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
-.feat h3 { margin: 0; font: 700 18px/1.35 var(--display); text-wrap: balance; }
-.feat p { margin: 0; color: var(--muted); font-size: 16px; max-width: 64ch; }
-@media (max-width: 560px) { .part-head h2 { scroll-margin-top: 150px; } .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
+/* Overview: each feature is a row that opens to a short bullet list. */
+.feats { display: grid; gap: 10px; }
+details.feat { padding: 0; border-radius: 12px; }
+details.feat + details.feat { margin-top: 0; }
+.feat summary { list-style: none; display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; align-items: center; gap: 2px 14px; padding: 14px 16px; }
+.feat summary::-webkit-details-marker { display: none; }
+.feat summary > svg:first-child { grid-row: 1 / span 2; width: 40px; height: 40px; padding: 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.feat summary b { font: 700 17px/1.35 var(--display); text-wrap: balance; }
+.feat summary span { grid-column: 2; color: var(--muted); font-size: 15px; font-weight: 400; line-height: 1.45; }
+.feat .chev { grid-column: 3; grid-row: 1 / span 2; width: 20px; height: 20px; color: var(--muted); transition: transform .15s; }
+.feat[open] .chev { transform: rotate(180deg); }
+.feat summary:hover b { color: var(--accent); }
+.feat ul { margin: 0; padding: 2px 16px 16px 90px; display: grid; gap: 6px; font-size: 16px; max-width: 72ch; }
+.feat-tools { display: flex; justify-content: flex-end; margin: -36px 0 -40px; }
+.feat-tools button { font: 500 14px/1 var(--body); color: var(--accent); background: none; border: 0; padding: 4px 0; cursor: pointer; }
+@media (max-width: 560px) { .part-head h2 { scroll-margin-top: 150px; } .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat ul { padding-left: 34px; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>"""
 
@@ -451,56 +460,76 @@ ICON = {k: f'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="cur
         }.items()}
 
 
+CHEVRON = ('<svg class="chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" '
+           'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>')
+
+
 def overview(setup_href):
+    # Each feature: (icon, title, one-line summary shown closed, bullets shown open).
     def feats(items):
         return '<div class="feats">' + "".join(
-            f'<div class="feat">{ICON[icon]}<h3>{title}</h3><p>{text}</p></div>' for icon, title, text in items) + "</div>"
+            f'<details class="feat"><summary>{ICON[icon]}<b>{title}</b><span>{hook}</span>{CHEVRON}</summary>'
+            f'<ul>{"".join(f"<li>{b}</li>" for b in bullets)}</ul></details>'
+            for icon, title, hook, bullets in items) + "</div>"
 
     def part(n, eyebrow, title, items, after=""):
         return (f'<section class="part" aria-labelledby="o{n}"><div class="part-head"><div class="eyebrow">{eyebrow}</div>'
                 f'<h2 id="o{n}">{title}</h2></div>\n{feats(items)}{after}</section>\n')
 
     prep = part(1, "Prepare tracks", "Prep away from your DJ laptop", [
-        ("wave", "Cues and loops on a full waveform",
-         "Open any track in the prep view: the whole track at the top, a zoomed waveform with its beat grid below. "
-         "Double-click to set a hot cue, drag it to move it, shift-drag to make a loop, and give each one a name and colour. "
-         "Cues snap to the beat or the bar, or not at all."),
-        ("history", "Every edit is a version",
-         "Each change to a track’s cues and loops is saved. Undo and redo, or revert the track to any earlier version, "
-         "including how it first came in from Rekordbox or Serato."),
-        ("export", "Take the work back into Rekordbox or Serato",
-         "Download a playlist as a Rekordbox XML or as Serato crates, and the cues, loops and beat grids you set in "
-         "Sub-box go with it."),
-    ], '<div class="note"><p>Prepping tracks is part of <strong>DJ mode</strong>. Sub-box offers to turn it on when an '
-       'import brings cues with it, or you can switch it on in Settings.</p></div>')
+        ("wave", "Cues and loops on a full waveform", "Set hot cues and loops in the prep view.", [
+            "The whole track at the top, a zoomed waveform with its beat grid below",
+            "Double-click to set a hot cue, drag to move it",
+            "Shift-drag to make a loop",
+            "Name and colour each cue and loop",
+            "Snap to the beat, the bar, or not at all",
+        ]),
+        ("history", "Every edit is a version", "Undo, redo or go back to any earlier version.", [
+            "Every change to a track’s cues and loops is saved",
+            "Undo and redo as you work",
+            "Revert a track to any earlier version, including how it came in from Rekordbox or Serato",
+        ]),
+        ("export", "Take the work back into Rekordbox or Serato", "Your prep goes back with the playlist.", [
+            "Download a playlist as a Rekordbox XML or as Serato crates",
+            "Cues, loops and beat grids set in Sub-box go with it",
+        ]),
+    ])
 
     safe = part(2, "Keep it safe", "Nothing is lost by mistake", [
-        ("undo", "Undo a delete",
-         "Delete a playlist, a folder or a track and you can undo it for 7 days. Until then it waits in "
-         "<span class=\"quote\">Recently deleted</span>. If importing your library again replaces a playlist, "
-         "you can put the old one back."),
-        ("devices", "Edit on more than one computer",
-         "If the same track is changed on two devices, Sub-box asks which change to keep instead of quietly "
-         "overwriting one."),
-        ("shield", "A copy that isn’t on your laptop",
-         "Your music, playlists and prep live in Sub-box as well as on your DJ laptop, so a lost or broken laptop "
-         "doesn’t take your library with it."),
+        ("undo", "Undo a delete", "Deleted playlists, folders and tracks can come back for 7 days.", [
+            "Delete a playlist, a folder or a track and undo it for 7 days",
+            "Until then it waits in <span class=\"quote\">Recently deleted</span>",
+            "If importing your library again replaces a playlist, you can put the old one back",
+        ]),
+        ("devices", "Edit on more than one computer", "Conflicting changes are never quietly overwritten.", [
+            "Change the same track on two devices and Sub-box asks which change to keep",
+        ]),
+        ("shield", "A copy that isn’t on your laptop", "A lost laptop doesn’t take your library with it.", [
+            "Your music, playlists and prep live in Sub-box as well as on your DJ laptop",
+        ]),
     ])
 
     library = part(3, "Your library", "One library, every format", [
-        ("swap", "Rekordbox and Serato in one place",
-         "Bring in a Serato library and take it out as Rekordbox, or the other way round. Playlists, crates, "
-         "folders, cue points, loops and beat grids come across."),
-        ("phone", "Listen anywhere",
-         "Play your own playlists in the desktop app, in a web browser, or on your phone with a "
-         "Subsonic-compatible music app. Rediscover tracks on the way to a gig."),
-        ("bookmark", "Never lose a track you heard",
-         "Paste a YouTube, SoundCloud or Bandcamp link to a track, playlist or album, and Sub-box adds it to your "
-         "wishlist with the artist and title filled in. Away from the app, jot tracks into a Google Sheet on your "
-         "phone, even offline, and they join the same wishlist."),
-        ("columns", "Your DJ data in the track list",
-         "BPM, key (Camelot, musical or both) and cue counts show as columns, so you can sort your library the way "
-         "you would in your DJ software."),
+        ("swap", "Rekordbox and Serato in one place", "Bring a library in from one, take it out as the other.", [
+            "Serato in, Rekordbox out, or the other way round",
+            "Playlists, crates and folders come across",
+            "So do cue points, loops and beat grids",
+        ]),
+        ("phone", "Listen anywhere", "Desktop app, web browser or your phone.", [
+            "Play your own playlists in the desktop app or a web browser",
+            "On your phone, use any Subsonic-compatible music app",
+            "Rediscover tracks on the way to a gig",
+        ]),
+        ("bookmark", "Never lose a track you heard", "Keep a wishlist from links or a Google Sheet.", [
+            "Paste a YouTube, SoundCloud or Bandcamp link to a track, playlist or album",
+            "Sub-box adds it to your wishlist with the artist and title filled in",
+            "Away from the app, jot tracks into a Google Sheet on your phone, even offline",
+            "They join the same wishlist",
+        ]),
+        ("columns", "Your DJ data in the track list", "Sort by BPM, key and cues, as in your DJ software.", [
+            "BPM, key (Camelot, musical or both) and cue counts as columns",
+            "Sort your library the way you would in Rekordbox or Serato",
+        ]),
     ])
 
     body = f"""{bar()}
@@ -508,13 +537,24 @@ def overview(setup_href):
 <header class="hero">
 <div class="eyebrow">What is Sub-box</div>
 <h1>Your DJ library, wherever you are</h1>
-<p class="lede">Sub-box keeps a copy of your music in the cloud, with the playlists, cue points and beat grids you made in Rekordbox or Serato. Play it, browse it and prep it from another computer, a web browser or your phone, then take the work back to your DJ software.</p>
+<p class="lede">A cloud copy of your music, with the playlists, cue points and beat grids you made in Rekordbox or Serato. Play and prep it anywhere, then take the work back to your DJ software.</p>
 <p><a class="btn" href="{setup_href}">Get started</a></p>
 </header>
+<div class="feat-tools"><button type="button" id="feat-all" hidden>Expand all</button></div>
 {prep}{safe}{library}<section class="part" aria-labelledby="o4"><div class="part-head"><div class="eyebrow">Try it</div><h2 id="o4">Start with a few tracks</h2></div>
-<p class="lede">You don’t need Rekordbox or Serato to start: drag a few tracks into the app and listen to them somewhere else. When you’re ready, bring in a playlist from your DJ software and prep one track’s cues.</p>
+<ul class="lede" style="margin:0;padding-left:20px;display:grid;gap:4px"><li>No Rekordbox or Serato needed: drag a few tracks into the app</li><li>Listen to them somewhere else</li><li>When you’re ready, bring in a playlist from your DJ software and prep one track’s cues</li></ul>
 <div class="choose"><a class="card" href="{setup_href}"><b>Getting started guides</b><span>Install Sub-box on Mac or Windows and upload your first music, step by step.</span></a><a class="card" href="{DISCORD}" target="_blank" rel="noopener"><b>Ask on Discord</b><span>Questions, problems or ideas: talk to the people who build Sub-box.</span></a></div></section>
-</main>"""
+</main>
+<script>
+(() => {{
+  const btn = document.getElementById("feat-all");
+  const all = [...document.querySelectorAll("details.feat")];
+  const sync = () => {{ btn.textContent = all.every(d => d.open) ? "Collapse all" : "Expand all"; }};
+  btn.hidden = false;
+  btn.addEventListener("click", () => {{ const open = !all.every(d => d.open); all.forEach(d => {{ d.open = open; }}); sync(); }});
+  all.forEach(d => d.addEventListener("toggle", sync));
+}})();
+</script>"""
     return (HEAD.replace("{title}", "Sub-box Overview")
             .replace("{desc}", "What Sub-box does: prep cues and loops away from your DJ laptop, undo deletes and edits, move between Rekordbox and Serato, and listen anywhere.")), body
 
