@@ -52,6 +52,8 @@ h2 { font: 700 24px/1.25 var(--display); margin: 0; text-wrap: balance; }
 .lede { margin: 0; color: var(--muted); max-width: 62ch; }
 
 section.part { display: grid; gap: 20px; }
+/* A jump to a part (#p3 from the quick start) clears the sticky bar and shows the part's eyebrow. */
+.part-head h2 { scroll-margin-top: 100px; }
 .part-head { display: grid; gap: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
 .part-head .eyebrow { padding-top: 22px; }
 ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; display: grid; gap: 26px; }
@@ -78,6 +80,7 @@ figcaption { font-size: 14px; color: var(--muted); }
 .note { margin: 10px 0 2px; padding: 12px 14px; border-radius: 10px; background: var(--note); border: 1px solid var(--note-line); font-size: 15.5px; display: grid; gap: 6px; }
 .note p { margin: 0; }
 .note strong { font-weight: 600; }
+.note.skip { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); max-width: 62ch; }
 .cmd { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
 .cmd code { flex: 1 1 240px; padding: 8px 10px; font-size: 14px; }
 .cmd button { font: 600 14px/1 var(--body); padding: 0 14px; min-height: 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
@@ -107,7 +110,7 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 .feat svg { grid-row: 1 / span 2; width: 40px; height: 40px; padding: 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
 .feat h3 { margin: 0; font: 700 18px/1.35 var(--display); text-wrap: balance; }
 .feat p { margin: 0; color: var(--muted); font-size: 16px; max-width: 64ch; }
-@media (max-width: 560px) { .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
+@media (max-width: 560px) { .part-head h2 { scroll-margin-top: 150px; } .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 </head>
@@ -117,6 +120,7 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 <header class="hero">
 <div class="eyebrow">Getting started · Windows · Serato</div>
 <h1>Export from Serato to Sub-box</h1>
+<div class="note skip"><p><strong>Already installed Sub-box?</strong> If you did the <a href="windows-quick-start.html">quick start</a>, or Sub-box is already on this computer, you don’t need to install it again. <a href="#p3">Skip to Part 3: Upload your Serato crates</a>.</p></div>
 </header>
 
 <section class="part" aria-labelledby="p1"><div class="part-head"><div class="eyebrow">Part 1 of 3</div><h2 id="p1">Install Sub-box</h2></div>
@@ -134,28 +138,28 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 <section class="part" aria-labelledby="p2"><div class="part-head"><div class="eyebrow">Part 2 of 3</div><h2 id="p2">Sign in</h2></div>
 <ol class="steps">
 <li><p><strong>Click <span class="ui">Login</span></strong></p>
-<figure><img src="img/landing.png" alt="The Sub-box start screen, with the Login button outlined" loading="lazy"></figure></li>
+<figure><img src="img/landing.png" alt="The Sub-box start screen, with the Login button outlined" width="1280" height="520" loading="lazy"></figure></li>
 <li><p><strong>Enter your username and password</strong> and click <span class="ui">Login</span>. Leave <span class="quote">Remember me</span> ticked so you stay signed in.</p>
-<figure class="narrow"><img src="img/login.png" alt="The login box, with the Login button outlined" loading="lazy"></figure></li></ol></section>
+<figure class="narrow"><img src="img/login.png" alt="The login box, with the Login button outlined" width="344" height="384" loading="lazy"></figure></li></ol></section>
 
 <section class="part" aria-labelledby="p3"><div class="part-head"><div class="eyebrow">Part 3 of 3</div><h2 id="p3">Upload your Serato crates</h2></div>
 <ol class="steps">
 <li><p><strong>Quit Serato DJ.</strong> Serato saves your crates when it closes, so Sub-box then reads your latest changes.</p></li>
 
 <li><p><strong>Read your library in Sub-box.</strong> Click <span class="quote">Sync</span> at the top right <span class="n">1</span>, choose <span class="quote">Serato</span> <span class="n">2</span>, then click <span class="ui">Read Library</span> <span class="n">3</span>. Sub-box finds your Serato folder by itself, usually <span class="file">C:\Users\<i>you</i>\Music\_Serato_</span>. Nothing is uploaded yet.</p>
-<figure><img src="img/se-start.png" alt="The Sync screen: Sync, Serato and Read Library outlined and numbered 1 to 3" loading="lazy"></figure>
+<figure><img src="img/se-start.png" alt="The Sync screen: Sync, Serato and Read Library outlined and numbered 1 to 3" width="1280" height="800" loading="lazy"></figure>
 <details><summary>It says “No Serato library found”, or my library is on an external drive</summary>
 <p>Click the gear next to <span class="quote">Sync From Serato</span>, then <span class="quote">Change Serato Folder</span>, and pick your <span class="file">_Serato_</span> folder. On an external drive it’s at the top level of the drive.</p>
-<figure class="mid"><img src="img/se-settings.png" alt="Upload Settings with Change Serato Folder outlined" loading="lazy"></figure></details></li>
+<figure class="mid"><img src="img/se-settings.png" alt="Upload Settings with Change Serato Folder outlined" width="464" height="300" loading="lazy"></figure></details></li>
 
 <li><p><strong>Click <span class="ui">Upload</span>.</strong> Every crate is ticked. Untick any you don’t want to send. Leave <span class="quote">Playlists only</span> unticked.</p>
-<figure><img src="img/se-preview.png" alt="Preview Changes: three crates ticked, 11 tracks, with the Upload button outlined" loading="lazy"></figure></li>
+<figure><img src="img/se-preview.png" alt="Preview Changes: three crates ticked, 11 tracks, with the Upload button outlined" width="1280" height="800" loading="lazy"></figure></li>
 
 <li><p><strong>Wait for <span class="quote">Import Complete</span>.</strong> Keep Sub-box open while it works. A big library can take a while.</p>
-<figure class="mid"><img src="img/se-done.png" alt="Import Complete: 11 tracks uploaded and imported" loading="lazy"></figure></li>
+<figure class="mid"><img src="img/se-done.png" alt="Import Complete: 11 tracks uploaded and imported" width="600" height="300" loading="lazy"></figure></li>
 
 <li><p><strong>Find your crates.</strong> Click <span class="quote">Library</span> at the top right. Each crate is now a playlist in the sidebar, subcrates sit inside folders, and your hot cues come with them.</p>
-<figure><img src="img/se-playlist.png" alt="The Warm Up playlist open inside the Gigs folder, each track showing 3 cues" loading="lazy"></figure></li></ol></section>
+<figure><img src="img/se-playlist.png" alt="The Warm Up playlist open inside the Gigs folder, each track showing 3 cues" width="1280" height="680" loading="lazy"></figure></li></ol></section>
 
 
 <section class="part" aria-labelledby="p4"><div class="part-head"><div class="eyebrow">If something goes wrong</div><h2 id="p4">Common problems</h2></div>
