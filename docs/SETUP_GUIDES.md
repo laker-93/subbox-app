@@ -15,6 +15,7 @@ They are served exactly like the legal pages (`docs/LEGAL_PAGES.md`): Vite's `pu
 
 - **Self-contained.** Inline CSS, no web fonts, no CDN. A font or script host would see every visitor's IP, and the privacy notice doesn't name one.
 - **Download buttons point at `releases/latest/download/<name>`.** That only works because release assets carry no version in their names (#276). If `artifactName` in `electron-builder.yml` changes, these links break.
+- **Nobody installs twice.** Every guide carries the same Part 1 (install) and Part 2 (sign in), because any of them can be someone's first. Quick start's "bring in your playlists" links open the Rekordbox/Serato guides at `#p3`, the upload part. Those guides open with a "Already installed Sub-box? Skip to Part 3" note, and the chooser says the same above them. Keep the upload part's heading id `p3`.
 - **The install steps describe an unsigned app** (macOS Open Anyway, Windows SmartScreen Run anyway). Rewrite Part 1 of each guide if signing is set up.
 
 ## Editing them

@@ -52,6 +52,8 @@ h2 { font: 700 24px/1.25 var(--display); margin: 0; text-wrap: balance; }
 .lede { margin: 0; color: var(--muted); max-width: 62ch; }
 
 section.part { display: grid; gap: 20px; }
+/* A jump to a part (#p3 from the quick start) clears the sticky bar and shows the part's eyebrow. */
+.part-head h2 { scroll-margin-top: 100px; }
 .part-head { display: grid; gap: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
 .part-head .eyebrow { padding-top: 22px; }
 ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; display: grid; gap: 26px; }
@@ -78,6 +80,7 @@ figcaption { font-size: 14px; color: var(--muted); }
 .note { margin: 10px 0 2px; padding: 12px 14px; border-radius: 10px; background: var(--note); border: 1px solid var(--note-line); font-size: 15.5px; display: grid; gap: 6px; }
 .note p { margin: 0; }
 .note strong { font-weight: 600; }
+.note.skip { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); max-width: 62ch; }
 .cmd { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
 .cmd code { flex: 1 1 240px; padding: 8px 10px; font-size: 14px; }
 .cmd button { font: 600 14px/1 var(--body); padding: 0 14px; min-height: 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
@@ -107,7 +110,7 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 .feat svg { grid-row: 1 / span 2; width: 40px; height: 40px; padding: 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
 .feat h3 { margin: 0; font: 700 18px/1.35 var(--display); text-wrap: balance; }
 .feat p { margin: 0; color: var(--muted); font-size: 16px; max-width: 64ch; }
-@media (max-width: 560px) { .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
+@media (max-width: 560px) { .part-head h2 { scroll-margin-top: 150px; } .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 </head>

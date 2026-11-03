@@ -52,6 +52,8 @@ h2 { font: 700 24px/1.25 var(--display); margin: 0; text-wrap: balance; }
 .lede { margin: 0; color: var(--muted); max-width: 62ch; }
 
 section.part { display: grid; gap: 20px; }
+/* A jump to a part (#p3 from the quick start) clears the sticky bar and shows the part's eyebrow. */
+.part-head h2 { scroll-margin-top: 100px; }
 .part-head { display: grid; gap: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
 .part-head .eyebrow { padding-top: 22px; }
 ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; display: grid; gap: 26px; }
@@ -78,6 +80,7 @@ figcaption { font-size: 14px; color: var(--muted); }
 .note { margin: 10px 0 2px; padding: 12px 14px; border-radius: 10px; background: var(--note); border: 1px solid var(--note-line); font-size: 15.5px; display: grid; gap: 6px; }
 .note p { margin: 0; }
 .note strong { font-weight: 600; }
+.note.skip { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); max-width: 62ch; }
 .cmd { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
 .cmd code { flex: 1 1 240px; padding: 8px 10px; font-size: 14px; }
 .cmd button { font: 600 14px/1 var(--body); padding: 0 14px; min-height: 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
@@ -107,7 +110,7 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 .feat svg { grid-row: 1 / span 2; width: 40px; height: 40px; padding: 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
 .feat h3 { margin: 0; font: 700 18px/1.35 var(--display); text-wrap: balance; }
 .feat p { margin: 0; color: var(--muted); font-size: 16px; max-width: 64ch; }
-@media (max-width: 560px) { .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
+@media (max-width: 560px) { .part-head h2 { scroll-margin-top: 150px; } .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 </head>
@@ -117,6 +120,7 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 <header class="hero">
 <div class="eyebrow">Getting started · Mac · Quick start</div>
 <h1>Try Sub-box with a few tracks</h1>
+
 </header>
 
 <section class="part" aria-labelledby="p1"><div class="part-head"><div class="eyebrow">Part 1 of 3</div><h2 id="p1">Install Sub-box</h2></div>
@@ -142,30 +146,30 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 <section class="part" aria-labelledby="p2"><div class="part-head"><div class="eyebrow">Part 2 of 3</div><h2 id="p2">Sign in</h2></div>
 <ol class="steps">
 <li><p><strong>Click <span class="ui">Login</span></strong></p>
-<figure><img src="img/landing.png" alt="The Sub-box start screen, with the Login button outlined" loading="lazy"></figure></li>
+<figure><img src="img/landing.png" alt="The Sub-box start screen, with the Login button outlined" width="1280" height="520" loading="lazy"></figure></li>
 <li><p><strong>Enter your username and password</strong> and click <span class="ui">Login</span>. Leave <span class="quote">Remember me</span> ticked so you stay signed in.</p>
-<figure class="narrow"><img src="img/login.png" alt="The login box, with the Login button outlined" loading="lazy"></figure></li></ol></section>
+<figure class="narrow"><img src="img/login.png" alt="The login box, with the Login button outlined" width="344" height="384" loading="lazy"></figure></li></ol></section>
 
 <section class="part" aria-labelledby="p3"><div class="part-head"><div class="eyebrow">Part 3 of 3</div><h2 id="p3">Drop in a few tracks</h2></div>
 <ol class="steps">
 <li><p><strong>Open the drop box.</strong> Click <span class="quote">Sync</span> at the top right <span class="n">1</span>, then <span class="quote">Watch</span> <span class="n">2</span>. Under the folder watcher there’s a box that says <span class="quote">Drop audio files or a folder here</span> <span class="n">3</span>.</p>
-<figure><img src="img/dz-start.png" alt="The Sync screen: Sync, Watch and the Drop Files box outlined and numbered 1 to 3" loading="lazy"></figure>
+<figure><img src="img/dz-start.png" alt="The Sync screen: Sync, Watch and the Drop Files box outlined and numbered 1 to 3" width="1280" height="562" loading="lazy"></figure>
 <div class="note"><p>Using Sub-box in a web browser instead? The same box is under <span class="menu">Sync<i>›</i>Add Files</span>.</p></div></li>
 
 <li><p><strong>Drag a few tracks onto the box.</strong> A handful of favourites is enough to try Sub-box. You can also drop a whole folder, or click <span class="ui">Choose Files</span> or <span class="ui">Choose Folder</span> instead of dragging.</p>
 <div class="note"><p>Your files stay as they are. Sub-box uploads a copy and doesn’t change the files on your computer.</p></div></li>
 
 <li><p><strong>Wait for <span class="quote">tracks added to your library</span>.</strong> It shows <span class="quote">Uploading</span>, then <span class="quote">Importing</span> while Sub-box sorts the tracks into your library. Keep Sub-box open until it finishes.</p>
-<figure><img src="img/dz-done.png" alt="The Drop Files box with the message 4 tracks added to your library" loading="lazy"></figure></li>
+<figure><img src="img/dz-done.png" alt="The Drop Files box with the message 4 tracks added to your library" width="1280" height="274" loading="lazy"></figure></li>
 
 <li><p><strong>Find your tracks.</strong> Click <span class="quote">Library</span> at the top right, then <span class="quote">Tracks</span> in the sidebar. Click one to play it.</p>
-<figure><img src="img/dz-library.png" alt="The Tracks page listing the 4 dropped tracks, with Tracks outlined in the sidebar" loading="lazy"></figure></li></ol></section>
+<figure><img src="img/dz-library.png" alt="The Tracks page listing the 4 dropped tracks, with Tracks outlined in the sidebar" width="1280" height="680" loading="lazy"></figure></li></ol></section>
 
 <section class="part" aria-labelledby="p3b"><div class="part-head"><div class="eyebrow">Optional</div><h2 id="p3b">Upload new music automatically</h2></div>
 <p class="lede">If you save new tracks into one folder, Sub-box can watch it and upload anything that lands there.</p>
 <ol class="steps">
 <li><p><strong>Pick the folder.</strong> On the same <span class="quote">Watch</span> screen, click <span class="ui">Select Directory</span> <span class="n">1</span> and choose the folder (the button then reads <span class="quote">Change Directory</span>). Folders inside it are included. Then click <span class="ui">Start Watching</span> <span class="n">2</span>.</p>
-<figure><img src="img/wa-ready.png" alt="The Watch screen with the chosen folder, Change Directory and Start Watching outlined and numbered 1 and 2" loading="lazy"></figure><div class="note"><p>If your Mac asks whether Sub-box can access your Music, Downloads or Documents folder, click <span class="quote">Allow</span>.</p></div>
+<figure><img src="img/wa-ready.png" alt="The Watch screen with the chosen folder, Change Directory and Start Watching outlined and numbered 1 and 2" width="1280" height="380" loading="lazy"></figure><div class="note"><p>If your Mac asks whether Sub-box can access your Music, Downloads or Documents folder, click <span class="quote">Allow</span>.</p></div>
 <div class="note"><p>Sub-box uploads every track already in the folder, then each new one you save there, for as long as the app is open. It doesn’t move, rename or convert them, but it does add a small ID tag to each file so it can recognise the track later. Click <span class="quote">Stop Watching</span> to turn it off.</p></div></li>
 </ol></section>
 
@@ -181,7 +185,8 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 <p>Sub-box tags the copy it keeps, not the file on your computer, so it can’t tell that a dropped track and the same track from your DJ library are one track. If you plan to upload your library later, try Sub-box with tracks that aren’t in it, or delete the dropped copies afterwards.</p></details></div></section>
 
 <section class="part" aria-labelledby="p5"><div class="part-head"><div class="eyebrow">When you’re ready</div><h2 id="p5">Bring in your playlists and cue points</h2></div>
-<p class="lede">Dropping files brings in tracks. If you use <a href="mac-rekordbox.html">Rekordbox</a> or <a href="mac-serato.html">Serato</a>, upload your library from there and Sub-box adds your playlists, folders, cue points and beatgrids.</p></section>
+<p class="lede">Dropping files brings in tracks. If you use <a href="mac-rekordbox.html#p3">Rekordbox</a> or <a href="mac-serato.html#p3">Serato</a>, upload your library from there and Sub-box adds your playlists, folders, cue points and beatgrids.</p>
+<p class="lede">You’ve already installed Sub-box and signed in, so those links open the Rekordbox and Serato guides at the upload part. You don’t need to install it again.</p></section>
 <footer>Stuck? Ask on the Sub-box <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>. Starting from somewhere else, or on a different computer? Switch guide at the top of the page.</footer>
 </main>
 <script>

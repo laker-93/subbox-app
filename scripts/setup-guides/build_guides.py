@@ -8,6 +8,7 @@ Writes <out>/site/ (every page a full HTML document, ready for www.sub-box.net) 
 full documents published beside it). Both share img/.
 """
 import shutil
+import struct
 import sys
 from pathlib import Path
 
@@ -78,6 +79,8 @@ h2 { font: 700 24px/1.25 var(--display); margin: 0; text-wrap: balance; }
 .lede { margin: 0; color: var(--muted); max-width: 62ch; }
 
 section.part { display: grid; gap: 20px; }
+/* A jump to a part (#p3 from the quick start) clears the sticky bar and shows the part's eyebrow. */
+.part-head h2 { scroll-margin-top: 100px; }
 .part-head { display: grid; gap: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
 .part-head .eyebrow { padding-top: 22px; }
 ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; display: grid; gap: 26px; }
@@ -104,6 +107,7 @@ figcaption { font-size: 14px; color: var(--muted); }
 .note { margin: 10px 0 2px; padding: 12px 14px; border-radius: 10px; background: var(--note); border: 1px solid var(--note-line); font-size: 15.5px; display: grid; gap: 6px; }
 .note p { margin: 0; }
 .note strong { font-weight: 600; }
+.note.skip { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); max-width: 62ch; }
 .cmd { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
 .cmd code { flex: 1 1 240px; padding: 8px 10px; font-size: 14px; }
 .cmd button { font: 600 14px/1 var(--body); padding: 0 14px; min-height: 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
@@ -133,7 +137,7 @@ footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line)
 .feat svg { grid-row: 1 / span 2; width: 40px; height: 40px; padding: 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
 .feat h3 { margin: 0; font: 700 18px/1.35 var(--display); text-wrap: balance; }
 .feat p { margin: 0; color: var(--muted); font-size: 16px; max-width: 64ch; }
-@media (max-width: 560px) { .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
+@media (max-width: 560px) { .part-head h2 { scroll-margin-top: 150px; } .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat { grid-template-columns: minmax(0, 1fr); } .feat svg { grid-row: auto; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>"""
 
@@ -176,7 +180,11 @@ def bar(os_=None, sw=None):
 def fig(src, alt, caption=None, size=""):
     cls = f' class="{size}"' if size else ""
     cap = f"<figcaption>{caption}</figcaption>" if caption else ""
-    return f'<figure{cls}><img src="img/{src}.png" alt="{alt}" loading="lazy">{cap}</figure>'
+    # Real dimensions reserve each screenshot's space before it lazy-loads, so a jump to
+    # #p3 (from the quick start) isn't pushed off-screen by the images above it.
+    with open(IMG / f"{src}.png", "rb") as f:
+        w, h = struct.unpack(">II", f.read(24)[16:24])
+    return f'<figure{cls}><img src="img/{src}.png" alt="{alt}" width="{w}" height="{h}" loading="lazy">{cap}</figure>'
 
 
 def ui(text):
@@ -317,10 +325,12 @@ def troubleshooting_drop():
 
 
 def next_steps(os_):
-    links = " or ".join(f'<a href="{page_name(os_, s)}">{SW_NAME[s]}</a>' for s in ("rekordbox", "serato"))
+    # #p3 skips install and sign-in, which the quick start has already done.
+    links = " or ".join(f'<a href="{page_name(os_, s)}#p3">{SW_NAME[s]}</a>' for s in ("rekordbox", "serato"))
     return f"""
 <section class="part" aria-labelledby="p5"><div class="part-head"><div class="eyebrow">When you’re ready</div><h2 id="p5">Bring in your playlists and cue points</h2></div>
-<p class="lede">Dropping files brings in tracks. If you use {links}, upload your library from there and Sub-box adds your playlists, folders, cue points and beatgrids.</p></section>"""
+<p class="lede">Dropping files brings in tracks. If you use {links}, upload your library from there and Sub-box adds your playlists, folders, cue points and beatgrids.</p>
+<p class="lede">You’ve already installed Sub-box and signed in, so those links open the {SW_NAME["rekordbox"]} and {SW_NAME["serato"]} guides at the upload part. You don’t need to install it again.</p></section>"""
 
 
 def troubleshooting(sw):
@@ -344,6 +354,7 @@ def troubleshooting(sw):
 
 def guide(os_, sw):
     install = install_mac() if os_ == "mac" else install_windows()
+    skip = ""
     if sw == "quick-start":
         title = f"Try Sub-box on {OS_NAME[os_]}"
         desc = f"Install the Sub-box desktop app on a {OS_NAME[os_]} and drag in a few tracks to try it. No DJ software needed."
@@ -361,6 +372,9 @@ def guide(os_, sw):
         part3 = f"Upload your {SW_NAME[sw]} {thing}"
         upload = upload_rekordbox(os_) if sw == "rekordbox" else upload_serato(os_)
         trouble, extra, after = troubleshooting(sw), "", ""
+        skip = (f'<div class="note skip"><p><strong>Already installed Sub-box?</strong> If you did the '
+                f'<a href="{page_name(os_, "quick-start")}">quick start</a>, or Sub-box is already on this computer, '
+                f'you don’t need to install it again. <a href="#p3">Skip to Part 3: {part3}</a>.</p></div>')
     update = ("When a new version comes out, Sub-box tells you. Get it with the same download button and repeat steps 2 to 4."
               if os_ == "mac" else "Sub-box checks for new versions when it starts.")
     body = f"""{bar(os_, sw)}
@@ -368,6 +382,7 @@ def guide(os_, sw):
 <header class="hero">
 <div class="eyebrow">Getting started · {eyebrow}</div>
 <h1>{h1}</h1>
+{skip}
 </header>
 
 <section class="part" aria-labelledby="p1"><div class="part-head"><div class="eyebrow">Part 1 of 3</div><h2 id="p1">Install Sub-box</h2></div>
@@ -413,6 +428,7 @@ def chooser():
 <section class="part" aria-labelledby="c1"><div class="part-head"><div class="eyebrow">Try it first</div><h2 id="c1">Drop in a few tracks</h2></div>
 <div class="choose">{start}</div></section>
 <section class="part" aria-labelledby="c2"><div class="part-head"><div class="eyebrow">Use Rekordbox or Serato?</div><h2 id="c2">Bring your playlists and cue points</h2></div>
+<p class="lede">Already did the quick start? You don’t install Sub-box twice: each guide lets you skip straight to uploading your library.</p>
 <div class="choose">{dj}</div></section>
 <footer>Stuck? Ask on the Sub-box <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>.</footer>
 </main>"""
