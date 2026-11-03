@@ -493,8 +493,7 @@ def overview(setup_href):
             "Download a playlist as a Rekordbox XML or as Serato crates",
             "Cues, loops and beat grids set in Sub-box go with it",
         ]),
-    ], '<div class="note"><p>Prepping tracks is part of <strong>DJ mode</strong>. Sub-box offers to turn it on when an '
-       'import brings cues with it, or you can switch it on in Settings.</p></div>')
+    ])
 
     safe = part(2, "Keep it safe", "Nothing is lost by mistake", [
         ("undo", "Undo a delete", "Deleted playlists, folders and tracks can come back for 7 days.", [
