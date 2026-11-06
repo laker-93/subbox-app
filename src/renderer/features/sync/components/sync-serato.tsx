@@ -20,6 +20,7 @@ import {
     SyncSettingsModal,
     SyncStorageExceeded,
     SyncSummary,
+    UntaggedTracks,
     useSelection,
 } from '/@/renderer/features/sync/components/shared';
 import {
@@ -673,6 +674,8 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
     // ── Done ───────────────────────────────────────────────────────────────
     const dropped = uploadResult?.dropped ?? [];
     const failedUploads = uploadResult?.failed ?? [];
+    const untagged = uploadResult?.untagged ?? [];
+    const hasProblems = failedUploads.length > 0 || untagged.length > 0;
 
     return (
         <SyncResult
@@ -682,9 +685,9 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
             })}
             maw={420}
             onAction={handleReset}
-            status={failedUploads.length > 0 ? 'warn' : 'success'}
+            status={hasProblems ? 'warn' : 'success'}
             title={
-                failedUploads.length > 0
+                hasProblems
                     ? t('page.sync.serato.importPartialUpload', {
                           defaultValue: 'Imported, with problems',
                           postProcess: 'sentenceCase',
@@ -703,7 +706,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                     {uploadResult.uploaded > 0 && (
                         <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
                     )}
-                    {uploadResult.uploaded === 0 && failedUploads.length === 0 && (
+                    {uploadResult.uploaded === 0 && !hasProblems && (
                         <Text c="dimmed" size="sm">
                             Everything was already in your library.
                         </Text>
@@ -743,6 +746,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                         placed in a playlist, and the job still succeeds — so this
                         is the only place the shortfall is ever explained. */}
                     <JobOutcome progress={importProgress} source="Serato" />
+                    <UntaggedTracks tracks={untagged} />
                     {dropped.length > 0 && (
                         <Stack align="center" gap={2}>
                             <Text c="dimmed" size="sm" ta="center">

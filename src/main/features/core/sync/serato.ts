@@ -99,6 +99,8 @@ export interface SeratoUploadResult {
     totalTracksInCrates: number;
     /** The manifest to send as `track_identities` on POST /serato/import. */
     trackIdentities: Array<{ crate_path: string; cues?: SeratoCueWire[]; subbox_id: string }>;
+    /** On the server but not tagged there, so the import leaves them out (#310). */
+    untagged: Array<{ reason: string; trackName: string }>;
     uploaded: number;
 }
 
@@ -372,6 +374,7 @@ handleKeepingAwake(
             skipped: 0,
             totalTracksInCrates: allTrackPaths.length,
             trackIdentities,
+            untagged: [],
             uploaded: 0,
         };
 
@@ -679,7 +682,7 @@ handleKeepingAwake(
                 }));
 
             if (tracksToMap.length > 0) {
-                await runMapMeta({
+                const untagged = await runMapMeta({
                     onProgress: (processed, total) =>
                         sendProgress({
                             currentTrack: '',
@@ -691,6 +694,13 @@ handleKeepingAwake(
                     pymixUrl,
                     tracks: tracksToMap,
                 });
+                const trackNameByStagingPath = new Map(
+                    uploads.map((u) => [u.stagingPath, u.trackName]),
+                );
+                result.untagged = untagged.map(({ reason, stagingLocation }) => ({
+                    reason,
+                    trackName: trackNameByStagingPath.get(stagingLocation) ?? stagingLocation,
+                }));
             }
 
             sendProgress({

@@ -19,6 +19,7 @@ import {
     SyncSettingsModal,
     SyncStorageExceeded,
     SyncSummary,
+    UntaggedTracks,
     useSelection,
 } from '/@/renderer/features/sync/components/shared';
 import {
@@ -676,6 +677,8 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
     // a skip is a track that was not found locally or was already uploaded.
     const failedUploads = uploadResult?.failed ?? [];
     const otherSkipped = (uploadResult?.skipped ?? 0) - failedUploads.length;
+    const untagged = uploadResult?.untagged ?? [];
+    const hasProblems = failedUploads.length > 0 || untagged.length > 0;
 
     return (
         <SyncResult
@@ -684,9 +687,9 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                 postProcess: 'titleCase',
             })}
             onAction={handleReset}
-            status={failedUploads.length > 0 ? 'warn' : 'success'}
+            status={hasProblems ? 'warn' : 'success'}
             title={
-                failedUploads.length > 0
+                hasProblems
                     ? t('page.sync.rekordbox.uploadPartial', {
                           defaultValue: 'Uploaded, with problems',
                           postProcess: 'sentenceCase',
@@ -709,6 +712,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         was imported" once we started polling the metadata-only path
                         through to the end (#55); that path always has progress now. */}
                     {uploadResult.uploaded === 0 &&
+                    untagged.length === 0 &&
                     (importProgress?.n_tracks_processed ?? 0) === 0 ? (
                         <Text c="dimmed" size="sm">
                             Everything is already up to date.
@@ -760,6 +764,9 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         re-import that rewrote the metadata on every track, and
                         this is the only line on the screen that says so (#50). */}
                     <JobOutcome progress={importProgress} source="Rekordbox" />
+                    {/* Outside the branch above too: a retry can upload nothing
+                        (everything already staged) and still leave some untagged. */}
+                    <UntaggedTracks tracks={untagged} />
                     {/* Outside the branch above: a run can upload nothing and still
                         have dropped tracks, and "everything is already up to date"
                         would be wrong without this qualifying it. */}

@@ -30,14 +30,28 @@ export interface TrackMetaToMap {
  */
 export const MAP_META_FAILED_PREFIX = 'MAP_META_FAILED:';
 
+/** A file that reached the server but could not be tagged, so isn't imported. */
+export interface UntaggedTrack {
+    /** Why, in the user's terms (from pymix's `message`, laker-93/pymix#333). */
+    reason: string;
+    stagingLocation: string;
+}
+
 interface MapMetaProgress {
-    detail: null | { untagged_count?: number };
+    detail: null | {
+        untagged_count?: number;
+        untagged_tracks?: Array<{ message?: string; stagingLocation: string }>;
+    };
     in_progress: boolean;
     n_tracks: number;
     n_tracks_processed: number;
     reason: string;
     result: boolean | null;
+    // A pymix from before laker-93/pymix#333 sends none.
+    warnings?: string;
 }
+
+const UNTAGGED_FALLBACK_REASON = "the server couldn't tag this file, so it wasn't imported";
 
 const POLL_INTERVAL_MS = 1000;
 // A blip while polling must not throw away an upload that took hours: the job goes
@@ -111,13 +125,19 @@ export async function findWhollyStaged(args: {
  * map_meta is a job on the server: one request tagging a whole library (~20ms a
  * file) outlived Cloudflare's 100s. The import refuses until the job has finished,
  * so this has to return only once it has (laker-93/pymix#237).
+ *
+ * Resolves with the files that could not be tagged when only some couldn't: the
+ * import goes ahead with the rest, which is what "Finish Import" would have done.
+ * One 0-byte file among 3,401 used to stop a 50 GB upload on "Tagging Failed"
+ * (subbox-app#310). Throws `MAP_META_FAILED:` only when nothing was tagged, the job
+ * broke, or the server could not be reached.
  */
 export async function runMapMeta(args: {
     onProgress: (processed: number, total: number) => void;
     pymixAuth: PymixAuth;
     pymixUrl: string;
     tracks: TrackMetaToMap[];
-}): Promise<void> {
+}): Promise<UntaggedTrack[]> {
     const { onProgress, pymixAuth, pymixUrl, tracks } = args;
 
     // Not while the server is unreachable: the upload before this may have just
@@ -180,10 +200,22 @@ export async function runMapMeta(args: {
 
         onProgress(prog.n_tracks_processed, prog.n_tracks);
         if (prog.in_progress) continue;
-        if (prog.result) return;
+
+        const untaggedTracks = prog.detail?.untagged_tracks ?? [];
+        const untagged = prog.detail?.untagged_count;
+        if (prog.result) {
+            if (prog.warnings) console.warn('[map_meta] partial:', prog.warnings);
+            return untaggedTracks.map(toUntaggedTrack);
+        }
+        // A pymix from before laker-93/pymix#333 fails the job when any file is
+        // untagged. The ones it did tag are recorded as the attempt all the same, so
+        // go on to the import when some were.
+        if (untagged && untaggedTracks.length === untagged && untagged < tracks.length) {
+            console.warn(`[map_meta] ${untagged} of ${tracks.length} untagged; importing the rest`);
+            return untaggedTracks.map(toUntaggedTrack);
+        }
 
         console.error('[map_meta] tagging failed:', prog.reason, prog.detail);
-        const untagged = prog.detail?.untagged_count;
         throw mapMetaFailed(
             untagged
                 ? `${untagged} ${untagged === 1 ? 'track' : 'tracks'} could not be tagged on the server.`
@@ -191,3 +223,8 @@ export async function runMapMeta(args: {
         );
     }
 }
+
+const toUntaggedTrack = (t: { message?: string; stagingLocation: string }): UntaggedTrack => ({
+    reason: t.message || UNTAGGED_FALLBACK_REASON,
+    stagingLocation: t.stagingLocation,
+});

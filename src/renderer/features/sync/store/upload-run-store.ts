@@ -57,6 +57,8 @@ export interface RekordboxUploadResult {
     failed?: TrackProblem[];
     skipped: number;
     totalTracksInXml?: number;
+    /** Uploaded but not tagged on the server, so not imported (#310). */
+    untagged?: TrackProblem[];
     uploaded: number;
 }
 
@@ -80,6 +82,8 @@ export interface SeratoUploadResult {
     skipped: number;
     totalTracksInCrates: number;
     trackIdentities: Array<{ crate_path: string; subbox_id: string }>;
+    /** Uploaded but not tagged on the server, so not imported (#310). */
+    untagged?: TrackProblem[];
     uploaded: number;
 }
 

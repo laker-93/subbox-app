@@ -90,6 +90,9 @@ export interface UploadResult {
     failed: Array<{ reason: string; trackName: string }>;
     skipped: number;
     totalTracksInXml: number;
+    /** Uploaded, but the server could not tag them, so the import leaves them out:
+     *  an empty file, say (#310). The import goes ahead with the rest. */
+    untagged: Array<{ reason: string; trackName: string }>;
     uploaded: number;
     /** The name the XML was uploaded under, for `rbImport`'s `xmlName`. pymix imports
      *  exactly that file rather than guessing among leftovers (laker-93/pymix#192). */
@@ -698,7 +701,7 @@ handleKeepingAwake(
             (m) => !failedStagingPaths.has(m.stagingLocation),
         );
 
-        await runMapMeta({
+        const untagged = await runMapMeta({
             onProgress: (processed, total) =>
                 sendProgress({
                     currentTrack: '',
@@ -710,6 +713,13 @@ handleKeepingAwake(
             pymixUrl,
             tracks: trackMetaDataToMap,
         });
+        // On the server but not tagged, so the import leaves them out (#310).
+        const trackNameByStagingPath = new Map(
+            originalTrackMetaData.map((m) => [
+                m.stagingLocation,
+                `${m.originalArtist ?? ''} - ${m.originalName ?? ''}`,
+            ]),
+        );
 
         sendProgress({
             currentTrack: '',
@@ -723,6 +733,10 @@ handleKeepingAwake(
             failed: failedTracks.map(({ reason, trackName }) => ({ reason, trackName })),
             skipped: skippedCount,
             totalTracksInXml: totalTracks,
+            untagged: untagged.map(({ reason, stagingLocation }) => ({
+                reason,
+                trackName: trackNameByStagingPath.get(stagingLocation) ?? stagingLocation,
+            })),
             uploaded: uploadedCount,
             xmlFileName,
         };
