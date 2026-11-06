@@ -1,4 +1,5 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { createHash } from 'crypto';
 import { app, ipcMain, shell } from 'electron';
 import Store from 'electron-store';
 import * as fs from 'fs';
@@ -51,6 +52,7 @@ import {
     ParsedPlaylist,
     ParsedTrack,
     sanitizePathSegment,
+    stagingFileName,
 } from '/@/main/features/core/sync/rekordbox-xml';
 import { getOrCreateSubboxId, readSubboxId } from '/@/main/features/core/sync/subbox-id-tags';
 import { uploadFileViaTus } from '/@/main/features/core/sync/tus-upload';
@@ -536,6 +538,8 @@ handleKeepingAwake(
         // land here instead of aborting the whole batch — see the worker loop below.
         const failedTracks: Array<{ reason: string; stagingPath: string; trackName: string }> = [];
         const originalTrackMetaData: TrackMetaToMap[] = [];
+        // Which local file each staging path was given to.
+        const stagingPathOwners = new Map<string, string>();
 
         // Build list of tracks that can actually be uploaded
         const uploadableTracks: Array<{
@@ -572,12 +576,25 @@ handleKeepingAwake(
             // promos, single-track downloads) — sanitizePathSegment(undefined) is '',
             // which would otherwise collapse to an empty path component
             // ("Artist//Title.mp3") that filebrowser 404s on. A blank artist (#201)
-            // needs the same fallback.
-            const stagingPath = [
+            // needs the same fallback. Each component is also cut to fit the
+            // server's 255-byte limit (#309).
+            let stagingPath = [
                 sanitizePathSegment(track.artist) || 'Unknown Artist',
                 sanitizePathSegment(track.album) || 'Unknown Album',
-                `${sanitizePathSegment(track.cleanName)}${track.fileExtension}`,
+                stagingFileName(track.cleanName, track.fileExtension),
             ].join('/');
+            // Two different files can come to the same staging path, more often now
+            // that long names are cut short. The second upload would overwrite the
+            // first, and leave one of them untagged. The suffix comes from the local
+            // path, not the order, so a retry builds the same path and its dedup
+            // still finds what it already sent.
+            const owner = stagingPathOwners.get(stagingPath);
+            if (owner !== undefined && owner !== track.location) {
+                const ext = track.fileExtension;
+                const suffix = createHash('sha1').update(track.location).digest('hex').slice(0, 8);
+                stagingPath = `${stagingPath.slice(0, stagingPath.length - ext.length)}-${suffix}${ext}`;
+            }
+            stagingPathOwners.set(stagingPath, track.location);
             uploadableTracks.push({ stagingPath, track, trackName });
 
             originalTrackMetaData.push({
