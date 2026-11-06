@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sub-box on Your Phone</title>
+<meta name="description" content="Play your Sub-box library on an iPhone or Android phone with a Subsonic app.">
+<style>
+/* Layout: one reading column, a sticky bar that switches between the four guides,
+   three parts in order, each a numbered list of steps with the app's own screens. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --line: #dcdfe5; --fg: #14161a; --muted: #5b6372;
+  --accent: #2b5cf0; --accent-fg: #ffffff; --accent-soft: #e6ecfe; --note: #fff6e0; --note-line: #f0d48a;
+  --shot-bg: #0c0d0f;
+  /* System fonts only: a font CDN would send every visitor's IP to a third party
+     that sub-box.net's privacy notice doesn't name. */
+  --display: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c0d0f; --surface: #15171b; --line: #272b33; --fg: #eceef2; --muted: #9aa2b0;
+  --accent: #4772ff; --accent-fg: #ffffff; --accent-soft: #18213d; --note: #241f12; --note-line: #5a4a1f;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0c0d0f; --surface: #15171b; --line: #272b33; --fg: #eceef2; --muted: #9aa2b0;
+  --accent: #4772ff; --accent-fg: #ffffff; --accent-soft: #18213d; --note: #241f12; --note-line: #5a4a1f;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 17px/1.6 var(--body); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.bar-in, .wrap { max-width: 780px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-in { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding-block: 10px; }
+.mark { display: flex; align-items: center; gap: 8px; font: 700 18px/1 var(--display); color: var(--fg); text-decoration: none; margin-right: auto; }
+.mark svg { width: 22px; height: 22px; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.seg a { padding: 4px 11px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--muted); text-decoration: none; }
+.seg a[aria-current="page"] { background: var(--accent-soft); color: var(--fg); }
+.seg a:hover { color: var(--fg); }
+
+.wrap { padding-block: 40px 72px; display: grid; gap: 48px; }
+header.hero { display: grid; gap: 14px; }
+.eyebrow { font: 600 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(30px, 6vw, 42px)/1.12 var(--display); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+h2 { font: 700 24px/1.25 var(--display); margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 62ch; }
+
+section.part { display: grid; gap: 20px; }
+/* A jump to a part (#p3 from the quick start) clears the sticky bar and shows the part's eyebrow. */
+.part-head h2 { scroll-margin-top: 100px; }
+.part-head { display: grid; gap: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
+.part-head .eyebrow { padding-top: 22px; }
+ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; display: grid; gap: 26px; }
+ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 0 14px; }
+ol.steps > li::before { content: counter(step); grid-row: 1 / span 20; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent); color: var(--accent-fg); font: 600 15px/1 var(--body); font-variant-numeric: tabular-nums; margin-top: 1px; }
+ol.steps > li > * { grid-column: 2; min-width: 0; }
+ol.steps p { margin: 0 0 8px; max-width: 64ch; }
+ol.steps p:last-child { margin-bottom: 0; }
+ol.steps ul { margin: 4px 0 8px; padding-left: 20px; display: grid; gap: 4px; }
+
+.ui { display: inline-block; padding: 0 7px; border-radius: 5px; background: var(--accent); color: var(--accent-fg); font-weight: 600; font-size: .92em; line-height: 1.6; white-space: nowrap; }
+.menu { font-family: var(--mono); font-size: .86em; padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); white-space: normal; }
+.menu i { font-style: normal; color: var(--muted); padding: 0 2px; }
+code, .file { font-family: var(--mono); font-size: .86em; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere; }
+.quote { font-weight: 600; }
+
+figure { margin: 12px 0 4px; display: grid; gap: 8px; }
+figure img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--shot-bg); }
+figure.narrow img { max-width: 360px; }
+figure.mid img { max-width: 540px; }
+figcaption { font-size: 14px; color: var(--muted); }
+
+.note { margin: 10px 0 2px; padding: 12px 14px; border-radius: 10px; background: var(--note); border: 1px solid var(--note-line); font-size: 15.5px; display: grid; gap: 6px; }
+.note p { margin: 0; }
+.note strong { font-weight: 600; }
+.note.skip { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); max-width: 62ch; }
+.cmd { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.cmd code { flex: 1 1 240px; padding: 8px 10px; font-size: 14px; }
+.cmd button { font: 600 14px/1 var(--body); padding: 0 14px; min-height: 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font-weight: 600; text-decoration: none; margin: 4px 0 8px; }
+.btn:hover { filter: brightness(1.08); }
+.btn.alt { background: var(--surface); color: var(--fg); border: 1px solid var(--line); }
+p:has(> .btn) { display: flex; flex-wrap: wrap; gap: 0 10px; }
+/* Matches the numbered amber outlines drawn on the screenshots. */
+.n { display: inline-grid; place-items: center; width: 1.35em; height: 1.35em; border-radius: 50%; background: #ffb020; color: #14161a; font-weight: 700; font-size: .8em; vertical-align: .1em; }
+
+details { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 0 16px; }
+details + details { margin-top: 10px; }
+summary { cursor: pointer; padding: 13px 0; font-weight: 600; }
+details p { margin: 0 0 14px; max-width: 64ch; }
+footer { color: var(--muted); font-size: 15px; border-top: 1px solid var(--line); padding-top: 22px; }
+
+/* Chooser */
+.choose { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.card { display: grid; gap: 6px; padding: 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); text-decoration: none; }
+.card:hover { border-color: var(--accent); }
+.card b { font: 700 19px/1.3 var(--display); }
+.card span { color: var(--muted); font-size: 15px; }
+
+/* Overview: each feature is a row that opens to a short bullet list. */
+.feats { display: grid; gap: 10px; }
+details.feat { padding: 0; border-radius: 12px; }
+details.feat + details.feat { margin-top: 0; }
+.feat summary { list-style: none; display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; align-items: center; gap: 2px 14px; padding: 14px 16px; }
+.feat summary::-webkit-details-marker { display: none; }
+.feat summary > svg:first-child { grid-row: 1 / span 2; width: 40px; height: 40px; padding: 9px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.feat summary b { font: 700 17px/1.35 var(--display); text-wrap: balance; }
+.feat summary span { grid-column: 2; color: var(--muted); font-size: 15px; font-weight: 400; line-height: 1.45; }
+.feat .chev { grid-column: 3; grid-row: 1 / span 2; width: 20px; height: 20px; color: var(--muted); transition: transform .15s; }
+.feat[open] .chev { transform: rotate(180deg); }
+.feat summary:hover b { color: var(--accent); }
+.feat ul { margin: 0; padding: 2px 16px 16px 90px; display: grid; gap: 6px; font-size: 16px; max-width: 72ch; }
+.feat-tools { display: flex; justify-content: flex-end; margin: -36px 0 -40px; }
+.feat-tools button { font: 500 14px/1 var(--body); color: var(--accent); background: none; border: 0; padding: 4px 0; cursor: pointer; }
+/* Phone guide: the username box that fills in the server address, and the app cards. */
+.field { display: grid; gap: 6px; max-width: 420px; }
+.field label { font-weight: 600; font-size: 15px; }
+.field input { font: 400 16px/1.4 var(--body); padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+.field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.apps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.app { display: grid; gap: 6px; align-content: start; padding: 18px 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.app b { font: 700 18px/1.3 var(--display); }
+.app .price { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.app p { margin: 0; color: var(--muted); font-size: 15px; }
+.app .btn { justify-self: start; margin: 6px 0 0; }
+.platform { display: grid; gap: 12px; }
+.platform h3 { font: 700 19px/1.3 var(--display); margin: 0; }
+@media (max-width: 560px) { .apps { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .part-head h2 { scroll-margin-top: 150px; } .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat ul { padding-left: 34px; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="bar"><div class="bar-in"><a class="mark" href="../setup.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="4" fill="currentColor" opacity=".12"/><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 10v4M8 7v10M11 9v6M14 5v14M17 8v8M20 11v2"/></g></svg>Sub-box</a></div></div>
+<main class="wrap">
+<header class="hero">
+<div class="eyebrow">Getting started · Phone</div>
+<h1>Listen on your phone</h1>
+<p class="lede">Your Sub-box library is also a Subsonic music server, so any Subsonic app on your iPhone or Android phone can play it: your tracks, albums and playlists, streamed or downloaded for offline listening.</p>
+<div class="note skip"><p><strong>Upload some music first.</strong> The phone app plays what’s already in your Sub-box library. If it’s empty, follow one of the <a href="../setup.html">computer guides</a> first.</p></div>
+</header>
+
+<section class="part" aria-labelledby="m1"><div class="part-head"><div class="eyebrow">Part 1 of 3</div><h2 id="m1">Install a music app</h2></div>
+<p class="lede">Pick one. They all connect to Sub-box the same way.</p>
+<div class="platform"><h3>iPhone and iPad</h3><div class="apps"><div class="app"><b>Amperfy</b><span class="price">Free</span><p>Open source. Downloads for offline listening, CarPlay. Needs a recent iOS version.</p><a class="btn" href="https://apps.apple.com/app/id1530145038" target="_blank" rel="noopener">Get it on the App Store</a></div><div class="app"><b>substreamer</b><span class="price">Free</span><p>Works on older iPhones too. Downloads for offline listening, CarPlay.</p><a class="btn" href="https://apps.apple.com/app/id1012991665" target="_blank" rel="noopener">Get it on the App Store</a></div><div class="app"><b>play:Sub</b><span class="price">Paid</span><p>A long-standing, polished Subsonic player, with offline caching and CarPlay.</p><a class="btn" href="https://apps.apple.com/app/id955329386" target="_blank" rel="noopener">Get it on the App Store</a></div></div></div>
+<div class="platform"><h3>Android</h3><div class="apps"><div class="app"><b>Symfonium</b><span class="price">Free trial, then a one-off purchase</span><p>The most complete Subsonic player on Android: offline, Android Auto, casting.</p><a class="btn" href="https://play.google.com/store/apps/details?id=app.symfonik.music.player" target="_blank" rel="noopener">Get it on Google Play</a></div><div class="app"><b>substreamer</b><span class="price">Free</span><p>Simple and free. Downloads for offline listening, Android Auto.</p><a class="btn" href="https://play.google.com/store/apps/details?id=com.ghenry22.substream2" target="_blank" rel="noopener">Get it on Google Play</a></div></div></div>
+<details><summary>Already have a different Subsonic app?</summary>
+<p>Any app that says it works with Subsonic, OpenSubsonic or Navidrome will connect. Skip to Part 2.</p></details>
+</section>
+
+<section class="part" aria-labelledby="m2"><div class="part-head"><div class="eyebrow">Part 2 of 3</div><h2 id="m2">Find your server address</h2></div>
+<p class="lede">Your address is your Sub-box username inside <span class="file">https://navidrome<i>username</i>.sub-box.net</span>.</p>
+<div class="field" hidden><label for="nd-user">Your Sub-box username</label>
+<input id="nd-user" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="e.g. djalex"></div>
+<div class="cmd"><code id="nd-host" data-nd-host>https://navidrome<i>yourusername</i>.sub-box.net</code><button type="button" data-copy="nd-host">Copy</button></div>
+</section>
+
+<section class="part" aria-labelledby="m3"><div class="part-head"><div class="eyebrow">Part 3 of 3</div><h2 id="m3">Connect the app</h2></div>
+<ol class="steps">
+<li><p><strong>Open the app and add a server.</strong> It asks for one the first time it opens. If it asks what kind, choose <span class="quote">Navidrome</span> if it’s listed, otherwise <span class="quote">Subsonic</span>.</p></li>
+<li><p><strong>Enter your server address</strong>, exactly as above: <span class="file" data-nd-host>https://navidrome<i>yourusername</i>.sub-box.net</span>. No port number, nothing after <span class="quote">.net</span>.</p></li>
+<li><p><strong>Enter your username and password.</strong> They’re the ones you sign in to Sub-box with: <span class="quote" data-nd-user>your Sub-box username</span> and your Sub-box password.</p></li>
+<li><p><strong>Save, or tap Log in.</strong> The app loads your library. A big library can take a minute the first time.</p></li>
+</ol>
+<details><summary>Where to find it in each app</summary>
+<p><strong>Amperfy:</strong> the login screen opens by itself. Fill in Server URL, Username and Password, then tap Login.</p>
+<p><strong>substreamer:</strong> on first launch, add a server: give it any name (“Sub-box”), then the address, username and password.</p>
+<p><strong>play:Sub:</strong> open Settings, then the server settings, and enter the address, username and password.</p>
+<p><strong>Symfonium:</strong> on first launch, add a media provider, choose Subsonic (or Navidrome), then the address, username and password.</p></details>
+</section>
+
+<section class="part" aria-labelledby="m4"><div class="part-head"><div class="eyebrow">Good to know</div><h2 id="m4">What you’ll see on your phone</h2></div>
+<ul class="lede" style="margin:0;padding-left:20px;display:grid;gap:6px">
+<li>Playlists inside folders show their folder in the name, like <span class="quote">Gigs / Warm Up</span>.</li>
+<li>Cue points, loops and beat grids stay in Sub-box and your DJ software. Phone apps just play the tracks.</li>
+<li>Music you upload later shows up once Sub-box has finished importing it. If it doesn’t appear, refresh the library in the app’s settings.</li>
+<li>Stars and ratings you give in the app are saved to your Sub-box library.</li>
+</ul></section>
+
+<section class="part" aria-labelledby="m5"><div class="part-head"><div class="eyebrow">If something goes wrong</div><h2 id="m5">Common problems</h2></div>
+<div>
+<details><summary>It can’t reach the server</summary>
+<p>Check the address starts with <span class="quote">https://</span>, has your username straight after <span class="quote">navidrome</span> with no space or dot, and ends at <span class="quote">.sub-box.net</span>. Some apps add a port number such as <span class="quote">:4533</span> by themselves: remove it.</p></details>
+<details><summary>It says the username or password is wrong</summary>
+<p>Use the same username and password as the Sub-box app. If you can sign in there but not on your phone, ask us on <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>.</p></details>
+<details><summary>It connects but the library is empty</summary>
+<p>Sign in to the Sub-box app and check your tracks are under <span class="quote">Library</span>. If they are, refresh the library in the phone app’s settings.</p></details>
+</div></section>
+<footer>Stuck? Ask on the Sub-box <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>.</footer>
+</main>
+<script>
+document.querySelectorAll('[data-copy]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var code = document.getElementById(b.getAttribute('data-copy'));
+    var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1600); };
+    var select = function () { var r = document.createRange(); r.selectNodeContents(code); var s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+    try { navigator.clipboard.writeText(code.textContent).then(done, select); } catch (e) { select(); }
+  });
+});
+</script>
+<script>
+(() => {
+  const input = document.getElementById("nd-user");
+  const out = document.querySelectorAll("[data-nd-host]");
+  const users = document.querySelectorAll("[data-nd-user]");
+  // A link can carry the username (phone.html?u=name), so an email or the app can open it filled in.
+  let u = "";
+  try { u = new URLSearchParams(location.search).get("u") || ""; } catch (e) {}
+  const show = () => {
+    const name = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+    out.forEach(el => {
+      if (name) el.textContent = "https://navidrome" + name + ".sub-box.net";
+      else el.innerHTML = "https://navidrome<i>yourusername</i>.sub-box.net";
+    });
+    users.forEach(el => { el.textContent = name || "your Sub-box username"; });
+  };
+  input.closest(".field").hidden = false;
+  if (u) input.value = u;
+  input.addEventListener("input", show);
+  show();
+})();
+</script>
+</body>
+</html>

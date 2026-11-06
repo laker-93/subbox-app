@@ -7,6 +7,7 @@ Six step-by-step guides for new users: install the desktop app, sign in, and upl
 | `https://www.sub-box.net/setup.html` | `src/renderer/public/setup.html` (the chooser) |
 | `https://www.sub-box.net/overview.html` | `src/renderer/public/overview.html` (what Sub-box does, for invite emails to link to) |
 | `https://www.sub-box.net/setup/mac-quick-start.html` (and the other five) | `src/renderer/public/setup/*.html` |
+| `https://www.sub-box.net/setup/phone.html` | `src/renderer/public/setup/phone.html` (connect a Subsonic app on iPhone/Android; `?u=<username>` fills in the server address) |
 | screenshots | `src/renderer/public/setup/img/*.png` |
 
 They are served exactly like the legal pages (`docs/LEGAL_PAGES.md`): Vite's `publicDir` copies them into `out/web/`, the `Dockerfile` bakes them into the nginx image, and `ng.conf.template`'s `try_files $uri` serves them before the SPA fallback. The PWA service worker is scoped to `/assets/`, so it never intercepts them. Link the explicit filename; a bare `/setup/` falls through to the app.
@@ -29,5 +30,7 @@ These files are generated; don't hand-edit them. The tools are in `scripts/setup
 Retake the screenshots when the Sync → Upload or Sync → Watch screens (dropzone included) change. `rb-export.png` is the one exception: it is Rekordbox's own File menu, taken by hand, and the script doesn't make it.
 
 Edit `build_guides.py`, not the HTML. A hand edit to the pages is lost at the next rebuild.
+
+The phone guide's recommended apps and store links are `PHONE_APPS` in `build_guides.py`. It has no screenshots, and it assumes every user's Navidrome answers at `navidrome<username>.sub-box.net` with their Sub-box password (pymix `services/traefik_routes.py`, pooled or not).
 
 As with the legal pages, a content change ships with a client release.

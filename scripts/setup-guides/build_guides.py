@@ -146,6 +146,20 @@ details.feat + details.feat { margin-top: 0; }
 .feat ul { margin: 0; padding: 2px 16px 16px 90px; display: grid; gap: 6px; font-size: 16px; max-width: 72ch; }
 .feat-tools { display: flex; justify-content: flex-end; margin: -36px 0 -40px; }
 .feat-tools button { font: 500 14px/1 var(--body); color: var(--accent); background: none; border: 0; padding: 4px 0; cursor: pointer; }
+/* Phone guide: the username box that fills in the server address, and the app cards. */
+.field { display: grid; gap: 6px; max-width: 420px; }
+.field label { font-weight: 600; font-size: 15px; }
+.field input { font: 400 16px/1.4 var(--body); padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+.field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.apps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.app { display: grid; gap: 6px; align-content: start; padding: 18px 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.app b { font: 700 18px/1.3 var(--display); }
+.app .price { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.app p { margin: 0; color: var(--muted); font-size: 15px; }
+.app .btn { justify-self: start; margin: 6px 0 0; }
+.platform { display: grid; gap: 12px; }
+.platform h3 { font: 700 19px/1.3 var(--display); margin: 0; }
+@media (max-width: 560px) { .apps { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .part-head h2 { scroll-margin-top: 150px; } .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat ul { padding-left: 34px; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>"""
@@ -170,14 +184,14 @@ def page_name(os_, sw):
     return f"{os_}-{sw}.html"
 
 
-def bar(os_=None, sw=None):
+def bar(os_=None, sw=None, home=False):
     def seg(items, current, link):
         here = ' aria-current="page"'
         return '<nav class="seg" aria-label="{}">{}</nav>'.format(
             items[0][2],
             "".join(f'<a href="{link(k)}"{here if k == current else ""}>{label}</a>'
                     for k, label, _ in items))
-    inner = f'<a class="mark" href="{HOME if os_ else ""}">{LOGO}Sub-box</a>'
+    inner = f'<a class="mark" href="{HOME if os_ or home else ""}">{LOGO}Sub-box</a>'
     if os_:
         inner += seg([("mac", "Mac", "Computer"), ("windows", "Windows", "Computer")], os_,
                      lambda k: page_name(k, sw))
@@ -414,6 +428,121 @@ def guide(os_, sw):
     return HEAD.replace("{title}", title).replace("{desc}", desc), body
 
 
+# Subsonic apps for the phone guide: (name, price, why, store link). Store links checked
+# 2026-11-06. Every pooled or dedicated user's Navidrome answers at navidrome{user}.<domain>
+# (pymix services/traefik_routes.py), and its account has the Sub-box password.
+PHONE_APPS = {
+    "ios": [
+        ("Amperfy", "Free", "Open source. Downloads for offline listening, CarPlay. Needs a recent iOS version.",
+         "https://apps.apple.com/app/id1530145038"),
+        ("substreamer", "Free", "Works on older iPhones too. Downloads for offline listening, CarPlay.",
+         "https://apps.apple.com/app/id1012991665"),
+        ("play:Sub", "Paid", "A long-standing, polished Subsonic player, with offline caching and CarPlay.",
+         "https://apps.apple.com/app/id955329386"),
+    ],
+    "android": [
+        ("Symfonium", "Free trial, then a one-off purchase", "The most complete Subsonic player on Android: offline, Android Auto, casting.",
+         "https://play.google.com/store/apps/details?id=app.symfonik.music.player"),
+        ("substreamer", "Free", "Simple and free. Downloads for offline listening, Android Auto.",
+         "https://play.google.com/store/apps/details?id=com.ghenry22.substream2"),
+    ],
+}
+
+PHONE_JS = """<script>
+(() => {
+  const input = document.getElementById("nd-user");
+  const out = document.querySelectorAll("[data-nd-host]");
+  const users = document.querySelectorAll("[data-nd-user]");
+  // A link can carry the username (phone.html?u=name), so an email or the app can open it filled in.
+  let u = "";
+  try { u = new URLSearchParams(location.search).get("u") || ""; } catch (e) {}
+  const show = () => {
+    const name = input.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+    out.forEach(el => {
+      if (name) el.textContent = "https://navidrome" + name + ".sub-box.net";
+      else el.innerHTML = "https://navidrome<i>yourusername</i>.sub-box.net";
+    });
+    users.forEach(el => { el.textContent = name || "your Sub-box username"; });
+  };
+  input.closest(".field").hidden = false;
+  if (u) input.value = u;
+  input.addEventListener("input", show);
+  show();
+})();
+</script>"""
+
+
+def phone():
+    def apps(platform):
+        return '<div class="apps">' + "".join(
+            f'<div class="app"><b>{name}</b><span class="price">{price}</span><p>{why}</p>'
+            f'<a class="btn" href="{link}" target="_blank" rel="noopener">'
+            f'{"Get it on the App Store" if platform == "ios" else "Get it on Google Play"}</a></div>'
+            for name, price, why, link in PHONE_APPS[platform]) + "</div>"
+
+    body = f"""{bar(home=True)}
+<main class="wrap">
+<header class="hero">
+<div class="eyebrow">Getting started · Phone</div>
+<h1>Listen on your phone</h1>
+<p class="lede">Your Sub-box library is also a Subsonic music server, so any Subsonic app on your iPhone or Android phone can play it: your tracks, albums and playlists, streamed or downloaded for offline listening.</p>
+<div class="note skip"><p><strong>Upload some music first.</strong> The phone app plays what’s already in your Sub-box library. If it’s empty, follow one of the <a href="{HOME}">computer guides</a> first.</p></div>
+</header>
+
+<section class="part" aria-labelledby="m1"><div class="part-head"><div class="eyebrow">Part 1 of 3</div><h2 id="m1">Install a music app</h2></div>
+<p class="lede">Pick one. They all connect to Sub-box the same way.</p>
+<div class="platform"><h3>iPhone and iPad</h3>{apps("ios")}</div>
+<div class="platform"><h3>Android</h3>{apps("android")}</div>
+<details><summary>Already have a different Subsonic app?</summary>
+<p>Any app that says it works with Subsonic, OpenSubsonic or Navidrome will connect. Skip to Part 2.</p></details>
+</section>
+
+<section class="part" aria-labelledby="m2"><div class="part-head"><div class="eyebrow">Part 2 of 3</div><h2 id="m2">Find your server address</h2></div>
+<p class="lede">Your address is your Sub-box username inside <span class="file">https://navidrome<i>username</i>.sub-box.net</span>.</p>
+<div class="field" hidden><label for="nd-user">Your Sub-box username</label>
+<input id="nd-user" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="e.g. djalex"></div>
+<div class="cmd"><code id="nd-host" data-nd-host>https://navidrome<i>yourusername</i>.sub-box.net</code><button type="button" data-copy="nd-host">Copy</button></div>
+</section>
+
+<section class="part" aria-labelledby="m3"><div class="part-head"><div class="eyebrow">Part 3 of 3</div><h2 id="m3">Connect the app</h2></div>
+<ol class="steps">
+<li><p><strong>Open the app and add a server.</strong> It asks for one the first time it opens. If it asks what kind, choose <span class="quote">Navidrome</span> if it’s listed, otherwise <span class="quote">Subsonic</span>.</p></li>
+<li><p><strong>Enter your server address</strong>, exactly as above: <span class="file" data-nd-host>https://navidrome<i>yourusername</i>.sub-box.net</span>. No port number, nothing after <span class="quote">.net</span>.</p></li>
+<li><p><strong>Enter your username and password.</strong> They’re the ones you sign in to Sub-box with: <span class="quote" data-nd-user>your Sub-box username</span> and your Sub-box password.</p></li>
+<li><p><strong>Save, or tap Log in.</strong> The app loads your library. A big library can take a minute the first time.</p></li>
+</ol>
+<details><summary>Where to find it in each app</summary>
+<p><strong>Amperfy:</strong> the login screen opens by itself. Fill in Server URL, Username and Password, then tap Login.</p>
+<p><strong>substreamer:</strong> on first launch, add a server: give it any name (“Sub-box”), then the address, username and password.</p>
+<p><strong>play:Sub:</strong> open Settings, then the server settings, and enter the address, username and password.</p>
+<p><strong>Symfonium:</strong> on first launch, add a media provider, choose Subsonic (or Navidrome), then the address, username and password.</p></details>
+</section>
+
+<section class="part" aria-labelledby="m4"><div class="part-head"><div class="eyebrow">Good to know</div><h2 id="m4">What you’ll see on your phone</h2></div>
+<ul class="lede" style="margin:0;padding-left:20px;display:grid;gap:6px">
+<li>Playlists inside folders show their folder in the name, like <span class="quote">Gigs / Warm Up</span>.</li>
+<li>Cue points, loops and beat grids stay in Sub-box and your DJ software. Phone apps just play the tracks.</li>
+<li>Music you upload later shows up once Sub-box has finished importing it. If it doesn’t appear, refresh the library in the app’s settings.</li>
+<li>Stars and ratings you give in the app are saved to your Sub-box library.</li>
+</ul></section>
+
+<section class="part" aria-labelledby="m5"><div class="part-head"><div class="eyebrow">If something goes wrong</div><h2 id="m5">Common problems</h2></div>
+<div>
+<details><summary>It can’t reach the server</summary>
+<p>Check the address starts with <span class="quote">https://</span>, has your username straight after <span class="quote">navidrome</span> with no space or dot, and ends at <span class="quote">.sub-box.net</span>. Some apps add a port number such as <span class="quote">:4533</span> by themselves: remove it.</p></details>
+<details><summary>It says the username or password is wrong</summary>
+<p>Use the same username and password as the Sub-box app. If you can sign in there but not on your phone, ask us on <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>.</p></details>
+<details><summary>It connects but the library is empty</summary>
+<p>Sign in to the Sub-box app and check your tracks are under <span class="quote">Library</span>. If they are, refresh the library in the phone app’s settings.</p></details>
+</div></section>
+<footer>Stuck? Ask on the Sub-box <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>.</footer>
+</main>
+{COPY_JS}
+{PHONE_JS}"""
+    return (HEAD.replace("{title}", "Sub-box on Your Phone")
+            .replace("{desc}", "Play your Sub-box library on an iPhone or Android phone with a Subsonic app.")), body
+
+
 def chooser():
     def on(o):
         return "a Mac" if o == "mac" else "Windows"
@@ -439,6 +568,8 @@ def chooser():
 <section class="part" aria-labelledby="c2"><div class="part-head"><div class="eyebrow">Use Rekordbox or Serato?</div><h2 id="c2">Bring your playlists and cue points</h2></div>
 <p class="lede">Already did the quick start? You don’t install Sub-box twice: each guide lets you skip straight to uploading your library.</p>
 <div class="choose">{dj}</div></section>
+<section class="part" aria-labelledby="c3"><div class="part-head"><div class="eyebrow">Music already uploaded?</div><h2 id="c3">Listen on your phone</h2></div>
+<div class="choose"><a class="card" href="{GUIDES}phone.html"><b>iPhone or Android</b><span>Install a free Subsonic app and connect it to your Sub-box library, to stream or download your playlists.</span></a></div></section>
 <footer>Stuck? Ask on the Sub-box <a href="{DISCORD}" target="_blank" rel="noopener">Discord</a>.</footer>
 </main>"""
     return HEAD.replace("{title}", "Sub-box Getting Started").replace("{desc}", "Install Sub-box and drag in a few tracks to try it, or upload your Rekordbox or Serato library."), body
@@ -517,7 +648,7 @@ def overview(setup_href):
         ]),
         ("phone", "Listen anywhere", "Desktop app, web browser or your phone.", [
             "Play your own playlists in the desktop app or a web browser",
-            "On your phone, use any Subsonic-compatible music app",
+            f'On your phone, use any Subsonic-compatible music app (<a href="{GUIDES}phone.html">how to set one up</a>)',
             "Rediscover tracks on the way to a gig",
         ]),
         ("bookmark", "Never lose a track you heard", "Keep a wishlist from links or a Google Sheet.", [
@@ -588,6 +719,8 @@ def write(target, chooser_path, guide_dir):
         for s in SOFTWARE:
             head, body = guide(o, s)
             (g / page_name(o, s)).write_text(full_doc(head.replace("{viewport_meta}", meta), body))
+    head, body = phone()
+    (g / "phone.html").write_text(full_doc(head.replace("{viewport_meta}", meta), body))
     head, body = overview(chooser_path)
     (d / "overview.html").write_text(full_doc(head.replace("{viewport_meta}", meta), body))
 
