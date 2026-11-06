@@ -119,6 +119,20 @@ details.feat + details.feat { margin-top: 0; }
 .feat ul { margin: 0; padding: 2px 16px 16px 90px; display: grid; gap: 6px; font-size: 16px; max-width: 72ch; }
 .feat-tools { display: flex; justify-content: flex-end; margin: -36px 0 -40px; }
 .feat-tools button { font: 500 14px/1 var(--body); color: var(--accent); background: none; border: 0; padding: 4px 0; cursor: pointer; }
+/* Phone guide: the username box that fills in the server address, and the app cards. */
+.field { display: grid; gap: 6px; max-width: 420px; }
+.field label { font-weight: 600; font-size: 15px; }
+.field input { font: 400 16px/1.4 var(--body); padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+.field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.apps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.app { display: grid; gap: 6px; align-content: start; padding: 18px 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.app b { font: 700 18px/1.3 var(--display); }
+.app .price { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.app p { margin: 0; color: var(--muted); font-size: 15px; }
+.app .btn { justify-self: start; margin: 6px 0 0; }
+.platform { display: grid; gap: 12px; }
+.platform h3 { font: 700 19px/1.3 var(--display); margin: 0; }
+@media (max-width: 560px) { .apps { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .part-head h2 { scroll-margin-top: 150px; } .choose { grid-template-columns: minmax(0, 1fr); } body { font-size: 16px; } .feat ul { padding-left: 34px; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
@@ -137,6 +151,8 @@ details.feat + details.feat { margin-top: 0; }
 <section class="part" aria-labelledby="c2"><div class="part-head"><div class="eyebrow">Use Rekordbox or Serato?</div><h2 id="c2">Bring your playlists and cue points</h2></div>
 <p class="lede">Already did the quick start? You don’t install Sub-box twice: each guide lets you skip straight to uploading your library.</p>
 <div class="choose"><a class="card" href="setup/mac-rekordbox.html"><b>Rekordbox on Mac</b><span>Install on a Mac, then upload your Rekordbox playlists with their cue points.</span></a><a class="card" href="setup/windows-rekordbox.html"><b>Rekordbox on Windows</b><span>Install on Windows, then upload your Rekordbox playlists with their cue points.</span></a><a class="card" href="setup/mac-serato.html"><b>Serato on Mac</b><span>Install on a Mac, then upload your Serato crates with their cue points.</span></a><a class="card" href="setup/windows-serato.html"><b>Serato on Windows</b><span>Install on Windows, then upload your Serato crates with their cue points.</span></a></div></section>
+<section class="part" aria-labelledby="c3"><div class="part-head"><div class="eyebrow">Music already uploaded?</div><h2 id="c3">Listen on your phone</h2></div>
+<div class="choose"><a class="card" href="setup/phone.html"><b>iPhone or Android</b><span>Install a free Subsonic app and connect it to your Sub-box library, to stream or download your playlists.</span></a></div></section>
 <footer>Stuck? Ask on the Sub-box <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>.</footer>
 </main>
 </body>
