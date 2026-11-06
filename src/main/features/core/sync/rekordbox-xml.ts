@@ -121,8 +121,44 @@ export function sanitizeName(name: null | string): string {
  * '_' matches the `replace: '^\.': _` rule beets applies to its own output paths, so the
  * staging tree and the library tree agree on what a dot-prefixed name becomes.
  */
-export function sanitizePathSegment(name: null | string): string {
-    return sanitizeName(name).replace(/^\.+/, '_');
+export function sanitizePathSegment(
+    name: null | string,
+    maxBytes: number = MAX_PATH_SEGMENT_BYTES,
+): string {
+    return truncateUtf8(sanitizeName(name).replace(/^\.+/, '_'), maxBytes);
+}
+
+/**
+ * The longest a staging path component may be, in UTF-8 bytes. Linux allows 255
+ * (NAME_MAX) and pymix and filebrowser run on Linux: a ~20-artist credit came to 256
+ * and the server could not create the path at all (laker-93/subbox-app#309). A
+ * 90-character CJK title is 270 bytes. The margin leaves room for a suffix added
+ * later, such as the `-1a2b3c4d` that tells two colliding tracks apart.
+ */
+export const MAX_PATH_SEGMENT_BYTES = 240;
+
+/** A staging file name: the sanitized title, shortened so the name *with* its
+ *  extension fits in {@link MAX_PATH_SEGMENT_BYTES}. */
+export function stagingFileName(title: null | string, ext: string): string {
+    return `${sanitizePathSegment(title, MAX_PATH_SEGMENT_BYTES - Buffer.byteLength(ext, 'utf8'))}${ext}`;
+}
+
+/**
+ * Cut `text` to at most `maxBytes` UTF-8 bytes, on a code point boundary, so no
+ * character is split. Only the staging file name is shortened: the track's own
+ * artist/album/title still go to the server in `originalTrackMetaData`.
+ */
+export function truncateUtf8(text: string, maxBytes: number): string {
+    if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text;
+    let out = '';
+    let bytes = 0;
+    for (const char of text) {
+        const n = Buffer.byteLength(char, 'utf8');
+        if (bytes + n > maxBytes) break;
+        out += char;
+        bytes += n;
+    }
+    return out.trimEnd();
 }
 
 function parseNodes<T, R>(nodes: Node[], callback: (node: T) => R): R[] {

@@ -22,7 +22,7 @@ import {
     PymixAuth,
     withPymixAuth,
 } from '/@/main/features/core/sync/pymix-auth';
-import { sanitizePathSegment } from '/@/main/features/core/sync/rekordbox-xml';
+import { sanitizePathSegment, stagingFileName } from '/@/main/features/core/sync/rekordbox-xml';
 import {
     CRATE_ZIP_FILENAME,
     CratePreview,
@@ -512,7 +512,7 @@ handleKeepingAwake(
             let stagingPath = [
                 sanitizePathSegment(resolvedArtist),
                 sanitizePathSegment(album ?? null) || 'Unknown Album',
-                `${sanitizePathSegment(resolvedTitle)}${ext}`,
+                stagingFileName(resolvedTitle, ext),
             ].join('/');
             // Two distinct files can sanitize to the same staging path (the same
             // track filed twice under different tags is normal in a DJ library).
