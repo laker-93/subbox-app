@@ -24,5 +24,6 @@ export { SyncSettingsButton, SyncSettingsModal } from './sync-settings';
 export { SyncSummary, type SyncSummaryItem } from './sync-summary';
 export { TrackRow } from './track-row';
 export { type LibraryRootStatus, usesTracksInPlace, xmlOnlyMissingCount } from './tracks-in-place';
+export { UntaggedTracks } from './untagged-tracks';
 export { useSelection } from './use-selection';
 export { type SeratoWriteResult, useSeratoCrates } from './use-serato-crates';
