@@ -203,6 +203,14 @@ export const SyncExternalDrive = () => {
 
             setStep('planning');
 
+            // NOPLAYLIST is a client-only virtual entry (tracks not in any
+            // playlist) that pymix can't look up -- sending it as an id made
+            // /sync/plan 500 (#305). pymix has no "tracks in no playlist" set, so
+            // selecting it compares the whole library instead (playlists: null),
+            // which is a superset of those tracks and yields an empty preview,
+            // not an error, for an empty library. Select all lands here too.
+            const compareWholeLibrary = allTracks || selectedPlaylists.has(NOPLAYLIST_ID);
+
             const result = await PymixController.syncPlan({
                 baseUrl: urlConfig.pymix,
                 body: {
@@ -212,7 +220,7 @@ export const SyncExternalDrive = () => {
                         fuzzyMatch: true,
                         includeMetadata: false,
                     },
-                    playlists: allTracks
+                    playlists: compareWholeLibrary
                         ? null
                         : Array.from(selectedPlaylists).map((id) => ({
                               id,
