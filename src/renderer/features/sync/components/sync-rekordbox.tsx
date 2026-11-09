@@ -591,6 +591,9 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
         // 1.2 GB would be the wrong reaction to that (laker-93/subbox-app#48).
         const failedPhase = importProgress?.phase;
         const tracksAreSafe = failedPhase === 'applying_metadata' || failedPhase === 'mapping_ids';
+        // The upload is still on the server (pymix restarted mid-import), so it can
+        // be imported as it stands. Re-uploading would send every file again.
+        const canFinish = tracksAreSafe || Boolean(importProgress?.finishable);
 
         const diagnostics = [
             `Rekordbox import failed${tracksAreSafe ? ' (after tracks were imported)' : ''}`,
@@ -618,11 +621,11 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                 // after `beet import`, e.g. pymix restarted), Finish Import re-runs the
                 // playlists and metadata without sending any audio.
                 actionLabel={
-                    tracksAreSafe
+                    canFinish
                         ? 'Finish Import'
                         : t('common.retry', { defaultValue: 'Retry', postProcess: 'titleCase' })
                 }
-                onAction={tracksAreSafe ? handleFinishImport : handleRetry}
+                onAction={canFinish ? handleFinishImport : handleRetry}
                 secondaryAction={
                     <Stack gap="xs">
                         <CopyButton timeout={2000} value={diagnostics}>
@@ -637,6 +640,11 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                                 </Button>
                             )}
                         </CopyButton>
+                        {canFinish && !tracksAreSafe && (
+                            <Button fullWidth onClick={handleRetry} variant="default">
+                                Upload again
+                            </Button>
+                        )}
                         <Button fullWidth onClick={handleReset} variant="default">
                             {t('common.back', {
                                 defaultValue: 'Back',
@@ -661,7 +669,9 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                 <Text size="sm" ta="center">
                     {tracksAreSafe
                         ? 'Your tracks were uploaded and are in your library, but some of the metadata from the XML (ratings, BPM, cue points) or some playlists could not be applied. There is no need to upload them again. Finish Import applies them again from the XML, without uploading anything.'
-                        : 'The import did not finish, so some or all of your tracks may not be in your library. Check the Tracks page before uploading again.'}
+                        : canFinish
+                          ? 'The import did not finish, but your uploaded files are still on the server. Finish Import brings them into your library without uploading them again.'
+                          : 'The import did not finish, so some or all of your tracks may not be in your library. Check the Tracks page before uploading again.'}
                 </Text>
                 {/* What actually landed. Whatever broke, these numbers are real,
                     and they are the difference between an error screen and one the

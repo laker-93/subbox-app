@@ -608,6 +608,9 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
         // reaction to that.
         const failedPhase = importProgress?.phase;
         const tracksAreSafe = failedPhase === 'applying_metadata' || failedPhase === 'mapping_ids';
+        // The upload is still on the server (pymix restarted mid-import), so it can
+        // be imported as it stands. Re-uploading would send every file again.
+        const canFinish = tracksAreSafe || Boolean(importProgress?.finishable);
 
         const diagnostics = [
             `Serato import failed${tracksAreSafe ? ' (after tracks were imported)' : ''}`,
@@ -633,11 +636,11 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                 // after `beet import`, e.g. pymix restarted), Finish Import re-runs the
                 // playlists and metadata without sending any audio.
                 actionLabel={
-                    tracksAreSafe
+                    canFinish
                         ? 'Finish Import'
                         : t('common.retry', { defaultValue: 'Retry', postProcess: 'titleCase' })
                 }
-                onAction={tracksAreSafe ? handleFinishImport : handleRetry}
+                onAction={canFinish ? handleFinishImport : handleRetry}
                 secondaryAction={
                     <Stack gap="xs">
                         <CopyButton timeout={2000} value={diagnostics}>
@@ -652,6 +655,11 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                                 </Button>
                             )}
                         </CopyButton>
+                        {canFinish && !tracksAreSafe && (
+                            <Button fullWidth onClick={handleRetry} variant="default">
+                                Upload again
+                            </Button>
+                        )}
                         <Button fullWidth onClick={handleReset} variant="default">
                             {t('common.back', {
                                 defaultValue: 'Back',
@@ -666,7 +674,9 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
                 <Text size="sm" ta="center">
                     {tracksAreSafe
                         ? 'Your tracks were uploaded and are in your library, but some playlists or cue points could not be applied. There is no need to upload them again. Finish Import applies them again from your crates, without uploading anything.'
-                        : 'The import did not finish, so some or all of your tracks may not be in your library. Check the Tracks page before uploading again.'}
+                        : canFinish
+                          ? 'The import did not finish, but your uploaded files are still on the server. Finish Import brings them into your library without uploading them again.'
+                          : 'The import did not finish, so some or all of your tracks may not be in your library. Check the Tracks page before uploading again.'}
                 </Text>
                 {(uploadResult || importProgress) && (
                     <Stack align="center" gap={2}>
