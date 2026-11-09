@@ -29,6 +29,10 @@ import {
     useSeratoCrates,
 } from '/@/renderer/features/sync/components/shared';
 import {
+    type DriveMissingSplit,
+    splitDriveMissing,
+} from '/@/renderer/features/sync/components/shared/drive-compare';
+import {
     type LibraryFormat,
     useCurrentServerId,
     useCurrentServerWithCredential,
@@ -58,6 +62,10 @@ const NOPLAYLIST_ID = 'NOPLAYLIST';
  *  Shared with sync-download.tsx so the app has one XML output setting. */
 const XML_DIRECTORY_KEY = 'rekordbox_xml_directory';
 
+type MissingTrack = SyncPlanResponse['tracks']['missing'][number];
+
+type PlanLocalTrack = z.infer<typeof pymixType._parameters.syncPlan>['localTracks'][number];
+
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
 
 export const SyncExternalDrive = () => {
@@ -74,6 +82,8 @@ export const SyncExternalDrive = () => {
     } = useSelection();
     const [allTracks, setAllTracks] = useState(false);
     const [plan, setPlan] = useState<null | SyncPlanResponse>(null);
+    // The plan's missing tracks, split by whether this computer has them (#315).
+    const [split, setSplit] = useState<DriveMissingSplit<MissingTrack> | null>(null);
     const [error, setError] = useState<null | string>(null);
     const [activeTab, setActiveTab] = useState<'conflicts' | 'existing' | 'missing'>('missing');
     const [downloadResult, setDownloadResult] = useState<null | {
@@ -190,16 +200,20 @@ export const SyncExternalDrive = () => {
         setError(null);
 
         try {
-            const driveTracks = (await window.api.ipc.invoke(
-                'sync:scan-external-drive',
-                drivePath,
-            )) as Array<{
-                album?: string;
-                artist: string;
-                fileExtension?: string;
-                fromTag: boolean;
-                title: string;
-            }>;
+            const [driveTracks, localTracks] = await Promise.all([
+                window.api.ipc.invoke('sync:scan-external-drive', drivePath) as Promise<
+                    PlanLocalTrack[]
+                >,
+                // The local library too, so a track missing from the drive that this
+                // computer already has isn't downloaded again (#315). Best effort: on
+                // a failure everything missing from the drive is downloaded, as before.
+                (window.api.ipc.invoke('sync:get-local-tracks') as Promise<PlanLocalTrack[]>).catch(
+                    (err): null => {
+                        console.warn('[sync] could not scan the local library:', err);
+                        return null;
+                    },
+                ),
+            ]);
 
             setStep('planning');
 
@@ -211,25 +225,37 @@ export const SyncExternalDrive = () => {
             // not an error, for an empty library. Select all lands here too.
             const compareWholeLibrary = allTracks || selectedPlaylists.has(NOPLAYLIST_ID);
 
-            const result = await PymixController.syncPlan({
-                baseUrl: urlConfig.pymix,
-                body: {
-                    direction: 'download',
-                    localTracks: driveTracks,
-                    options: {
-                        fuzzyMatch: true,
-                        includeMetadata: false,
+            const planAgainst = (tracks: PlanLocalTrack[]) =>
+                PymixController.syncPlan({
+                    baseUrl: urlConfig.pymix,
+                    body: {
+                        direction: 'download',
+                        localTracks: tracks,
+                        options: {
+                            fuzzyMatch: true,
+                            includeMetadata: false,
+                        },
+                        playlists: compareWholeLibrary
+                            ? null
+                            : Array.from(selectedPlaylists).map((id) => ({
+                                  id,
+                                  source: 'subbox',
+                              })),
                     },
-                    playlists: compareWholeLibrary
-                        ? null
-                        : Array.from(selectedPlaylists).map((id) => ({
-                              id,
-                              source: 'subbox',
-                          })),
-                },
-            });
+                }) as Promise<SyncPlanResponse>;
 
-            setPlan(result as SyncPlanResponse);
+            const [result, localPlan] = await Promise.all([
+                planAgainst(driveTracks),
+                localTracks
+                    ? planAgainst(localTracks).catch((err) => {
+                          console.warn('[sync] could not plan against the local library:', err);
+                          return null;
+                      })
+                    : Promise.resolve(null),
+            ]);
+
+            setPlan(result);
+            setSplit(splitDriveMissing(result.tracks.missing, localPlan?.tracks.missing ?? null));
             setStep('preview');
         } catch (err: any) {
             setError(err?.message || 'Comparison failed');
@@ -240,13 +266,14 @@ export const SyncExternalDrive = () => {
     const handleBack = useCallback(() => {
         setStep('select');
         setPlan(null);
+        setSplit(null);
         setError(null);
         setDownloadResult(null);
         resetSeratoResult();
     }, [resetSeratoResult]);
 
     const handleDownload = useCallback(async () => {
-        if (!plan) return;
+        if (!plan || !split) return;
         setStep('downloading');
         setError(null);
 
@@ -261,7 +288,7 @@ export const SyncExternalDrive = () => {
             // tracks and no XML, and rightly -- the crates are written from tracks
             // already on disk. An empty musicRoot means "wherever the app keeps its
             // music", which the main process is the side that knows.
-            if (format === 'serato' && plan.tracks.missing.length === 0) {
+            if (format === 'serato' && split.toDownload.length === 0) {
                 await writeCrates(playlistIds, '');
                 setDownloadResult({ tracksExported: 0 });
                 setStep('done');
@@ -278,7 +305,9 @@ export const SyncExternalDrive = () => {
                 // Let the main process silently re-login to filebrowser if its
                 // token has expired by the time the download runs.
                 serverId: serverId ?? undefined,
-                tracksToDownload: plan.tracks.missing.map((t) => ({
+                // Only what this computer doesn't have: the rest is already in the
+                // local library for the DJ software to export (#315).
+                tracksToDownload: split.toDownload.map((t) => ({
                     album: t.album,
                     artist: t.artist,
                     fromTag: true,
@@ -321,6 +350,7 @@ export const SyncExternalDrive = () => {
         plan,
         selectedPlaylists,
         server.fbToken,
+        split,
         server.username,
         serverId,
         writeCrates,
@@ -544,9 +574,14 @@ export const SyncExternalDrive = () => {
     }
 
     // ── Preview ───────────────────────────────────────────────────────────
-    if (!plan) return null;
+    if (!plan || !split) return null;
 
     const { summary, tracks } = plan;
+    // pymix's size counts every track missing from the drive; this is what the
+    // download fetches. Zero when pymix sent no sizes, and the label then drops it.
+    const downloadBytes = split.toDownload.reduce((sum, t) => sum + (t.fileSize ?? 0), 0);
+    // The plan's own entries, so one membership test marks each row.
+    const onComputer = new Set<MissingTrack>(split.onComputer);
 
     const tabs = [
         { count: tracks.missing.length, key: 'missing' as const, label: 'Missing from Drive' },
@@ -627,14 +662,20 @@ export const SyncExternalDrive = () => {
                     { color: 'blue', label: `${summary.tracksRequested} tracks requested` },
                     { color: 'green', label: `${summary.tracksAlreadyPresent} already on drive` },
                     { color: 'orange', label: `${summary.tracksMissing} missing from drive` },
-                    ...(summary.downloadSizeBytes > 0
+                    ...(split.onComputer.length > 0
                         ? [
                               {
-                                  color: 'cyan',
-                                  label: `${formatBytes(summary.downloadSizeBytes)} missing`,
+                                  color: 'teal',
+                                  label: `${split.onComputer.length} already on this computer`,
                               },
                           ]
                         : []),
+                    {
+                        color: 'cyan',
+                        label: `${split.toDownload.length} to download${
+                            downloadBytes > 0 ? ` (${formatBytes(downloadBytes)})` : ''
+                        }`,
+                    },
                 ]}
             />
 
@@ -667,6 +708,11 @@ export const SyncExternalDrive = () => {
                                     artist={track.artist}
                                     detail={
                                         <Group gap="xs">
+                                            {onComputer.has(track) && (
+                                                <Badge color="teal" size="sm" variant="light">
+                                                    on this computer
+                                                </Badge>
+                                            )}
                                             {track.duration != null && (
                                                 <Text c="dimmed" size="xs">
                                                     {formatDuration(track.duration)}

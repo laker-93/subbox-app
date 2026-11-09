@@ -2295,44 +2295,50 @@ handleKeepingAwake(
             username,
         });
 
-        // Step 1: Call sync/tracks to prepare the zip on the server
-        const syncResponse = await withPymixAuth<{
-            nTracksExported: number;
-            reason: string;
-            success: boolean;
-            zipPath: string;
-        }>(pymixAuth, (cookie) =>
-            axios.post(
-                `${pymixUrl}/sync/tracks`,
-                { tracksToDownload },
-                { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
-            ),
-        );
-
-        if (!syncResponse.data.success) {
-            throw new Error(`Sync failed: ${syncResponse.data.reason}`);
-        }
-
-        const { nTracksExported, zipPath } = syncResponse.data;
-        const zipFileName = `${path.basename(zipPath)}.zip`;
-
-        // Step 2: Download the zip from filebrowser
+        // Nothing to fetch when every track missing from the drive is already on
+        // this computer (#315): the XML below is still written, from the tracks here.
         const appPath = getAppPath();
-        if (!fs.existsSync(appPath)) {
-            fs.mkdirSync(appPath, { recursive: true });
-        }
-        const localZipPath = path.join(appPath, zipFileName);
-        await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
+        let nTracksExported = 0;
+        if (tracksToDownload.length > 0) {
+            // Step 1: Call sync/tracks to prepare the zip on the server
+            const syncResponse = await withPymixAuth<{
+                nTracksExported: number;
+                reason: string;
+                success: boolean;
+                zipPath: string;
+            }>(pymixAuth, (cookie) =>
+                axios.post(
+                    `${pymixUrl}/sync/tracks`,
+                    { tracksToDownload },
+                    { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
+                ),
+            );
 
-        // Step 3: Unzip and merge into app directory.
-        // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
-        await unzipAndMerge(localZipPath, appPath);
+            if (!syncResponse.data.success) {
+                throw new Error(`Sync failed: ${syncResponse.data.reason}`);
+            }
 
-        // Clean up the zip
-        try {
-            fs.unlinkSync(localZipPath);
-        } catch {
-            // ignore cleanup errors
+            nTracksExported = syncResponse.data.nTracksExported;
+            const { zipPath } = syncResponse.data;
+            const zipFileName = `${path.basename(zipPath)}.zip`;
+
+            // Step 2: Download the zip from filebrowser
+            if (!fs.existsSync(appPath)) {
+                fs.mkdirSync(appPath, { recursive: true });
+            }
+            const localZipPath = path.join(appPath, zipFileName);
+            await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
+
+            // Step 3: Unzip and merge into app directory.
+            // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
+            await unzipAndMerge(localZipPath, appPath);
+
+            // Clean up the zip
+            try {
+                fs.unlinkSync(localZipPath);
+            } catch {
+                // ignore cleanup errors
+            }
         }
 
         // Step 4: Optionally export and download a Rekordbox XML for the compared
