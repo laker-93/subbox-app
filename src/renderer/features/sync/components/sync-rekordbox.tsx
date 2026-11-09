@@ -7,6 +7,7 @@ import { DjModeImportOffer } from '/@/renderer/features/dj/components/dj-mode-of
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import {
     IMPORT_PHASE_LABELS,
+    ImportStalled,
     JobOutcome,
     LibraryRootSetting,
     SelectableList,
@@ -435,6 +436,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         <Text c="dimmed" size="xs" ta="center">
                             This may take a while for large libraries.
                         </Text>
+                        <ImportStalled movedAt={run?.importMovedAt ?? null} />
                     </>
                 }
                 phaseLabel={title}
@@ -610,21 +612,38 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
 
         return (
             <SyncResult
-                actionLabel={t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
-                onAction={handleReset}
+                // When the import may not have brought the tracks in (pymix restarted
+                // part way, laker-93/subbox-app#296), uploading again is the way on: it
+                // sends only what the library and the server don't already have.
+                actionLabel={
+                    tracksAreSafe
+                        ? t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })
+                        : t('common.retry', { defaultValue: 'Retry', postProcess: 'titleCase' })
+                }
+                onAction={tracksAreSafe ? handleReset : handleRetry}
                 secondaryAction={
-                    <CopyButton timeout={2000} value={diagnostics}>
-                        {({ copied, copy }) => (
-                            <Button
-                                fullWidth
-                                leftSection={<Icon icon={copied ? 'check' : 'clipboardCopy'} />}
-                                onClick={copy}
-                                variant="subtle"
-                            >
-                                {copied ? 'Copied' : 'Copy details'}
+                    <Stack gap="xs">
+                        <CopyButton timeout={2000} value={diagnostics}>
+                            {({ copied, copy }) => (
+                                <Button
+                                    fullWidth
+                                    leftSection={<Icon icon={copied ? 'check' : 'clipboardCopy'} />}
+                                    onClick={copy}
+                                    variant="subtle"
+                                >
+                                    {copied ? 'Copied' : 'Copy details'}
+                                </Button>
+                            )}
+                        </CopyButton>
+                        {!tracksAreSafe && (
+                            <Button fullWidth onClick={handleReset} variant="default">
+                                {t('common.back', {
+                                    defaultValue: 'Back',
+                                    postProcess: 'titleCase',
+                                })}
                             </Button>
                         )}
-                    </CopyButton>
+                    </Stack>
                 }
                 status="warn"
                 title={

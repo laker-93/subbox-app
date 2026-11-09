@@ -1,6 +1,7 @@
 export { DestinationPath } from './destination-path';
 export { formatBytes, formatDuration } from './format';
 export { FormatSelect } from './format-select';
+export { IMPORT_STALL_MS, ImportStalled } from './import-stalled';
 export {
     describeJobWork,
     IMPORT_PHASE_LABELS,
