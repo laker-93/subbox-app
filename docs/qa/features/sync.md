@@ -9,8 +9,10 @@ Verified 2026-07-09 against subbox-app `claude/continuous-ux` (rebased onto
 ## UI path
 
 Library/Sync segmented control (top of main content area, always rendered) →
-"Sync" → tab bar: "Upload (Rekordbox)" (default tab), "Download", "Watch",
-"External Drive". This doc covers **Download**.
+"Sync" → tab bar: "Upload (Rekordbox)" (default tab), "Download", "Watch".
+This doc covers **Download**. The External Drive tab was folded into Download
+(#314): an optional "Choose Drive" on the playlist screen adds a "Not on Drive"
+tab to the preview, each row marked "on this computer" or "downloading".
 
 Download tab: playlist checklist (`Select all` / `Select none` /
 per-playlist checkbox rows showing name + track count) → "Preview Download"

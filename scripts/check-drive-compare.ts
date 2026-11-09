@@ -5,8 +5,8 @@ import {
     splitDriveMissing,
 } from '../src/renderer/features/sync/components/shared/drive-compare';
 
-// External Drive downloads only tracks missing from both the drive and this
-// computer (#315). These check the split that decides it.
+// Download's drive check splits the tracks a drive is missing into those on
+// this computer and those to download first (#315, #314). These check the split.
 //
 // Usage: pnpm run check:drive-compare
 
@@ -35,13 +35,14 @@ const c = { artist: 'Other', title: 'Three' };
     assert.deepEqual(split.toDownload, [a, b]);
 }
 
-// A song in two selected playlists is listed twice by the plan: shown twice,
-// fetched once.
+// A song in two selected playlists is listed twice by the plan: one file, so
+// listed once, on either side of the split.
 {
-    const split = splitDriveMissing([a, { ...a }, b], [a, a]);
+    const split = splitDriveMissing([a, { ...a }, b, { ...b }], [a, a]);
     assert.equal(split.toDownload.length, 1);
     assert.equal(plannedTrackKey(split.toDownload[0]), plannedTrackKey(a));
-    assert.deepEqual(split.onComputer, [b]);
+    assert.equal(split.onComputer.length, 1);
+    assert.ok(split.onComputer[0] === b);
 }
 
 // The album is part of the key, and a missing album is the same as an empty one.

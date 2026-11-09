@@ -1,6 +1,6 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
 import isElectron from 'is-electron';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 
 import { PymixController } from '/@/renderer/api/pymix/pymix-controller';
@@ -33,6 +33,10 @@ import {
     usesTracksInPlace,
     xmlOnlyMissingCount,
 } from '/@/renderer/features/sync/components/shared';
+import {
+    type DriveMissingSplit,
+    splitDriveMissing,
+} from '/@/renderer/features/sync/components/shared/drive-compare';
 import {
     type LibraryFormat,
     useCurrentServerId,
@@ -112,6 +116,20 @@ const musicRootFromExtractPath = (extractPath: string): string => {
     return `${trimmed.replace(/[/\\]+$/, '')}${separator}${ZIP_MUSIC_DIR}`;
 };
 
+/**
+ * The selected playlists against a drive the user asked to check (#314): a USB
+ * they load in the DJ software, say. Only ever read. Nothing is written to it.
+ */
+interface DriveCheck {
+    // Tracks found on the drive, by the plan's own count.
+    onDrive: number;
+    path: string;
+    // The tracks missing from the drive, split by whether this computer has them.
+    split: DriveMissingSplit<MissingTrack>;
+}
+
+type MissingTrack = SyncPlanResponse['tracks']['missing'][number];
+
 type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'select';
 
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
@@ -183,7 +201,16 @@ export const SyncDownload = () => {
     const [error, setError] = useState<null | string>(null);
     // No 'conflicts' tab: pymix initialises tracks.conflicts as an empty list and
     // never appends to it, so it could only ever render "No conflicts found."
-    const [activeTab, setActiveTab] = useState<'existing' | 'metadata' | 'missing'>('missing');
+    const [activeTab, setActiveTab] = useState<'drive' | 'existing' | 'metadata' | 'missing'>(
+        'missing',
+    );
+    // A drive to compare the playlists with as well (#314), chosen per visit: it is
+    // whichever USB is plugged in today, not a setting. Desktop only.
+    const [drivePath, setDrivePath] = useState<null | string>(null);
+    const [driveCheck, setDriveCheck] = useState<DriveCheck | null>(null);
+    // The drive's tracks, kept for the replans a format change or "Download anyway"
+    // triggers, so they don't walk the whole drive again. Dropped on Back.
+    const driveScan = useRef<null | { path: string; tracks: LocalTrack[] }>(null);
     const [downloadResult, setDownloadResult] = useState<null | {
         musicPath?: string;
         tracksExported: number;
@@ -218,9 +245,8 @@ export const SyncDownload = () => {
     // both in one pass is a real capability and nothing here should lose it. A
     // checkbox for the exception, a radio for the decision.
     const [alsoWriteSeratoCrates, setAlsoWriteSeratoCrates] = useState(false);
-    // The folder, the picker, the write and its result -- shared with External Drive,
-    // which ends the same way this does. The folder itself is one persisted setting,
-    // so the user browses for their _Serato_ library once rather than once per flow.
+    // The folder, the picker, the write and its result. The folder itself is one
+    // persisted setting, so the user browses for their _Serato_ library once.
     const {
         reset: resetSeratoResult,
         result: seratoResult,
@@ -337,6 +363,22 @@ export const SyncDownload = () => {
         [server.username, serverId],
     );
 
+    const handleSelectDrive = useCallback(async () => {
+        if (!ipc) return;
+        const selected = (await ipc.invoke('sync:select-external-drive')) as null | string;
+        if (selected) setDrivePath(selected);
+    }, []);
+
+    const scanDrive = useCallback(async (dir: string): Promise<LocalTrack[]> => {
+        if (driveScan.current?.path === dir) return driveScan.current.tracks;
+        const tracks = (await window.api.ipc.invoke(
+            'sync:scan-external-drive',
+            dir,
+        )) as LocalTrack[];
+        driveScan.current = { path: dir, tracks };
+        return tracks;
+    }, []);
+
     const playlistQuery = useSuspenseQuery(
         playlistsQueries.list({
             query: {
@@ -365,30 +407,65 @@ export const SyncDownload = () => {
         setStep('planning');
         setError(null);
 
-        try {
-            const inPlace = useTracksInPlace
-                ? await getInPlaceTracks(Array.from(selectedPlaylists), ignoreLibraryRoot)
-                : { libraryRoot: null, moved: [], tracks: [] };
-            const inPlaceTracks = inPlace.tracks;
-            const localTracks = [...(await getLocalTracks()), ...inPlaceTracks];
-
-            const result = await PymixController.syncPlan({
+        const planAgainst = (localTracks: LocalTrack[], includeMetadata: boolean) =>
+            PymixController.syncPlan({
                 baseUrl: urlConfig.pymix,
                 body: {
                     direction: 'download',
                     localTracks,
                     options: {
                         fuzzyMatch: true,
-                        includeMetadata: true,
+                        includeMetadata,
                     },
                     playlists: Array.from(selectedPlaylists).map((id) => ({
                         id,
                         source: 'subbox',
                     })),
                 },
-            });
+            }) as Promise<SyncPlanResponse>;
 
-            setPlan(result as SyncPlanResponse);
+        try {
+            // The drive is planned on its own, alongside: the same playlists against
+            // what is on it rather than what is here (#314). It changes nothing about
+            // what is downloaded. That is still only what this computer lacks.
+            // Settled here, not left to reject before the await below reaches it.
+            const drivePlan =
+                drivePath && isElectron()
+                    ? scanDrive(drivePath)
+                          .then((tracks) => planAgainst(tracks, false))
+                          .then(
+                              (onDrive) => ({ onDrive }),
+                              (err: any) => ({ err }),
+                          )
+                    : null;
+
+            const inPlace = useTracksInPlace
+                ? await getInPlaceTracks(Array.from(selectedPlaylists), ignoreLibraryRoot)
+                : { libraryRoot: null, moved: [], tracks: [] };
+            const inPlaceTracks = inPlace.tracks;
+            const localTracks = [...(await getLocalTracks()), ...inPlaceTracks];
+
+            const [result, driveResult] = await Promise.all([
+                planAgainst(localTracks, true),
+                drivePlan,
+            ]);
+            if (driveResult && 'err' in driveResult) {
+                throw new Error(
+                    `Couldn't check the drive: ${driveResult.err?.message || driveResult.err}`,
+                );
+            }
+            const onDrive = driveResult?.onDrive;
+
+            setPlan(result);
+            setDriveCheck(
+                drivePath && onDrive
+                    ? {
+                          onDrive: onDrive.tracks.existing.length,
+                          path: drivePath,
+                          split: splitDriveMissing(onDrive.tracks.missing, result.tracks.missing),
+                      }
+                    : null,
+            );
             setPlannedInPlace({
                 count: inPlaceTracks.length,
                 ignoreRoot: ignoreLibraryRoot,
@@ -401,7 +478,15 @@ export const SyncDownload = () => {
             setError(err?.message || 'Failed to get sync plan');
             setStep('select');
         }
-    }, [getInPlaceTracks, getLocalTracks, ignoreLibraryRoot, selectedPlaylists, useTracksInPlace]);
+    }, [
+        drivePath,
+        getInPlaceTracks,
+        getLocalTracks,
+        ignoreLibraryRoot,
+        scanDrive,
+        selectedPlaylists,
+        useTracksInPlace,
+    ]);
 
     // The format is chosen on the preview, after the plan, and "Download anyway" is
     // too. A change to either changes which tracks are missing, so plan again.
@@ -452,6 +537,10 @@ export const SyncDownload = () => {
     const handleBack = useCallback(() => {
         setStep('select');
         setPlan(null);
+        setDriveCheck(null);
+        // A new preview reads the drive again: the user may have just exported to it.
+        driveScan.current = null;
+        setActiveTab('missing');
         setPlannedInPlace(null);
         setIgnoreLibraryRoot(false);
         setError(null);
@@ -683,6 +772,30 @@ export const SyncDownload = () => {
                     selected={selectedPlaylists}
                 />
 
+                {/* Optional, and per visit: compare with a USB or external drive too,
+                    to see what it is missing (#314). Read only. Whatever is
+                    missing from this computer is still what gets downloaded. */}
+                {isElectron() && (
+                    <DestinationPath
+                        emptyLabel="No drive. Optional: choose your USB to see which of these tracks it's missing."
+                        extra={
+                            drivePath ? (
+                                <Button
+                                    onClick={() => setDrivePath(null)}
+                                    size="xs"
+                                    variant="subtle"
+                                >
+                                    Clear
+                                </Button>
+                            ) : undefined
+                        }
+                        label="Drive"
+                        onChoose={handleSelectDrive}
+                        path={drivePath}
+                        tooltip="Pick the folder on your USB or external drive that your DJ software exports to. The preview then shows which of these tracks aren't on it yet. Nothing is written to the drive."
+                    />
+                )}
+
                 <Button
                     disabled={selectedPlaylists.size === 0}
                     fullWidth
@@ -805,6 +918,13 @@ export const SyncDownload = () => {
 
     const { metadata, summary, tracks } = plan;
 
+    // Every track the drive is missing, in the drive plan's order, each marked by
+    // whether this computer has it (#314).
+    const driveOnComputer = new Set<MissingTrack>(driveCheck?.split.onComputer ?? []);
+    const driveNotOnDrive: MissingTrack[] = driveCheck
+        ? [...driveCheck.split.onComputer, ...driveCheck.split.toDownload]
+        : [];
+
     // The web build can't read the user's disk, so it asks /sync/plan for a plan with
     // an empty localTracks list. pymix then has nothing to match server tracks
     // against, which fixes the whole classification: `existing` is always empty,
@@ -848,6 +968,10 @@ export const SyncDownload = () => {
     const tabs = [
         { count: tracks.missing.length, key: 'missing' as const, label: 'Missing' },
         { count: tracks.existing.length, key: 'existing' as const, label: 'Already Present' },
+        // The drive's own list: what to export to it, and where each track stands here.
+        ...(driveCheck
+            ? [{ count: driveNotOnDrive.length, key: 'drive' as const, label: 'Not on Drive' }]
+            : []),
         { count: metadata.updates.length, key: 'metadata' as const, label: 'Metadata Updates' },
     ];
 
@@ -939,6 +1063,13 @@ export const SyncDownload = () => {
                 </>
             }
             onBack={handleBack}
+            subtitle={
+                driveCheck ? (
+                    <Text c="dimmed" size="xs" style={{ wordBreak: 'break-all' }}>
+                        Drive: {driveCheck.path}
+                    </Text>
+                ) : undefined
+            }
             title="Download Preview"
         >
             {/* The only control left on the screen. Format is the one question a DJ
@@ -1083,6 +1214,15 @@ export const SyncDownload = () => {
                         color: 'cyan',
                         label: `${formatBytes(summary.downloadSizeBytes)} download`,
                     },
+                    ...(driveCheck
+                        ? [
+                              { color: 'grape', label: `${driveCheck.onDrive} on drive` },
+                              {
+                                  color: 'grape',
+                                  label: `${driveNotOnDrive.length} not on drive`,
+                              },
+                          ]
+                        : []),
                 ]}
             />
 
@@ -1134,6 +1274,47 @@ export const SyncDownload = () => {
                                     title={track.title}
                                 />
                             ))
+                        )}
+                    </Stack>
+                )}
+
+                {!isWeb && activeTab === 'drive' && driveCheck && (
+                    <Stack data-testid="drive-check" gap="xs">
+                        {driveNotOnDrive.length === 0 ? (
+                            <Text c="dimmed" size="sm">
+                                Every track in these playlists is already on the drive.
+                            </Text>
+                        ) : (
+                            <>
+                                <Text c="dimmed" size="xs">
+                                    Export these to the drive from your DJ software.{' '}
+                                    {driveCheck.split.toDownload.length > 0 &&
+                                        (includeTracks
+                                            ? 'The ones not on this computer are downloaded first.'
+                                            : "The ones not on this computer aren't downloaded: XML only is set under the cog.")}
+                                </Text>
+                                {driveNotOnDrive.map((track, i) => (
+                                    <TrackRow
+                                        album={track.album}
+                                        artist={track.artist}
+                                        detail={
+                                            driveOnComputer.has(track) ? (
+                                                <Badge color="teal" size="sm" variant="light">
+                                                    on this computer
+                                                </Badge>
+                                            ) : (
+                                                <Badge color="orange" size="sm" variant="light">
+                                                    {includeTracks
+                                                        ? 'downloading'
+                                                        : 'not on this computer'}
+                                                </Badge>
+                                            )
+                                        }
+                                        key={`${track.artist}-${track.title}-${i}`}
+                                        title={track.title}
+                                    />
+                                ))}
+                            </>
                         )}
                     </Stack>
                 )}

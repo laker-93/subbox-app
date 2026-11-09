@@ -50,9 +50,10 @@ export type SeratoWriteResult = {
 };
 
 /**
- * Writing playlists into the user's Serato library, for the two screens that do it.
+ * Writing playlists into the user's Serato library, for Download.
  *
- * Both Download and External Drive end the same way: tracks land on disk, then the
+ * Shared since there were two screens that did it (External Drive, folded into
+ * Download in #314). A download ends this way: tracks land on disk, then the
  * crates are written against the paths the download actually produced. That
  * ordering is the whole reason the crate writing lives on the client: a crate
  * stores paths, and pymix could only ever guess at them.

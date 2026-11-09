@@ -30,12 +30,6 @@ interface SelectableListProps {
      */
     options?: ReactNode;
     /**
-     * A control above the list has claimed the whole set: External Drive's "All
-     * server tracks". Every row reads as ticked and stops responding, because the
-     * per-row selection no longer decides anything.
-     */
-    overriddenAll?: boolean;
-    /**
      * `area` uses the app's overlay scrollbar, `native` the plain one. Both exist
      * in Sync today and this preserves each screen's own; there is no behavioural
      * reason to prefer one, so it is not worth a visible change to unify them here.
@@ -78,7 +72,6 @@ export const SelectableList = ({
     onSelectNone,
     onToggle,
     options,
-    overriddenAll = false,
     scroll = 'native',
     selected,
     toolbar,
@@ -89,15 +82,14 @@ export const SelectableList = ({
                 <Group
                     gap="md"
                     key={item.id}
-                    onClick={() => !overriddenAll && onToggle(item.id)}
+                    onClick={() => onToggle(item.id)}
                     style={{
                         borderRadius: 'var(--theme-radius-sm)',
-                        cursor: overriddenAll ? 'default' : 'pointer',
-                        opacity: overriddenAll ? 0.4 : 1,
+                        cursor: 'pointer',
                         padding: 'var(--theme-spacing-xs) var(--theme-spacing-sm)',
                     }}
                 >
-                    <Checkbox checked={overriddenAll || selected.has(item.id)} readOnly size="sm" />
+                    <Checkbox checked={selected.has(item.id)} readOnly size="sm" />
                     <Text fw={500} size="sm" style={{ flex: 1 }}>
                         {item.prefix && (
                             <Text c="dimmed" component="span" size="xs">

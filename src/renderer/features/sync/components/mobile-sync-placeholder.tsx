@@ -7,7 +7,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Stack } from '/@/shared/components/stack/stack';
 import { Text } from '/@/shared/components/text/text';
 
-// Sync (Upload/Download/Watch/External Drive) relies on a file picker and
+// Sync (Upload/Download/Watch) relies on a file picker and
 // wide multi-pane layouts that don't fit a phone-sized viewport. Rather than
 // silently hiding the feature (see subbox-app#80), tell the user why it's
 // unavailable here and give them a one-tap way back to Library.

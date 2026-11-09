@@ -7,7 +7,6 @@ import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite
 import { SyncDesktopOnly } from '/@/renderer/features/sync/components/shared';
 import { SyncDownload } from '/@/renderer/features/sync/components/sync-download';
 import { SyncDropzone } from '/@/renderer/features/sync/components/sync-dropzone';
-import { SyncExternalDrive } from '/@/renderer/features/sync/components/sync-external-drive';
 import { SyncUpload } from '/@/renderer/features/sync/components/sync-upload';
 import { SyncWatch } from '/@/renderer/features/sync/components/sync-watch';
 import { useUploadRunActive } from '/@/renderer/features/sync/store/upload-run-store';
@@ -18,7 +17,7 @@ import { Icon } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { Stack } from '/@/shared/components/stack/stack';
 
-type SyncTab = 'download' | 'external-drive' | 'upload' | 'watch';
+type SyncTab = 'download' | 'upload' | 'watch';
 
 export const SyncModePlaceholder = () => {
     const electron = isElectron();
@@ -91,21 +90,6 @@ export const SyncModePlaceholder = () => {
                     {/* There is no folder to watch on web; there the tab is only the dropzone. */}
                     {electron ? 'Watch' : 'Add Files'}
                 </Button>
-                {electron && (
-                    <Button
-                        onClick={() => setTab('external-drive')}
-                        size="sm"
-                        tooltip={{
-                            label: 'Compare a folder on a USB or external drive against your library and copy across any missing tracks. Handy for loading a DJ USB.',
-                            multiline: true,
-                            openDelay: 300,
-                            w: 280,
-                        }}
-                        variant={tab === 'external-drive' ? 'filled' : 'subtle'}
-                    >
-                        External Drive
-                    </Button>
-                )}
             </Group>
             <DjModeSyncHint />
             <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -153,17 +137,6 @@ export const SyncModePlaceholder = () => {
                             </Stack>
                         </div>
                     ))}
-                {tab === 'external-drive' && (
-                    <Suspense
-                        fallback={
-                            <Center style={{ height: '100%' }}>
-                                <Spinner />
-                            </Center>
-                        }
-                    >
-                        <SyncExternalDrive />
-                    </Suspense>
-                )}
             </div>
         </div>
     );
