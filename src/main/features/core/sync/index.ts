@@ -2140,20 +2140,51 @@ ipcMain.handle('sync:stop-watch', async (): Promise<void> => {
     inFlightUploadIds.clear();
 });
 
-// ── External drive comparison ───────────────────────────────────────────────
+// ── Checking a drive (Download, #314) ───────────────────────────────────────
+
+/** A track found on a drive, as a /sync/plan local track. */
+interface DriveTrack {
+    album?: string;
+    artist: string;
+    fromTag: boolean;
+    subboxId?: string;
+    title: string;
+}
+
+const driveSubboxIdCacheStore = new Store<{ entries: Record<string, SubboxIdCacheEntry> }>({
+    cwd: subboxIdCacheStorePath,
+    defaults: { entries: {} },
+    name: 'drive-subbox-id-cache',
+});
 
 /**
  * Recursively scan any directory for audio tracks, reading ID3/metadata tags
  * first and falling back to path-derived values when tags are unavailable.
  */
-async function scanDirectoryTracks(
-    rootDir: string,
-): Promise<Array<{ album?: string; artist: string; fromTag: boolean; title: string }>> {
-    const audioFiles = getAudioFiles(rootDir);
+async function scanDirectoryTracks(rootDir: string): Promise<DriveTrack[]> {
+    // macOS writes an AppleDouble `._name.mp3` beside every file it copies to a
+    // FAT or exFAT drive. It has an audio extension and no audio.
+    const audioFiles = getAudioFiles(rootDir).filter((f) => !path.basename(f).startsWith('._'));
 
-    const readTrack = async (
-        filePath: string,
-    ): Promise<{ album?: string; artist: string; fromTag: boolean; title: string }> => {
+    // SUBBOX_ID first, so pymix matches a tagged file exactly rather than by name
+    // (#314). In its own cache: scanLocalTracks prunes every entry outside the music
+    // folder from the shared one, which would make every drive scan a cold one.
+    const idCache = driveSubboxIdCacheStore.get('entries');
+    let idCacheChanged = false;
+    const seen = new Set<string>();
+    const subboxIdOf = (filePath: string): string | undefined => {
+        seen.add(filePath);
+        try {
+            const result = resolveSubboxId(filePath, fs.statSync(filePath), idCache);
+            if (result.changed) idCacheChanged = true;
+            return result.subboxId ?? undefined;
+        } catch {
+            return undefined;
+        }
+    };
+
+    const readTrack = async (filePath: string): Promise<DriveTrack> => {
+        const subboxId = subboxIdOf(filePath);
         const nameWithoutExt = path.basename(filePath, path.extname(filePath));
 
         // Derive path-based values (always needed as fallback)
@@ -2175,6 +2206,7 @@ async function scanDirectoryTracks(
                 album: pathAlbum,
                 artist: fromFilename.artist,
                 fromTag: false,
+                subboxId,
                 title: fromFilename.title,
             };
         }
@@ -2201,14 +2233,14 @@ async function scanDirectoryTracks(
             album: fromTag ? tagAlbum : pathAlbum,
             artist: fromTag ? tagArtist! : pathArtist || 'Unknown',
             fromTag,
+            subboxId,
             title: fromTag ? tagTitle! : nameWithoutExt,
         };
     };
 
     // Process files concurrently, capped to avoid overwhelming the filesystem
     const CONCURRENCY = 20;
-    const results: Array<{ album?: string; artist: string; fromTag: boolean; title: string }> =
-        new Array(audioFiles.length);
+    const results: DriveTrack[] = new Array(audioFiles.length);
     const queue = audioFiles.map((f, i) => ({ filePath: f, index: i }));
 
     await Promise.all(
@@ -2219,6 +2251,17 @@ async function scanDirectoryTracks(
             }
         }),
     );
+
+    // Forget files under this folder that are gone, so re-checking one USB after
+    // another doesn't grow the cache forever. Other drives' entries stay.
+    const under = path.resolve(rootDir) + path.sep;
+    for (const cachedPath of Object.keys(idCache)) {
+        if (cachedPath.startsWith(under) && !seen.has(cachedPath)) {
+            delete idCache[cachedPath];
+            idCacheChanged = true;
+        }
+    }
+    if (idCacheChanged) driveSubboxIdCacheStore.set('entries', idCache);
 
     return results;
 }
@@ -2235,143 +2278,7 @@ ipcMain.handle('sync:select-external-drive', async (): Promise<null | string> =>
 
 ipcMain.handle(
     'sync:scan-external-drive',
-    async (
-        _event,
-        dirPath: string,
-    ): Promise<
-        Array<{
-            album?: string;
-            artist: string;
-            fileExtension?: string;
-            fromTag: boolean;
-            title: string;
-        }>
-    > => {
+    async (_event, dirPath: string): Promise<DriveTrack[]> => {
         return scanDirectoryTracks(dirPath);
-    },
-);
-
-handleKeepingAwake(
-    'sync:download-missing-tracks',
-    async (
-        event,
-        args: {
-            filebrowserToken: string;
-            filebrowserUrl: string;
-            includeRekordboxXml?: boolean;
-            playlistIds?: string[];
-            pymixUrl: string;
-            rekordboxXmlDir?: string;
-            serverId?: string;
-            tracksToDownload: Array<{
-                album?: string;
-                artist: string;
-                fileExtension?: string;
-                fromTag: boolean;
-                title: string;
-            }>;
-            username?: string;
-        },
-    ): Promise<{ musicPath: string; tracksExported: number; xmlPath?: string }> => {
-        const {
-            filebrowserToken,
-            filebrowserUrl,
-            includeRekordboxXml,
-            playlistIds,
-            pymixUrl,
-            rekordboxXmlDir,
-            serverId,
-            tracksToDownload,
-            username,
-        } = args;
-        const pymixAuth = createPymixAuth({ pymixUrl, serverId, username });
-
-        // Filebrowser auth that self-heals on a 401 by re-logging in (see download-playlists).
-        const fbAuth = createFbAuth({
-            event,
-            filebrowserUrl,
-            initialToken: filebrowserToken,
-            serverId,
-            username,
-        });
-
-        // Nothing to fetch when every track missing from the drive is already on
-        // this computer (#315): the XML below is still written, from the tracks here.
-        const appPath = getAppPath();
-        let nTracksExported = 0;
-        if (tracksToDownload.length > 0) {
-            // Step 1: Call sync/tracks to prepare the zip on the server
-            const syncResponse = await withPymixAuth<{
-                nTracksExported: number;
-                reason: string;
-                success: boolean;
-                zipPath: string;
-            }>(pymixAuth, (cookie) =>
-                axios.post(
-                    `${pymixUrl}/sync/tracks`,
-                    { tracksToDownload },
-                    { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
-                ),
-            );
-
-            if (!syncResponse.data.success) {
-                throw new Error(`Sync failed: ${syncResponse.data.reason}`);
-            }
-
-            nTracksExported = syncResponse.data.nTracksExported;
-            const { zipPath } = syncResponse.data;
-            const zipFileName = `${path.basename(zipPath)}.zip`;
-
-            // Step 2: Download the zip from filebrowser
-            if (!fs.existsSync(appPath)) {
-                fs.mkdirSync(appPath, { recursive: true });
-            }
-            const localZipPath = path.join(appPath, zipFileName);
-            await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, zipFileName, localZipPath);
-
-            // Step 3: Unzip and merge into app directory.
-            // unzipAndMerge primes the SUBBOX_ID cache for the files it writes.
-            await unzipAndMerge(localZipPath, appPath);
-
-            // Clean up the zip
-            try {
-                fs.unlinkSync(localZipPath);
-            } catch {
-                // ignore cleanup errors
-            }
-        }
-
-        // Step 4: Optionally export and download a Rekordbox XML for the compared
-        // playlists (mirrors sync:download-playlists) so the user can import the
-        // exact tracks into Rekordbox instead of hunting through the app's music
-        // folder — Rekordbox matches XML entries to its collection by file path,
-        // so tracks it already has aren't duplicated.
-        let xmlPath: string | undefined;
-        if (includeRekordboxXml) {
-            const musicPath = getMusicPath();
-            // Scanned after the unzip, so it covers what just landed too: pymix points
-            // the XML at each track where it is, not at the name it would give it now
-            // (laker-93/pymix#261). An older pymix ignores it.
-            const localTracks = await scanLocalTracks();
-
-            await withPymixAuth(pymixAuth, (cookie) =>
-                axios.post(
-                    `${pymixUrl}/rekordbox/export`,
-                    { localTracks, playlistIds: playlistIds ?? [], user_root: musicPath },
-                    { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
-                ),
-            );
-
-            const xmlDir =
-                rekordboxXmlDir && rekordboxXmlDir.length > 0 ? rekordboxXmlDir : appPath;
-            if (!fs.existsSync(xmlDir)) {
-                fs.mkdirSync(xmlDir, { recursive: true });
-            }
-            const xmlDestPath = path.join(xmlDir, XML_FILENAME);
-            await downloadFileFromFilebrowser(filebrowserUrl, fbAuth, XML_FILENAME, xmlDestPath);
-            xmlPath = xmlDestPath;
-        }
-
-        return { musicPath: getMusicPath(), tracksExported: nTracksExported, xmlPath };
     },
 );

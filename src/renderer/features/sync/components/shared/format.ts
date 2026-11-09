@@ -1,9 +1,8 @@
 /**
  * Byte and duration formatting for the Sync screens.
  *
- * Written out twice before this, identically, in sync-download.tsx and
- * sync-external-drive.tsx. And they have to agree: the same plan's size is
- * quoted on both screens.
+ * Written out twice before this, identically, in sync-download.tsx and the
+ * External Drive screen, which Download has since absorbed (#314).
  */
 
 const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
