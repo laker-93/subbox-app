@@ -7,6 +7,7 @@ import { DjModeImportOffer } from '/@/renderer/features/dj/components/dj-mode-of
 import { InviteLockedPanel } from '/@/renderer/features/invite/components/invite-locked-panel';
 import {
     IMPORT_PHASE_LABELS,
+    ImportStalled,
     JobOutcome,
     LibraryRootSetting,
     SelectableList,
@@ -435,6 +436,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         <Text c="dimmed" size="xs" ta="center">
                             This may take a while for large libraries.
                         </Text>
+                        <ImportStalled movedAt={run?.importMovedAt ?? null} />
                     </>
                 }
                 phaseLabel={title}
@@ -589,6 +591,9 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
         // 1.2 GB would be the wrong reaction to that (laker-93/subbox-app#48).
         const failedPhase = importProgress?.phase;
         const tracksAreSafe = failedPhase === 'applying_metadata' || failedPhase === 'mapping_ids';
+        // The upload is still on the server (pymix restarted mid-import), so it can
+        // be imported as it stands. Re-uploading would send every file again.
+        const canFinish = tracksAreSafe || Boolean(importProgress?.finishable);
 
         const diagnostics = [
             `Rekordbox import failed${tracksAreSafe ? ' (after tracks were imported)' : ''}`,
@@ -610,21 +615,43 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
 
         return (
             <SyncResult
-                actionLabel={t('common.back', { defaultValue: 'Back', postProcess: 'titleCase' })}
-                onAction={handleReset}
+                // Each failure leads with its way on (laker-93/subbox-app#296). When the
+                // tracks may not be in, upload again: it sends only what the library and
+                // the server don't already have. When they are (the job died in a pass
+                // after `beet import`, e.g. pymix restarted), Finish Import re-runs the
+                // playlists and metadata without sending any audio.
+                actionLabel={
+                    canFinish
+                        ? 'Finish Import'
+                        : t('common.retry', { defaultValue: 'Retry', postProcess: 'titleCase' })
+                }
+                onAction={canFinish ? handleFinishImport : handleRetry}
                 secondaryAction={
-                    <CopyButton timeout={2000} value={diagnostics}>
-                        {({ copied, copy }) => (
-                            <Button
-                                fullWidth
-                                leftSection={<Icon icon={copied ? 'check' : 'clipboardCopy'} />}
-                                onClick={copy}
-                                variant="subtle"
-                            >
-                                {copied ? 'Copied' : 'Copy details'}
+                    <Stack gap="xs">
+                        <CopyButton timeout={2000} value={diagnostics}>
+                            {({ copied, copy }) => (
+                                <Button
+                                    fullWidth
+                                    leftSection={<Icon icon={copied ? 'check' : 'clipboardCopy'} />}
+                                    onClick={copy}
+                                    variant="subtle"
+                                >
+                                    {copied ? 'Copied' : 'Copy details'}
+                                </Button>
+                            )}
+                        </CopyButton>
+                        {canFinish && !tracksAreSafe && (
+                            <Button fullWidth onClick={handleRetry} variant="default">
+                                Upload again
                             </Button>
                         )}
-                    </CopyButton>
+                        <Button fullWidth onClick={handleReset} variant="default">
+                            {t('common.back', {
+                                defaultValue: 'Back',
+                                postProcess: 'titleCase',
+                            })}
+                        </Button>
+                    </Stack>
                 }
                 status="warn"
                 title={
@@ -641,8 +668,10 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
             >
                 <Text size="sm" ta="center">
                     {tracksAreSafe
-                        ? 'Your tracks were uploaded and are in your library, but some of the metadata from the XML (ratings, BPM, cue points) or some playlists could not be applied. There is no need to upload them again.'
-                        : 'The import did not finish, so some or all of your tracks may not be in your library. Check the Tracks page before uploading again.'}
+                        ? 'Your tracks were uploaded and are in your library, but some of the metadata from the XML (ratings, BPM, cue points) or some playlists could not be applied. There is no need to upload them again. Finish Import applies them again from the XML, without uploading anything.'
+                        : canFinish
+                          ? 'The import did not finish, but your uploaded files are still on the server. Finish Import brings them into your library without uploading them again.'
+                          : 'The import did not finish, so some or all of your tracks may not be in your library. Check the Tracks page before uploading again.'}
                 </Text>
                 {/* What actually landed. Whatever broke, these numbers are real,
                     and they are the difference between an error screen and one the

@@ -80,6 +80,10 @@ const jobPhase = z.object({
 });
 
 const beetsImportProgress = z.object({
+    // A failed import whose upload attempt is still on the server, so it can be
+    // finished without uploading again (pymix#327: pymix restarted mid-import).
+    // Absent from an older pymix.
+    finishable: z.boolean().optional(),
     in_progress: z.boolean(),
     n_tracks_processed: z.number(),
     n_tracks_to_process: z.number(),

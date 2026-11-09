@@ -16,6 +16,12 @@ export type ImportPhase = 'applying_metadata' | 'complete' | 'importing_audio' |
  * server-side improvement had to be re-landed on every screen to be seen.
  */
 export interface ImportProgress {
+    /**
+     * A failed import whose upload attempt is still on the server: Finish Import
+     * brings it in without uploading again (laker-93/pymix#327, after pymix
+     * restarted mid-import). Absent from an older server, which means Retry.
+     */
+    finishable?: boolean;
     in_progress: boolean;
     n_tracks_processed: number;
     n_tracks_to_process: number;

@@ -131,6 +131,9 @@ interface TrackProblem {
 
 interface UploadRunBase {
     error: null | string;
+    /** When the import's phase or counts last changed (ms since epoch), so the
+     *  screen can say when it has stopped moving (laker-93/subbox-app#296). */
+    importMovedAt: null | number;
     importProgress: ImportProgress | null;
     jobId: null | string;
     /** The server this run belongs to, so a run is never shown to another account. */
@@ -161,6 +164,12 @@ const IMPORT_POLL_MS = 3000;
 // so polling backs off and only gives up after this long of nothing but failures.
 const IMPORT_POLL_GIVE_UP_MS = 10 * 60 * 1000;
 const IMPORT_POLL_MAX_BACKOFF_MS = 30 * 1000;
+
+/** What has to change for an import to count as moving: the pass it's in, and its counts. */
+const importPosition = (prog: ImportProgress): string =>
+    [prog.phase, prog.phase_n_processed, prog.n_tracks_processed, prog.percentage_complete].join(
+        '|',
+    );
 
 export const isUploadRunActive = (run: null | UploadRun): boolean =>
     run?.step === 'uploading' || run?.step === 'importing';
@@ -206,6 +215,7 @@ const beginRun = (run: UploadRun): null | number => {
 
 const baseRun = (serverId: string): UploadRunBase => ({
     error: null,
+    importMovedAt: null,
     importProgress: null,
     jobId: null,
     serverId,
@@ -297,8 +307,9 @@ const runImport = async (
     // Poll even when nothing was uploaded: pymix runs the playlist and metadata
     // passes for a metadata-only or playlists-only import too, and the job is the
     // only thing that can say it finished (laker-93/subbox-app#55).
-    update(token, { importProgress: null, jobId, step: 'importing' });
+    update(token, { importMovedAt: Date.now(), importProgress: null, jobId, step: 'importing' });
 
+    let lastPosition: null | string = null;
     let failingSince: null | number = null;
     let failedPolls = 0;
     for (;;) {
@@ -326,7 +337,13 @@ const runImport = async (
         failingSince = null;
         failedPolls = 0;
         if (useUploadRunStore.getState().runToken !== token) return;
-        update(token, { importProgress: prog });
+        const position = importPosition(prog);
+        if (position !== lastPosition) {
+            lastPosition = position;
+            update(token, { importMovedAt: Date.now(), importProgress: prog });
+        } else {
+            update(token, { importProgress: prog });
+        }
 
         if (!prog.in_progress) {
             // The import made playlists (and tree nodes), even if it failed part way.
