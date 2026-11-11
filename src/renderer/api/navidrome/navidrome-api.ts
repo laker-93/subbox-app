@@ -6,6 +6,7 @@ import qs from 'qs';
 
 import i18n from '/@/i18n/i18n';
 import { authenticationFailure } from '/@/renderer/api/utils';
+import { urlConfig } from '/@/renderer/config/url-config';
 import { useAuthStore } from '/@/renderer/store';
 import { credentialStore } from '/@/renderer/utils/credential-store';
 import { getServerUrl } from '/@/renderer/utils/normalize-server-url';
@@ -263,11 +264,49 @@ type ReauthResult =
 
 let ndReauthPromise: null | Promise<ReauthResult> = null;
 
+const statusOf = (error: unknown) => (isAxiosError(error) ? error.response?.status : undefined);
+
+// Install a fresh Navidrome login: the JWT for the native API and a new Subsonic
+// salt/token pair.
+const applyLogin = (
+    server: ServerListItemWithCredential,
+    login: { subsonicSalt: string; subsonicToken: string; token: string },
+): ReauthResult => {
+    useAuthStore.getState().actions.updateServer(server.id, {
+        credential: `u=${server.username}&s=${login.subsonicSalt}&t=${login.subsonicToken}`,
+        ndCredential: login.token,
+    });
+    return { credential: login.token, kind: 'ok' };
+};
+
+// With no saved password, ask pymix to log in on our behalf (subbox-app#319). The
+// web player keeps the password only for the life of the tab (credentialStore), so
+// a new tab opened after the 24h JWT lapsed used to log the user out here. The pymix
+// session cookie outlasts the tab, and pymix holds the account password.
+const reissueFromPymix = async (server: ServerListItemWithCredential): Promise<ReauthResult> => {
+    try {
+        // Plain axios: neither this interceptor nor pymix's own (which logs the user
+        // out on a 401) should see this call.
+        const res = await axios.post(`${urlConfig.pymix}/user/navidrome_token`, null, {
+            withCredentials: true,
+        });
+        return applyLogin(server, res.data);
+    } catch (error) {
+        const status = statusOf(error);
+        // 401: the pymix session is gone as well. 403: Navidrome refused the login,
+        // or the user has none. 404: a pymix older than the route. Each of these
+        // needs a real login, which is what happened before the route existed.
+        if (status === 401 || status === 403 || status === 404) return { kind: 'invalid' };
+        console.error('Navidrome token reissue via pymix failed: ', error);
+        return { kind: 'transient' };
+    }
+};
+
 const reauthenticateNavidrome = (server: ServerListItemWithCredential): Promise<ReauthResult> => {
     if (!ndReauthPromise) {
         ndReauthPromise = (async (): Promise<ReauthResult> => {
             const password = await credentialStore.get(server.id);
-            if (!password) return { kind: 'invalid' };
+            if (!password) return reissueFromPymix(server);
 
             try {
                 // Plain axios, not axiosClient, so the login can't recurse through
@@ -277,15 +316,9 @@ const reauthenticateNavidrome = (server: ServerListItemWithCredential): Promise<
                     username: server.username,
                 });
 
-                const credential = res.data.token as string;
-                useAuthStore.getState().actions.updateServer(server.id, {
-                    credential: `u=${server.username}&s=${res.data.subsonicSalt}&t=${res.data.subsonicToken}`,
-                    ndCredential: credential,
-                });
-
-                return { credential, kind: 'ok' };
+                return applyLogin(server, res.data);
             } catch (loginError) {
-                const status = isAxiosError(loginError) ? loginError.response?.status : undefined;
+                const status = statusOf(loginError);
                 if (status === 401 || status === 403) return { kind: 'invalid' };
 
                 console.error('Navidrome reauthentication failed: ', loginError);
