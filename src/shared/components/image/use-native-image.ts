@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { fetchImage } from './fetch-image';
+
 import { ImageRequest } from '/@/shared/types/domain-types';
 
 type FetchPriority = 'auto' | 'high' | 'low';
@@ -100,7 +102,8 @@ export function useNativeImage({
                     init.priority = fetchPriority;
                 }
 
-                const response = await fetch(request.url, init);
+                // Retries a 429/503 with backoff; see fetch-image.ts (#321).
+                const response = await fetchImage(request.url, init);
 
                 if (!response.ok) {
                     throw new Error(`Failed to load image: ${response.status}`);
