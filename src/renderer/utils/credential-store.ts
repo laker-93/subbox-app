@@ -5,8 +5,9 @@ import isElectron from 'is-electron';
 // Desktop (Electron): the OS-encrypted store via safeStorage (window.api.localSettings).
 // Web: sessionStorage — there is no encrypted store in the browser, so the password
 //   is kept in plaintext for the lifetime of the tab only (cleared when it closes).
-//   Switch WEB_STORAGE to localStorage if reauth needs to survive a full restart, at
-//   the cost of persisting the plaintext password to disk.
+//   A new tab therefore has no password. Navidrome reauth then asks pymix for a fresh
+//   login over the session cookie (navidrome-api.ts, subbox-app#319), so the password
+//   never has to be persisted to disk.
 const localSettings = isElectron() ? window.api.localSettings : null;
 const WEB_STORAGE: Storage | undefined =
     typeof sessionStorage !== 'undefined' ? sessionStorage : undefined;
