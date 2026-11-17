@@ -1,8 +1,11 @@
+import type { ClientRequest } from 'http';
+
 import * as fs from 'fs';
 import * as tus from 'tus-js-client';
 
 import { TUS_RETRY_DELAYS_MS } from '/@/main/features/core/sync/network-retry';
 import { FbAuth, fbRequest } from '/@/main/features/core/sync/pymix-auth';
+import { uploadLog, UploadRun } from '/@/main/features/core/sync/upload-telemetry';
 
 // ── TUS upload to filebrowser ───────────────────────────────────────────────
 //
@@ -33,6 +36,68 @@ const MAX_OFFSET_CONFLICT_RETRIES = 1;
  */
 const MAX_RETRIES = 10;
 
+/**
+ * How long a request may move no bytes, either way, before it is aborted and
+ * retried. tus-js-client sets no timeout of its own, so a connection that dies
+ * without a reset (a wifi or NAT drop mid-chunk is the usual case) left its PATCH
+ * waiting on the OS. On 2026-11-16 that froze all three uploads of a beta user's
+ * 18 GB Serato upload for 11 minutes, and then froze them for good, 4 GB in.
+ * Aborted, the request fails like any dropped connection: tus
+ * retries it, resuming from the offset the server has, and a real outage pauses
+ * the queue. 60s is Traefik's own read timeout, so nothing slower would ever have
+ * succeeded anyway, and at CHUNK_SIZE a working link never goes that long idle.
+ */
+export const STALL_TIMEOUT_MS = 60_000;
+
+/**
+ * tus's Node HTTP stack with an idle timeout on every request. A socket idle for
+ * `STALL_TIMEOUT_MS` (no bytes written or read) is destroyed with an `ETIMEDOUT`
+ * error, which tus and `isNetworkError` both treat as a network failure.
+ */
+class StallTimeoutHttpStack implements tus.HttpStack {
+    private readonly inner = new tus.DefaultHttpStack({ rejectUnauthorized: false });
+
+    constructor(private readonly onStall: () => void) {}
+
+    createRequest(method: string, url: string): tus.HttpRequest {
+        const req = this.inner.createRequest(method, url);
+        const send = req.send.bind(req);
+        req.send = (body: unknown) => {
+            const sent = send(body);
+            // The Node stack creates its ClientRequest synchronously inside send().
+            const raw = req.getUnderlyingObject() as ClientRequest | null;
+            raw?.setTimeout(STALL_TIMEOUT_MS, () => {
+                this.onStall();
+                raw.destroy(
+                    Object.assign(
+                        new Error(`no data moved for ${STALL_TIMEOUT_MS / 1000}s on ${method}`),
+                        { code: 'ETIMEDOUT' },
+                    ),
+                );
+            });
+            return sent;
+        };
+        return req;
+    }
+
+    getName(): string {
+        return 'StallTimeoutHttpStack';
+    }
+}
+
+/** One line for a tus error: status if there was a response, else the cause. */
+const describeTusError = (err: unknown): string => {
+    if (err instanceof tus.DetailedError) {
+        const status = err.originalResponse?.getStatus();
+        const method = err.originalRequest?.getMethod();
+        if (status) return `${method ?? 'request'} answered ${status}`;
+        const cause = err.causingError as (Error & { code?: string }) | null;
+        if (cause)
+            return `${method ?? 'request'} failed: ${cause.code ?? ''} ${cause.message}`.trim();
+    }
+    return err instanceof Error ? err.message : String(err);
+};
+
 const statusOf = (err: unknown): null | number =>
     err instanceof tus.DetailedError ? (err.originalResponse?.getStatus() ?? null) : null;
 
@@ -56,6 +121,8 @@ const RESTART_STATUSES = new Set([404, 409, 410]);
  */
 const tusOptions = (
     fbAuth: FbAuth,
+    trackName: string,
+    run?: UploadRun,
 ): Pick<tus.UploadOptions, 'onAfterResponse' | 'onBeforeRequest' | 'onShouldRetry'> => {
     let refreshed = false;
     let conflicts = 0;
@@ -71,11 +138,21 @@ const tusOptions = (
             req.setHeader('X-Auth', fbAuth.getToken());
         },
         onShouldRetry: (err, retryAttempt, options) => {
-            if (++retries > MAX_RETRIES) return false;
-            const status = statusOf(err);
-            if (status === 401) return refreshed;
-            if (status === 409) return ++conflicts <= MAX_OFFSET_CONFLICT_RETRIES;
-            return tus.defaultOptions.onShouldRetry?.(err, retryAttempt, options) ?? false;
+            const retry = (() => {
+                if (++retries > MAX_RETRIES) return false;
+                const status = statusOf(err);
+                if (status === 401) return refreshed;
+                if (status === 409) return ++conflicts <= MAX_OFFSET_CONFLICT_RETRIES;
+                return tus.defaultOptions.onShouldRetry?.(err, retryAttempt, options) ?? false;
+            })();
+            // Each retry is logged with its cause: what's missing from a run that
+            // went wrong is usually *why* the chunk failed, not that it did.
+            if (retry) {
+                const reason = `${describeTusError(err)} (retry ${retries}/${MAX_RETRIES})`;
+                if (run) run.retried(trackName, reason);
+                else uploadLog.warn(`retrying "${trackName}": ${reason}`);
+            }
+            return retry;
         },
     };
 };
@@ -94,10 +171,13 @@ export async function uploadFileViaTus(args: {
     filebrowserUrl: string;
     filePath: string;
     onProgress: (bytesUploaded: number, bytesTotal: number) => void;
+    /** The run this file belongs to, told about its retries, stalls and restarts. */
+    run?: UploadRun;
     stagingPath: string;
     trackName: string;
 }): Promise<void> {
-    const { fbAuth, filebrowserUrl, filePath, onProgress, stagingPath, trackName } = args;
+    const { fbAuth, filebrowserUrl, filePath, onProgress, run, stagingPath, trackName } = args;
+    const startedAt = Date.now();
     // Fail fast and cleanly on a file this process can't read (permission denied, a
     // cloud-sync placeholder, a lock held by another app). `statSync` above would
     // succeed even on a chmod-000 file (it only needs directory traverse permission,
@@ -118,6 +198,9 @@ export async function uploadFileViaTus(args: {
             data: null,
             headers: { 'upload-length': fileSize },
             method: 'post',
+            // axios has no timeout by default either: the same silent drop would
+            // hang the create as it did a PATCH.
+            timeout: STALL_TIMEOUT_MS,
             url: resourcePath,
         });
         if (createResp.status !== 201) {
@@ -150,12 +233,18 @@ export async function uploadFileViaTus(args: {
             // just this one track (found live via a chmod'd-unreadable fixture file).
             fileStream.on('error', reject);
             const uploader = new tus.Upload(fileStream as unknown as Buffer, {
-                ...tusOptions(fbAuth),
+                ...tusOptions(fbAuth, trackName, run),
                 chunkSize: CHUNK_SIZE,
-                // Pass a custom HTTP stack so TUS respects self-signed certs in dev
-                httpStack: new tus.DefaultHttpStack({ rejectUnauthorized: false }),
+                // Accepts dev's self-signed certs, and aborts a request that stalls.
+                httpStack: new StallTimeoutHttpStack(() => {
+                    if (run) run.stalled(trackName, STALL_TIMEOUT_MS / 1000);
+                    else uploadLog.warn(`"${trackName}": no data moved, aborting the request`);
+                }),
                 onError: reject,
-                onProgress,
+                onProgress: (bytesUploaded, bytesTotal) => {
+                    run?.fileProgress(trackName, bytesUploaded);
+                    onProgress(bytesUploaded, bytesTotal);
+                },
                 onSuccess: () => resolve(),
                 // Ride out a dropped connection mid-file (subbox-app#203).
                 retryDelays: TUS_RETRY_DELAYS_MS,
@@ -167,14 +256,23 @@ export async function uploadFileViaTus(args: {
     };
 
     try {
-        await attempt();
+        try {
+            await attempt();
+        } catch (err) {
+            const status = statusOf(err);
+            if (status === null || !RESTART_STATUSES.has(status)) throw err;
+            if (run) run.restarted(trackName, status);
+            else uploadLog.warn(`"${trackName}" can't be resumed (${status}), restarting from 0`);
+            await attempt();
+        }
     } catch (err) {
-        const status = statusOf(err);
-        if (status === null || !RESTART_STATUSES.has(status)) throw err;
-        console.warn(
-            `TUS upload for "${trackName}" can't be resumed (${status}), restarting from 0:`,
-            (err as Error).message,
-        );
-        await attempt();
+        // Rethrown with the cause in the message: the caller records only the
+        // message, and tus's own reads "failed to upload chunk at offset N".
+        const reason = describeTusError(err);
+        if (err instanceof Error && !err.message.includes(reason)) {
+            err.message = `${err.message} [${reason}]`;
+        }
+        throw err;
     }
+    run?.fileSent(trackName, fileSize, Date.now() - startedAt);
 }

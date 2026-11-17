@@ -56,6 +56,7 @@ import {
 } from '/@/main/features/core/sync/rekordbox-xml';
 import { getOrCreateSubboxId, readSubboxId } from '/@/main/features/core/sync/subbox-id-tags';
 import { uploadFileViaTus } from '/@/main/features/core/sync/tus-upload';
+import { UploadRun } from '/@/main/features/core/sync/upload-telemetry';
 
 /** What pymix calls the Rekordbox XML it writes, in the zip and on its own. */
 const XML_FILENAME = 'subbox_rb_export.xml';
@@ -637,6 +638,19 @@ handleKeepingAwake(
                 uploaded: 0,
             });
 
+            const run = new UploadRun({ flow: 'rekordbox', pymixAuth, pymixUrl });
+            run.start({
+                bytesTotal: tracksToUpload.reduce((sum, { track }) => {
+                    try {
+                        return sum + fs.statSync(track.location).size;
+                    } catch {
+                        return sum; // gone since the scan; its upload will say so
+                    }
+                }, 0),
+                filesSkipped: uploadableTracks.length - tracksToUpload.length,
+                filesTotal: tracksToUpload.length,
+            });
+
             // Upload concurrently, capped at 3 simultaneous uploads
             const CONCURRENCY = 3;
             let completedCount = 0;
@@ -666,6 +680,7 @@ handleKeepingAwake(
                         activeUploads.set(trackName, `${trackName} (${pct}%)`);
                         emitUploadingProgress();
                     },
+                    run,
                     stagingPath,
                     trackName,
                 });
@@ -680,27 +695,38 @@ handleKeepingAwake(
             // sink the whole batch: it's recorded with its reason and counted as
             // skipped, instead of aborting every other in-flight and queued track. A
             // dropped connection pauses the queue instead of failing it (#203).
-            const { connectionLost, unsent } = await runUploadQueue({
-                concurrency: CONCURRENCY,
-                items: tracksToUpload,
-                onFailed: (item, reason) => {
-                    activeUploads.delete(item.trackName);
-                    completedCount++;
-                    skippedCount++;
-                    failedTracks.push({
-                        reason,
-                        stagingPath: item.stagingPath,
-                        trackName: item.trackName,
-                    });
-                    console.warn(`Upload failed for "${item.trackName}", skipping: ${reason}`);
-                    emitUploadingProgress();
-                },
-                probeUrl: filebrowserUrl,
-                uploadOne: uploadTrack,
-            });
-            if (connectionLost) {
-                throw connectionLostError(uploadedCount, unsent.length);
+            let queueResult: Awaited<ReturnType<typeof runUploadQueue>>;
+            try {
+                queueResult = await runUploadQueue({
+                    concurrency: CONCURRENCY,
+                    items: tracksToUpload,
+                    onFailed: (item, reason) => {
+                        activeUploads.delete(item.trackName);
+                        completedCount++;
+                        skippedCount++;
+                        failedTracks.push({
+                            reason,
+                            stagingPath: item.stagingPath,
+                            trackName: item.trackName,
+                        });
+                        run.fileFailed(item.trackName, reason);
+                        emitUploadingProgress();
+                    },
+                    onPause: (paused) => (paused ? run.paused() : run.resumed()),
+                    probeUrl: filebrowserUrl,
+                    uploadOne: uploadTrack,
+                });
+            } catch (err) {
+                run.finish('failed', err);
+                throw err;
             }
+            const { connectionLost, unsent } = queueResult;
+            if (connectionLost) {
+                const err = connectionLostError(uploadedCount, unsent.length);
+                run.finish('connection_lost', err);
+                throw err;
+            }
+            run.finish('completed');
         }
 
         // Step 4: Map metadata. Tracks whose upload failed above never landed on the
