@@ -53,6 +53,7 @@ import {
     withTaggedFile,
 } from '/@/main/features/core/sync/serato-identity';
 import { uploadFileViaTus } from '/@/main/features/core/sync/tus-upload';
+import { UploadRun } from '/@/main/features/core/sync/upload-telemetry';
 import { writeFlatZip } from '/@/main/features/core/sync/write-zip';
 
 // ── Serato import ───────────────────────────────────────────────────────────
@@ -595,6 +596,12 @@ handleKeepingAwake(
             }
 
             // Step 6: upload, at the same bounded concurrency as the Rekordbox flow.
+            const run = new UploadRun({ flow: 'serato', pymixAuth, pymixUrl });
+            run.start({
+                bytesTotal: totalUploadBytes,
+                filesSkipped: uploads.length - toSend.length,
+                filesTotal: toSend.length,
+            });
             const activeUploads = new Map<string, string>();
             let completed = 0;
             const emitProgress = (currentTrack = '') => {
@@ -623,6 +630,7 @@ handleKeepingAwake(
                                 activeUploads.set(item.trackName, `${item.trackName} (${pct}%)`);
                                 emitProgress();
                             },
+                            run,
                             stagingPath: item.stagingPath,
                             trackName: item.trackName,
                         }),
@@ -638,24 +646,35 @@ handleKeepingAwake(
             // One track's failure must not sink the batch — the user has dozens of
             // other tracks in flight behind it. A dropped connection pauses the queue
             // instead of failing it (subbox-app#203).
-            const { connectionLost, unsent } = await runUploadQueue({
-                concurrency: UPLOAD_CONCURRENCY,
-                items: toSend,
-                onFailed: (item, reason) => {
-                    activeUploads.delete(item.trackName);
-                    completed++;
-                    result.skipped++;
-                    failedStagingPaths.add(item.stagingPath);
-                    result.failed.push({ reason, trackName: item.trackName });
-                    console.warn(`[serato] upload failed for "${item.trackName}": ${reason}`);
-                    emitProgress();
-                },
-                probeUrl: filebrowserUrl,
-                uploadOne,
-            });
-            if (connectionLost) {
-                throw connectionLostError(result.uploaded, unsent.length);
+            let queueResult: Awaited<ReturnType<typeof runUploadQueue>>;
+            try {
+                queueResult = await runUploadQueue({
+                    concurrency: UPLOAD_CONCURRENCY,
+                    items: toSend,
+                    onFailed: (item, reason) => {
+                        activeUploads.delete(item.trackName);
+                        completed++;
+                        result.skipped++;
+                        failedStagingPaths.add(item.stagingPath);
+                        result.failed.push({ reason, trackName: item.trackName });
+                        run.fileFailed(item.trackName, reason);
+                        emitProgress();
+                    },
+                    onPause: (paused) => (paused ? run.paused() : run.resumed()),
+                    probeUrl: filebrowserUrl,
+                    uploadOne,
+                });
+            } catch (err) {
+                run.finish('failed', err);
+                throw err;
             }
+            const { connectionLost, unsent } = queueResult;
+            if (connectionLost) {
+                const err = connectionLostError(result.uploaded, unsent.length);
+                run.finish('connection_lost', err);
+                throw err;
+            }
+            run.finish('completed');
 
             // Step 7: map the staged files to their identities. The server re-reads the
             // SUBBOX_ID in the bytes sent rather than minting a new one, so this records

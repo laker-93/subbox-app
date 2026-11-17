@@ -173,10 +173,12 @@ export async function runUploadQueue<T>(args: {
     concurrency: number;
     items: T[];
     onFailed: (item: T, reason: string) => void;
+    /** Told when the queue pauses for the server and when it comes back. */
+    onPause?: (paused: boolean) => void;
     probeUrl: string;
     uploadOne: (item: T) => Promise<void>;
 }): Promise<{ connectionLost: boolean; unsent: T[] }> {
-    const { concurrency, items, onFailed, probeUrl, uploadOne } = args;
+    const { concurrency, items, onFailed, onPause, probeUrl, uploadOne } = args;
     const MAX_NETWORK_REQUEUES = 3;
     const queue = [...items];
     const requeues = new Map<T, number>();
@@ -187,8 +189,10 @@ export async function runUploadQueue<T>(args: {
     const waitForConnection = () => {
         if (!waiting) {
             console.warn(`[network] server unreachable, pausing the upload queue`);
+            onPause?.(true);
             waiting = waitForServer(probeUrl).finally(() => {
                 waiting = null;
+                onPause?.(false);
             });
         }
         return waiting;
