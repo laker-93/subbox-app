@@ -15,9 +15,10 @@ import { httpsAgent, PymixAuth, withPymixAuth } from '/@/main/features/core/sync
 //
 // Two outputs, both best-effort, neither allowed to fail an upload:
 //
-//   * `uploadLog` writes to electron-log's file (main.log), so a user can send it.
-//     Per-file lines are `verbose`, which the file leaves out. The file rotates at
-//     1 MB, and an hours-long run would push its own start out of it.
+//   * `uploadLog` writes to electron-log's file, so a user can send it (macOS:
+//     ~/Library/Logs/Subbox/main.log). The file keeps the `verbose` per-file lines
+//     too, ~150 bytes each, so a run of a few thousand files fits in the 1 MB the
+//     file holds before it rotates to main.old.log.
 //   * `UploadRun` reports to pymix (POST /sync/upload_report): once at the start,
 //     every minute while it runs, and once at the end. A run whose reports stop
 //     without a `finished` is a client that died, quit or lost its network. That
