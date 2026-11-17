@@ -26,5 +26,6 @@ export { SyncSummary, type SyncSummaryItem } from './sync-summary';
 export { TrackRow } from './track-row';
 export { type LibraryRootStatus, usesTracksInPlace, xmlOnlyMissingCount } from './tracks-in-place';
 export { UntaggedTracks } from './untagged-tracks';
+export { UploadKeepOpen } from './upload-keep-open';
 export { useSelection } from './use-selection';
 export { type SeratoWriteResult, useSeratoCrates } from './use-serato-crates';
