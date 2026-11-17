@@ -22,6 +22,7 @@ import {
     SyncStorageExceeded,
     SyncSummary,
     UntaggedTracks,
+    UploadKeepOpen,
     useSelection,
 } from '/@/renderer/features/sync/components/shared';
 import {
@@ -433,6 +434,7 @@ export const SyncSerato = ({ formatControl }: SyncSeratoProps) => {
             <SyncProgress
                 activeTracks={progress?.activeTracks}
                 currentTrack={progress?.currentTrack}
+                detail={<UploadKeepOpen />}
                 phaseLabel={phaseLabel}
             />
         );

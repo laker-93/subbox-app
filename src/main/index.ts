@@ -29,6 +29,7 @@ import packageJson from '../../package.json';
 import { disableMediaKeys, enableMediaKeys } from './features/core/player/media-keys';
 import { shutdownServer } from './features/core/remote';
 import { store } from './features/core/settings';
+import { mayExitDuringUpload } from './features/core/sync/upload-quit-guard';
 import MenuBuilder from './menu';
 import {
     autoUpdaterLogInterface,
@@ -549,6 +550,7 @@ async function createWindow(first = true): Promise<void> {
     });
 
     ipcMain.on('window-quit', () => {
+        if (!mayExitDuringUpload(mainWindow, 'quit')) return;
         shutdownServer();
         mainWindow?.close();
         app.exit();
@@ -607,6 +609,7 @@ async function createWindow(first = true): Promise<void> {
     );
 
     ipcMain.on('app-restart', () => {
+        if (!mayExitDuringUpload(mainWindow, 'quit')) return;
         // Fix for .AppImage
         if (process.env.APPIMAGE) {
             app.exit();
@@ -671,6 +674,14 @@ async function createWindow(first = true): Promise<void> {
     });
 
     mainWindow.on('close', (event) => {
+        // Hiding to the tray keeps the upload going; anything else ends it. A quit
+        // already asked in before-quit.
+        const hidesToTray = !exitFromTray && Boolean(store.get('window_exit_to_tray'));
+        if (!forceQuit && !hidesToTray && !mayExitDuringUpload(mainWindow, 'close')) {
+            event.preventDefault();
+            return;
+        }
+
         store.set('bounds', mainWindow?.getNormalBounds());
         store.set('maximized', mainWindow?.isMaximized());
         store.set('fullscreen', mainWindow?.isFullScreen());
@@ -694,12 +705,6 @@ async function createWindow(first = true): Promise<void> {
 
     if (isWindows()) {
         app.setAppUserModelId('org.jeffvli.subbox');
-    }
-
-    if (isMacOS()) {
-        app.on('before-quit', () => {
-            forceQuit = true;
-        });
     }
 
     const menuBuilder = new MenuBuilder(mainWindow);
@@ -873,6 +878,17 @@ ipcMain.handle('power-save-blocker-stop', () => {
 
 ipcMain.handle('power-save-blocker-is-started', () => {
     return powerSaveBlockerId !== null && powerSaveBlocker.isStarted(powerSaveBlockerId);
+});
+
+// Registered once, here, rather than in createWindow, which macOS runs again each
+// time the dock reopens a closed window.
+app.on('before-quit', (event) => {
+    if (!mayExitDuringUpload(mainWindow, 'quit')) {
+        event.preventDefault();
+        exitFromTray = false;
+        return;
+    }
+    if (isMacOS()) forceQuit = true;
 });
 
 app.on('window-all-closed', () => {

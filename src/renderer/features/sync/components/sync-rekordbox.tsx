@@ -21,6 +21,7 @@ import {
     SyncStorageExceeded,
     SyncSummary,
     UntaggedTracks,
+    UploadKeepOpen,
     useSelection,
 } from '/@/renderer/features/sync/components/shared';
 import {
@@ -401,6 +402,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
             <SyncProgress
                 activeTracks={progress?.activeTracks}
                 currentTrack={progress?.currentTrack}
+                detail={<UploadKeepOpen />}
                 phaseLabel={phaseLabel}
             />
         );

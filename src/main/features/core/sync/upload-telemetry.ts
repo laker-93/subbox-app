@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import { app, powerMonitor } from 'electron';
 import log from 'electron-log/main';
 
 import { httpsAgent, PymixAuth, withPymixAuth } from '/@/main/features/core/sync/pymix-auth';
@@ -48,6 +48,7 @@ const activeRuns = new Set<UploadRun>();
  */
 export class UploadRun {
     readonly runId = randomUUID();
+    private abandoned = false;
     private bytesDone = 0;
     private readonly bytesInFlight = new Map<string, number>();
     private bytesTotal = 0;
@@ -64,6 +65,9 @@ export class UploadRun {
     private reportFailures = 0;
     private restarts = 0;
     private retries = 0;
+    private sleeps = 0;
+    private sleptAt: null | number = null;
+    private sleptMs = 0;
     private stalls = 0;
     private readonly startedAt = Date.now();
 
@@ -87,7 +91,8 @@ export class UploadRun {
 
     /** Called on quit: the last thing the log says about a run the app abandoned. */
     abandon(): void {
-        if (this.finished) return;
+        if (this.finished || this.abandoned) return;
+        this.abandoned = true;
         uploadLog.warn(
             `[${this.tag}] app quitting with the upload still running — ${this.summary()}`,
         );
@@ -124,6 +129,10 @@ export class UploadRun {
             this.pausedMs += Date.now() - this.pausedAt;
             this.pausedAt = null;
         }
+        if (this.sleptAt !== null) {
+            this.sleptMs += Date.now() - this.sleptAt;
+            this.sleptAt = null;
+        }
         if (this.heartbeat) clearInterval(this.heartbeat);
         activeRuns.delete(this);
         const detail = err instanceof Error ? err.message : err ? String(err) : '';
@@ -138,6 +147,11 @@ export class UploadRun {
         this.pausedAt = Date.now();
         this.pauses++;
         uploadLog.warn(`[${this.tag}] server unreachable, queue paused — ${this.summary()}`);
+    }
+
+    /** "3 of 120 files sent", for the quit prompt. */
+    progressLine(): string {
+        return `${this.filesSent} of ${this.filesTotal} files sent`;
     }
 
     restarted(track: string, status: number): void {
@@ -163,6 +177,18 @@ export class UploadRun {
         uploadLog.warn(`[${this.tag}] retrying "${track}": ${reason}`);
     }
 
+    /**
+     * The machine is going to sleep: usually a closed lid, since keepAwake already
+     * holds off idle sleep. Every connection the run has open dies with it, and a
+     * stall that follows a wake is this, not the network.
+     */
+    slept(): void {
+        if (this.sleptAt !== null) return;
+        this.sleptAt = Date.now();
+        this.sleeps++;
+        uploadLog.warn(`[${this.tag}] system going to sleep mid-upload — ${this.summary()}`);
+    }
+
     stalled(track: string, seconds: number): void {
         this.stalls++;
         uploadLog.warn(
@@ -186,6 +212,19 @@ export class UploadRun {
             void this.report('progress');
         }, HEARTBEAT_MS);
         this.heartbeat.unref?.();
+    }
+
+    woke(): void {
+        if (this.sleptAt === null) return;
+        const ms = Date.now() - this.sleptAt;
+        this.sleptMs += ms;
+        this.sleptAt = null;
+        uploadLog.warn(
+            `[${this.tag}] system woke after ${Math.round(ms / 1000)}s asleep; ` +
+                'open requests will time out and resume',
+        );
+        // Now rather than at the next heartbeat, so the server sees the gap explained.
+        void this.report('progress', undefined, `woke after ${Math.round(ms / 1000)}s asleep`);
     }
 
     private noteError(track: string, reason: string): void {
@@ -221,6 +260,8 @@ export class UploadRun {
             restarts: this.restarts,
             retries: this.retries,
             run_id: this.runId,
+            sleeps: this.sleeps,
+            slept_seconds: this.sleptMs / 1000,
             stalls: this.stalls,
         };
         try {
@@ -254,6 +295,8 @@ export class UploadRun {
         if (this.retries) parts.push(`${this.retries} retries`);
         if (this.stalls) parts.push(`${this.stalls} stalls`);
         if (this.restarts) parts.push(`${this.restarts} restarts`);
+        if (this.sleeps)
+            parts.push(`slept ${this.sleeps}x for ${Math.round(this.sleptMs / 1000)}s`);
         if (this.pauses)
             parts.push(`paused ${this.pauses}x for ${Math.round(this.pausedMs / 1000)}s`);
         parts.push(`${Math.round((Date.now() - this.startedAt) / 1000)}s elapsed`);
@@ -263,6 +306,24 @@ export class UploadRun {
 
 const mb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
-app.on('before-quit', () => {
+/** The runs still going, for the quit prompt. Empty when nothing is uploading. */
+export const activeUploads = (): UploadRun[] => Array.from(activeRuns);
+
+/**
+ * Called once the user has chosen to quit (or close the window) mid-upload, from
+ * each of main/index.ts's exit paths. Not a `before-quit` listener of its own: that
+ * fires before the prompt can cancel the quit, and `app.exit()` skips it entirely.
+ */
+export const abandonActiveUploads = (): void => {
     for (const run of activeRuns) run.abandon();
+};
+
+// powerMonitor can only be used once the app is ready.
+void app.whenReady().then(() => {
+    powerMonitor.on('suspend', () => {
+        for (const run of activeRuns) run.slept();
+    });
+    powerMonitor.on('resume', () => {
+        for (const run of activeRuns) run.woke();
+    });
 });
