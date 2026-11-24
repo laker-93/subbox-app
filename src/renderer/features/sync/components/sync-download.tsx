@@ -39,6 +39,13 @@ import {
     splitDriveMissing,
 } from '/@/renderer/features/sync/components/shared/drive-compare';
 import {
+    clearDownloadRun,
+    type DownloadProgress,
+    ipcErrorMessage,
+    startDownloadRun,
+    useDownloadRun,
+} from '/@/renderer/features/sync/store/download-run-store';
+import {
     type LibraryFormat,
     useCurrentServerId,
     useCurrentServerWithCredential,
@@ -117,18 +124,6 @@ const musicRootFromExtractPath = (extractPath: string): string => {
     return `${trimmed.replace(/[/\\]+$/, '')}${separator}${ZIP_MUSIC_DIR}`;
 };
 
-/** What the main process reports while a download job runs (subbox-app#328). */
-interface DownloadProgress {
-    activeTracks: string[];
-    bytesDone: number;
-    bytesTotal: number;
-    nDone: number;
-    nTotal: number;
-    phase: 'collect' | 'manifest' | 'tracks' | 'xml';
-    tracksFailed: number;
-    tracksSkipped: number;
-}
-
 /**
  * The selected playlists against a drive the user asked to check (#314): a USB
  * they load in the DJ software, say. Only ever read. Nothing is written to it.
@@ -151,14 +146,6 @@ const DOWNLOAD_PHASE_LABELS: Record<DownloadProgress['phase'], string> = {
     tracks: 'Downloading tracks...',
     xml: 'Building your Rekordbox XML...',
 };
-
-/** The message an error from the main process carries, without Electron's
- *  "Error invoking remote method '...': Error: " in front of it. */
-const ipcErrorMessage = (err: unknown): string =>
-    ((err as Error | undefined)?.message ?? '').replace(
-        /^Error invoking remote method '[^']*': (Error: )?/,
-        '',
-    );
 
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
 
@@ -246,7 +233,6 @@ export const SyncDownload = () => {
         warnings?: string;
         xmlPath?: string;
     }>(null);
-    const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
     // Free space where tracks land, so the preview can say a download won't fit
     // before it starts. Desktop only; null when unknown.
     const [freeSpace, setFreeSpace] = useState<null | number>(null);
@@ -285,7 +271,6 @@ export const SyncDownload = () => {
         result: seratoResult,
         selectFolder: handleSelectSeratoFolder,
         seratoFolder,
-        showFolder: handleShowSeratoFolder,
         writeCrates,
     } = useSeratoCrates();
     // What the export contains, not which format it is in: the audio as well as the
@@ -358,15 +343,23 @@ export const SyncDownload = () => {
         localSettings.set(XML_DIRECTORY_KEY, '');
     }, []);
 
+    // A desktop download runs on after this screen is left, so its progress and
+    // result live in a store, not here (subbox-app#328). The web download is one
+    // browser file and stays in this component.
+    const downloadRun = useDownloadRun(serverId ?? undefined);
+    const shownResult = downloadRun?.result ?? downloadResult;
+    const shownMusicPath = shownResult?.musicPath;
+    const shownXmlPath = shownResult?.xmlPath;
+
     const handleOpenMusicFolder = useCallback(() => {
-        if (!ipc || !downloadResult?.musicPath) return;
-        ipc.invoke('sync:open-folder', downloadResult.musicPath);
-    }, [downloadResult?.musicPath]);
+        if (!ipc || !shownMusicPath) return;
+        ipc.invoke('sync:open-folder', shownMusicPath);
+    }, [shownMusicPath]);
 
     const handleRevealXml = useCallback(() => {
-        if (!ipc || !downloadResult?.xmlPath) return;
-        ipc.invoke('sync:reveal-file', downloadResult.xmlPath);
-    }, [downloadResult?.xmlPath]);
+        if (!ipc || !shownXmlPath) return;
+        ipc.invoke('sync:reveal-file', shownXmlPath);
+    }, [shownXmlPath]);
 
     const getLocalTracks = useCallback(async (): Promise<LocalTrack[]> => {
         if (!isElectron()) return [];
@@ -579,24 +572,27 @@ export const SyncDownload = () => {
         setError(null);
         setDownloadResult(null);
         resetSeratoResult();
+        clearDownloadRun();
     }, [resetSeratoResult]);
 
     /** This screen's crate write: its own "should I" rule, its own playlist ids. */
     const writeSeratoCrates = useCallback(
         async (musicRoot: string) => {
-            if (!includeSeratoCrates) return;
-            await writeCrates(Array.from(selectedPlaylists), musicRoot);
+            if (!includeSeratoCrates) return null;
+            return writeCrates(Array.from(selectedPlaylists), musicRoot);
         },
         [includeSeratoCrates, selectedPlaylists, writeCrates],
     );
 
+    // A failed run lands back where it can be retried: the preview, while this
+    // screen still holds the plan, else the selection.
+    const runError = downloadRun?.step === 'error' ? downloadRun.error : null;
     useEffect(() => {
-        if (step !== 'downloading' || !isElectron()) return undefined;
-        const handler = (_event: unknown, progress: DownloadProgress) =>
-            setDownloadProgress(progress);
-        window.api.ipc.on('sync:download-progress', handler);
-        return () => window.api.ipc.removeListener('sync:download-progress', handler);
-    }, [step]);
+        if (runError === null) return;
+        setError(runError);
+        setStep(plan ? 'preview' : 'select');
+        clearDownloadRun();
+    }, [plan, runError]);
 
     useEffect(() => {
         if (step !== 'preview' || !isElectron() || !includeTracks) return;
@@ -615,61 +611,45 @@ export const SyncDownload = () => {
     }, []);
 
     const handleDownload = useCallback(async () => {
-        setStep('downloading');
         setError(null);
-        setDownloadProgress(null);
 
         try {
             if (isElectron()) {
+                // Hand the run to the store: it carries on, and is shown again,
+                // if the user goes to the library meanwhile.
+                setStep('preview');
                 // Crates alone: nothing to fetch, so nothing is fetched. pymix
                 // would reject a download with neither tracks nor XML in it, and
                 // rightly — the crates are written from tracks already on disk.
-                if (!includeTracks && !includeRekordboxXml) {
-                    await writeSeratoCrates('');
-                    setDownloadResult({ tracksExported: 0 });
-                    setStep('done');
-                    return;
-                }
-                console.log(
-                    '[Subbox] Download (Electron) - selectedPlaylists:',
-                    Array.from(selectedPlaylists),
-                    'includeTracks:',
-                    includeTracks,
-                    'includeRekordboxXml:',
+                const fetchNothing = !includeTracks && !includeRekordboxXml;
+                await startDownloadRun({
+                    // Serato crates are written after the audio, and only after: a
+                    // crate points at absolute paths, so writing one before the
+                    // files are there produces a crate full of missing tracks.
+                    afterAudio: writeSeratoCrates,
+                    downloadArgs: fetchNothing
+                        ? null
+                        : {
+                              filebrowserToken: server.fbToken ?? '',
+                              filebrowserUrl: urlConfig.filebrowser,
+                              ignoreLibraryRoot,
+                              includeRekordboxXml,
+                              includeTracks,
+                              playlistIds: Array.from(selectedPlaylists),
+                              pymixUrl: urlConfig.pymix,
+                              rekordboxXmlDir: xmlDir ?? '',
+                              // Let the main process silently re-login to filebrowser
+                              // if its token has expired by the time the download runs.
+                              serverId: serverId ?? undefined,
+                              username: server.username,
+                              useTracksInPlace,
+                          },
                     includeRekordboxXml,
-                );
-                const result = await window.api.ipc.invoke('sync:download-playlists', {
-                    filebrowserToken: server.fbToken ?? '',
-                    filebrowserUrl: urlConfig.filebrowser,
-                    ignoreLibraryRoot,
-                    includeRekordboxXml,
                     includeTracks,
-                    playlistIds: Array.from(selectedPlaylists),
-                    pymixUrl: urlConfig.pymix,
-                    rekordboxXmlDir: xmlDir ?? '',
-                    // Let the main process silently re-login to filebrowser if its
-                    // token has expired by the time the download runs.
-                    serverId: serverId ?? undefined,
-                    username: server.username,
-                    useTracksInPlace,
+                    serverId: serverId ?? '',
                 });
-                const downloaded = result as {
-                    musicPath?: string;
-                    tracksExported: number;
-                    tracksInPlace?: number;
-                    warnings?: string;
-                    xmlPath?: string;
-                };
-                setDownloadResult(downloaded);
-
-                // Serato crates are written after the audio, and only after: a
-                // crate points at absolute paths, so writing one before the files
-                // are there produces a crate full of missing tracks. This is the
-                // reason the crate writing lives on the client at all — pymix
-                // could only ever guess at these paths.
-                await writeSeratoCrates(downloaded.musicPath ?? '');
-                setStep('done');
             } else {
+                setStep('downloading');
                 // Web: one file, whatever the user asked for — the tracks zip with
                 // the Rekordbox XML inside it, or the XML on its own. It has to be
                 // one: a browser only reliably saves a single download per user
@@ -748,7 +728,16 @@ export const SyncDownload = () => {
     ]);
 
     // ── Select playlists ───────────────────────────────────────────────────
-    if (step === 'select') {
+    // A run in the store outranks this screen's own step: coming back to Download
+    // mid-run, or after it, shows the run rather than a fresh selection.
+    const view: Step =
+        downloadRun?.step === 'downloading'
+            ? 'downloading'
+            : downloadRun?.step === 'done'
+              ? 'done'
+              : step;
+
+    if (view === 'select') {
         const totalSelectedTracks = playlists
             .filter((p) => selectedPlaylists.has(p.id))
             .reduce((sum, p) => sum + (p.songCount ?? 0), 0);
@@ -878,14 +867,14 @@ export const SyncDownload = () => {
     }
 
     // ── Planning (loading) ─────────────────────────────────────────────────
-    if (step === 'planning') {
+    if (view === 'planning') {
         return <SyncLoading label="Generating sync plan..." />;
     }
 
     // ── Downloading ────────────────────────────────────────────────────────
-    if (step === 'downloading') {
-        if (downloadProgress) {
-            const p = downloadProgress;
+    if (view === 'downloading') {
+        if (downloadRun?.progress) {
+            const p = downloadRun.progress;
             const preparing = p.phase !== 'tracks';
             return (
                 <SyncProgress
@@ -940,7 +929,11 @@ export const SyncDownload = () => {
     }
 
     // ── Done ───────────────────────────────────────────────────────────────
-    if (step === 'done') {
+    if (view === 'done') {
+        // As the run was started, not as the format control says now.
+        const doneTracks = downloadRun ? downloadRun.includeTracks : includeTracks;
+        const doneXml = downloadRun ? downloadRun.includeRekordboxXml : includeRekordboxXml;
+        const doneSerato = downloadRun?.seratoResult ?? seratoResult;
         return (
             <SyncResult
                 action={
@@ -950,18 +943,16 @@ export const SyncDownload = () => {
                 }
                 /* Nothing was fetched in the crates-only case, so don't call it a
                    download; the sentence underneath would contradict it. */
-                title={
-                    !includeTracks && !includeRekordboxXml ? 'Crates Written' : 'Download Complete'
-                }
+                title={!doneTracks && !doneXml ? 'Crates Written' : 'Download Complete'}
             >
                 <Text c="dimmed" size="sm">
-                    {!includeTracks
-                        ? includeRekordboxXml
+                    {!doneTracks
+                        ? doneXml
                             ? 'Rekordbox XML downloaded. No audio files, as requested.'
                             : 'Serato crates written from the tracks you already have. Nothing was downloaded.'
-                        : downloadResult
-                          ? `${downloadResult.tracksExported} track${downloadResult.tracksExported === 1 ? '' : 's'} exported${
-                                includeRekordboxXml
+                        : shownResult
+                          ? `${shownResult.tracksExported} track${shownResult.tracksExported === 1 ? '' : 's'} exported${
+                                doneXml
                                     ? isElectron()
                                         ? ', with a Rekordbox XML saved alongside them'
                                         : ", with subbox_rb_export.xml inside the zip's music folder"
@@ -969,9 +960,9 @@ export const SyncDownload = () => {
                             }.`
                           : 'Download finished.'}
                 </Text>
-                {downloadResult?.warnings && (
+                {shownResult?.warnings && (
                     <Text c="yellow" size="sm">
-                        {downloadResult.warnings}
+                        {shownResult.warnings}
                     </Text>
                 )}
                 {xmlOnlyMissing > 0 && (
@@ -980,9 +971,9 @@ export const SyncDownload = () => {
                         {xmlOnlyMissing === 1 ? 'it' : 'them'}.
                     </Text>
                 )}
-                {isElectron() && (downloadResult?.musicPath || downloadResult?.xmlPath) && (
+                {isElectron() && (shownResult?.musicPath || shownResult?.xmlPath) && (
                     <Group gap="sm" justify="center" wrap="wrap">
-                        {downloadResult?.musicPath && (
+                        {shownResult?.musicPath && (
                             <Button
                                 leftSection={<Icon icon="folder" />}
                                 onClick={handleOpenMusicFolder}
@@ -995,7 +986,7 @@ export const SyncDownload = () => {
                                 Show Music
                             </Button>
                         )}
-                        {downloadResult?.xmlPath && (
+                        {shownResult?.xmlPath && (
                             <Button
                                 leftSection={<Icon icon="folder" />}
                                 onClick={handleRevealXml}
@@ -1010,10 +1001,12 @@ export const SyncDownload = () => {
                         )}
                     </Group>
                 )}
-                {seratoResult && (
+                {doneSerato && (
                     <SeratoWriteSummary
-                        onShowFolder={handleShowSeratoFolder}
-                        result={seratoResult}
+                        onShowFolder={() =>
+                            ipc?.invoke('sync:open-folder', doneSerato.seratoFolder)
+                        }
+                        result={doneSerato}
                     />
                 )}
             </SyncResult>

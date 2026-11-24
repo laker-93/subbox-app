@@ -107,8 +107,8 @@ export const useSeratoCrates = () => {
      * that aren't there.
      */
     const writeCrates = useCallback(
-        async (playlistIds: string[], musicRoot: string) => {
-            if (!seratoFolder) return;
+        async (playlistIds: string[], musicRoot: string): Promise<null | SeratoWriteResult> => {
+            if (!seratoFolder) return null;
             const structure = await PymixController.seratoExport({
                 baseUrl: urlConfig.pymix,
                 body: { playlistIds },
@@ -128,6 +128,9 @@ export const useSeratoCrates = () => {
                 seratoFolder,
             })) as SeratoWriteResult;
             setResult(written);
+            // Returned too: a download run keeps it for a Download screen that was
+            // left and reopened, where this hook's state is gone.
+            return written;
         },
         [seratoFolder, overwrite.beatgrid, overwrite.cues],
     );

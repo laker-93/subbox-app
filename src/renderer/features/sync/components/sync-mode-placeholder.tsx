@@ -9,6 +9,10 @@ import { SyncDownload } from '/@/renderer/features/sync/components/sync-download
 import { SyncDropzone } from '/@/renderer/features/sync/components/sync-dropzone';
 import { SyncUpload } from '/@/renderer/features/sync/components/sync-upload';
 import { SyncWatch } from '/@/renderer/features/sync/components/sync-watch';
+import {
+    useDownloadRunActive,
+    useDownloadRunStore,
+} from '/@/renderer/features/sync/store/download-run-store';
 import { useUploadRunActive } from '/@/renderer/features/sync/store/upload-run-store';
 import { Button } from '/@/shared/components/button/button';
 import { Center } from '/@/shared/components/center/center';
@@ -22,8 +26,13 @@ type SyncTab = 'download' | 'upload' | 'watch';
 export const SyncModePlaceholder = () => {
     const electron = isElectron();
     const isDemo = useIsDemoSession();
-    const [tab, setTab] = useState<SyncTab>('upload');
     const uploadRunning = useUploadRunActive();
+    const downloadRunning = useDownloadRunActive();
+    // Back on Sync with a download to show (running, or finished while the user was
+    // away), open on it rather than on Upload. A running upload still wins.
+    const [tab, setTab] = useState<SyncTab>(() =>
+        useDownloadRunStore.getState().run && !uploadRunning ? 'download' : 'upload',
+    );
 
     // Upload and Watch both write to the library, which pymix blocks for `demo`
     // (`require_uploader`). Marking the tabs up front is the point: the user should see
@@ -59,10 +68,13 @@ export const SyncModePlaceholder = () => {
                     Upload
                 </Button>
                 <Button
+                    leftSection={downloadRunning ? <Spinner size={12} /> : undefined}
                     onClick={() => setTab('download')}
                     size="sm"
                     tooltip={{
-                        label: 'Download playlists from your Sub-box library to this device, optionally with a Rekordbox XML to import them straight back into Rekordbox.',
+                        label: downloadRunning
+                            ? 'A download is running. It carries on while you use the rest of the app; come back here to see how it is getting on.'
+                            : 'Download playlists from your Sub-box library to this device, optionally with a Rekordbox XML to import them straight back into Rekordbox.',
                         multiline: true,
                         openDelay: 300,
                         w: 280,
