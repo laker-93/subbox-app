@@ -23,6 +23,7 @@ import {
     SeratoWriteSummary,
     SyncFlow,
     SyncLoading,
+    SyncProgress,
     SyncResult,
     SyncSettingsButton,
     SyncSettingsModal,
@@ -116,6 +117,18 @@ const musicRootFromExtractPath = (extractPath: string): string => {
     return `${trimmed.replace(/[/\\]+$/, '')}${separator}${ZIP_MUSIC_DIR}`;
 };
 
+/** What the main process reports while a download job runs (subbox-app#328). */
+interface DownloadProgress {
+    activeTracks: string[];
+    bytesDone: number;
+    bytesTotal: number;
+    nDone: number;
+    nTotal: number;
+    phase: 'collect' | 'manifest' | 'tracks' | 'xml';
+    tracksFailed: number;
+    tracksSkipped: number;
+}
+
 /**
  * The selected playlists against a drive the user asked to check (#314): a USB
  * they load in the DJ software, say. Only ever read. Nothing is written to it.
@@ -131,6 +144,21 @@ interface DriveCheck {
 type MissingTrack = SyncPlanResponse['tracks']['missing'][number];
 
 type Step = 'done' | 'downloading' | 'planning' | 'preview' | 'select';
+
+const DOWNLOAD_PHASE_LABELS: Record<DownloadProgress['phase'], string> = {
+    collect: 'Gathering your playlists...',
+    manifest: 'Listing the tracks to download...',
+    tracks: 'Downloading tracks...',
+    xml: 'Building your Rekordbox XML...',
+};
+
+/** The message an error from the main process carries, without Electron's
+ *  "Error invoking remote method '...': Error: " in front of it. */
+const ipcErrorMessage = (err: unknown): string =>
+    ((err as Error | undefined)?.message ?? '').replace(
+        /^Error invoking remote method '[^']*': (Error: )?/,
+        '',
+    );
 
 type SyncPlanResponse = z.infer<typeof pymixType._response.syncPlan>;
 
@@ -215,8 +243,13 @@ export const SyncDownload = () => {
         musicPath?: string;
         tracksExported: number;
         tracksInPlace?: number;
+        warnings?: string;
         xmlPath?: string;
     }>(null);
+    const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+    // Free space where tracks land, so the preview can say a download won't fit
+    // before it starts. Desktop only; null when unknown.
+    const [freeSpace, setFreeSpace] = useState<null | number>(null);
     // How many of the plan's tracks were found where the user uploaded them from,
     // and whether the plan was made counting them (#214).
     const [plannedInPlace, setPlannedInPlace] = useState<null | {
@@ -557,9 +590,34 @@ export const SyncDownload = () => {
         [includeSeratoCrates, selectedPlaylists, writeCrates],
     );
 
+    useEffect(() => {
+        if (step !== 'downloading' || !isElectron()) return undefined;
+        const handler = (_event: unknown, progress: DownloadProgress) =>
+            setDownloadProgress(progress);
+        window.api.ipc.on('sync:download-progress', handler);
+        return () => window.api.ipc.removeListener('sync:download-progress', handler);
+    }, [step]);
+
+    useEffect(() => {
+        if (step !== 'preview' || !isElectron() || !includeTracks) return;
+        let current = true;
+        window.api.ipc
+            .invoke('sync:free-space')
+            .then((free: null | number) => current && setFreeSpace(free))
+            .catch(() => current && setFreeSpace(null));
+        return () => {
+            current = false;
+        };
+    }, [includeTracks, step]);
+
+    const handleCancelDownload = useCallback(() => {
+        window.api.ipc.invoke('sync:cancel-download');
+    }, []);
+
     const handleDownload = useCallback(async () => {
         setStep('downloading');
         setError(null);
+        setDownloadProgress(null);
 
         try {
             if (isElectron()) {
@@ -599,6 +657,7 @@ export const SyncDownload = () => {
                     musicPath?: string;
                     tracksExported: number;
                     tracksInPlace?: number;
+                    warnings?: string;
                     xmlPath?: string;
                 };
                 setDownloadResult(downloaded);
@@ -668,9 +727,10 @@ export const SyncDownload = () => {
                 setDownloadResult({ tracksExported: result.nTracksExported });
                 setStep('done');
             }
-        } catch (err: any) {
-            toast.error({ message: err?.message || 'Download failed' });
-            setError(err?.message || 'Download failed');
+        } catch (err: unknown) {
+            const message = ipcErrorMessage(err) || 'Download failed';
+            toast.error({ message });
+            setError(message);
             setStep('preview');
         }
     }, [
@@ -824,6 +884,48 @@ export const SyncDownload = () => {
 
     // ── Downloading ────────────────────────────────────────────────────────
     if (step === 'downloading') {
+        if (downloadProgress) {
+            const p = downloadProgress;
+            const preparing = p.phase !== 'tracks';
+            return (
+                <SyncProgress
+                    activeTracks={p.activeTracks}
+                    detail={
+                        <>
+                            <Text size="sm">
+                                {preparing
+                                    ? p.nTotal > 0
+                                        ? `${p.nDone} / ${p.nTotal}`
+                                        : ''
+                                    : `${p.nDone} / ${p.nTotal} tracks · ${formatBytes(p.bytesDone)} of ${formatBytes(p.bytesTotal)}` +
+                                      (p.bytesTotal > 0
+                                          ? ` (${Math.floor((100 * p.bytesDone) / p.bytesTotal)}%)`
+                                          : '')}
+                            </Text>
+                            {!preparing && p.tracksSkipped > 0 && (
+                                <Text c="dimmed" size="xs" ta="center">
+                                    {p.tracksSkipped} already on this computer
+                                </Text>
+                            )}
+                            {p.tracksFailed > 0 && (
+                                <Text c="yellow" size="xs" ta="center">
+                                    {p.tracksFailed} failed: press Download again afterwards to
+                                    retry {p.tracksFailed === 1 ? 'it' : 'them'}
+                                </Text>
+                            )}
+                            <Text c="dimmed" size="xs" ta="center">
+                                Keep subbox open. If this stops, press Download again: tracks
+                                already downloaded aren&apos;t downloaded twice.
+                            </Text>
+                            <Button onClick={handleCancelDownload} size="xs" variant="subtle">
+                                Cancel
+                            </Button>
+                        </>
+                    }
+                    phaseLabel={DOWNLOAD_PHASE_LABELS[p.phase] ?? 'Downloading...'}
+                />
+            );
+        }
         return (
             <SyncLoading
                 label={
@@ -867,6 +969,11 @@ export const SyncDownload = () => {
                             }.`
                           : 'Download finished.'}
                 </Text>
+                {downloadResult?.warnings && (
+                    <Text c="yellow" size="sm">
+                        {downloadResult.warnings}
+                    </Text>
+                )}
                 {xmlOnlyMissing > 0 && (
                     <Text c="yellow" data-testid="xml-only-missing-done" size="sm">
                         {xmlOnlyMissingSentence} Download again with tracks included to fetch{' '}
@@ -1119,6 +1226,13 @@ export const SyncDownload = () => {
                         </Button>
                     </Group>
                 </Stack>
+            )}
+
+            {includeTracks && freeSpace !== null && summary.downloadSizeBytes > freeSpace && (
+                <Text c="yellow" data-testid="download-wont-fit" size="sm">
+                    This download is {formatBytes(summary.downloadSizeBytes)}, and this computer has{' '}
+                    {formatBytes(freeSpace)} free. Free up some space, or choose fewer playlists.
+                </Text>
             )}
 
             {rootUnavailable && (
