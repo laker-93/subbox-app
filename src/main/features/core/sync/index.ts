@@ -10,6 +10,16 @@ import * as unzipper from 'unzipper';
 
 import { appConfig } from '/@/main/config/app-config';
 import { getStoredPassword, store } from '/@/main/features/core/settings';
+import {
+    alreadyDownloaded,
+    destinationFor,
+    DownloadProgress,
+    fetchDownloadsFile,
+    fetchTracks,
+    freeBytes,
+    startDownloadJob,
+    waitForDownloadJob,
+} from '/@/main/features/core/sync/download-job';
 import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip-layout';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 import {
@@ -1166,6 +1176,8 @@ handleKeepingAwake(
         musicPath: string;
         tracksExported: number;
         tracksInPlace: number;
+        /** What a download that finished still wants to say (a track missing on the server). */
+        warnings?: string;
         xmlPath?: string;
     }> => {
         const {
@@ -1238,6 +1250,129 @@ handleKeepingAwake(
                 if (!fs.existsSync(xmlDir)) fs.mkdirSync(xmlDir, { recursive: true });
             };
 
+            const downloadBody = {
+                direction: 'download',
+                includeRekordboxXml: Boolean(includeRekordboxXml),
+                includeTracks,
+                localTracks,
+                options: {
+                    fuzzyMatch: true,
+                    includeMetadata: true,
+                },
+                playlists: playlistIds.map((id) => ({ id, source: 'subbox' })),
+                user_root: getMusicPath(),
+            };
+
+            // A pymix with download jobs: the server prepares the list, and the
+            // tracks come one request each (laker-93/pymix#346, #347). Null from an
+            // older pymix, which gets the one-zip download below.
+            const job = await startDownloadJob(pymixAuth, pymixUrl, downloadBody);
+            if (job) {
+                const abort = new AbortController();
+                activeDownload = abort;
+                const sendProgress = (progress: DownloadProgress) => {
+                    if (!event.sender.isDestroyed()) {
+                        event.sender.send('sync:download-progress', progress);
+                    }
+                };
+                try {
+                    const ready = await waitForDownloadJob(
+                        pymixAuth,
+                        pymixUrl,
+                        job,
+                        (status) =>
+                            sendProgress({
+                                activeTracks: [],
+                                bytesDone: 0,
+                                bytesTotal: 0,
+                                nDone: status.nProcessed,
+                                nTotal: status.nTotal,
+                                phase: (status.phase === 'xml' ||
+                                status.phase === 'collect' ||
+                                status.phase === 'manifest'
+                                    ? status.phase
+                                    : 'manifest') as DownloadProgress['phase'],
+                                tracksFailed: 0,
+                                tracksSkipped: 0,
+                            }),
+                        abort.signal,
+                    );
+
+                    // As below: pymix wrote their new paths into this download.
+                    if (inPlace && inPlace.moved.length > 0) {
+                        await recordMovedTracks(pymixAuth, pymixUrl, inPlace.moved);
+                    }
+
+                    const musicPath = getMusicPath();
+                    const entries = ready.tracks ?? [];
+                    // Only what isn't already here, and no x2 for an unzip any more.
+                    const needed = entries
+                        .filter((entry) => {
+                            const dest = destinationFor(musicPath, entry.relativePath);
+                            return !dest || !alreadyDownloaded(dest, entry.size);
+                        })
+                        .reduce((sum, entry) => sum + entry.size, 0);
+                    const free = await freeBytes(musicPath);
+                    if (free !== null && needed > free) {
+                        throw new Error(
+                            `This download needs ${formatGigabytes(needed)} free on this computer, ` +
+                                `and there is ${formatGigabytes(free)}. Free up some space and press ` +
+                                `Download again.`,
+                        );
+                    }
+
+                    fs.mkdirSync(musicPath, { recursive: true });
+                    const fetched = await fetchTracks({
+                        auth: pymixAuth,
+                        entries,
+                        jobId: ready.jobId,
+                        musicPath,
+                        onProgress: sendProgress,
+                        pymixUrl,
+                        signal: abort.signal,
+                    });
+                    // pymix tagged these files before listing them: cache their ids
+                    // now, as the unzip does, so the next scan needn't reopen them.
+                    cacheSubboxIdsForNewFiles(fetched.downloaded);
+
+                    let xmlPath: string | undefined;
+                    if (ready.xmlFilename) {
+                        ensureXmlDir();
+                        await fetchDownloadsFile(
+                            pymixAuth,
+                            pymixUrl,
+                            ready.xmlFilename,
+                            xmlDestPath,
+                        );
+                        xmlPath = xmlDestPath;
+                    }
+
+                    if (fetched.failed.length > 0) {
+                        const n = fetched.failed.length;
+                        throw new Error(
+                            `${n} of ${entries.length} ${entries.length === 1 ? 'track' : 'tracks'} ` +
+                                `didn't download (${fetched.failed[0].relativePath}: ` +
+                                `${fetched.failed[0].reason}). Press Download again to fetch ` +
+                                `${n === 1 ? 'it' : 'them'}: tracks already downloaded aren't ` +
+                                `downloaded twice.`,
+                        );
+                    }
+                    console.log(
+                        `[download] job ${ready.jobId}: ${fetched.downloaded.length} downloaded, ` +
+                            `${fetched.skipped} already here`,
+                    );
+                    return {
+                        musicPath,
+                        tracksExported: entries.length,
+                        tracksInPlace,
+                        warnings: ready.warnings || undefined,
+                        xmlPath,
+                    };
+                } finally {
+                    if (activeDownload === abort) activeDownload = null;
+                }
+            }
+
             // Step 1: have pymix prepare the one file this download is — the tracks
             // zip, that zip with the Rekordbox XML inside it, or (includeTracks
             // false) the XML on its own.
@@ -1249,22 +1384,11 @@ handleKeepingAwake(
                 xmlIncluded?: boolean;
                 zipPath?: null | string;
             }>(pymixAuth, (cookie) =>
-                axios.post(
-                    `${pymixUrl}/sync/playlists`,
-                    {
-                        direction: 'download',
-                        includeRekordboxXml: Boolean(includeRekordboxXml),
-                        includeTracks,
-                        localTracks,
-                        options: {
-                            fuzzyMatch: true,
-                            includeMetadata: true,
-                        },
-                        playlists: playlistIds.map((id) => ({ id, source: 'subbox' })),
-                        user_root: getMusicPath(),
-                    },
-                    { headers: { Cookie: cookie }, httpsAgent, timeout: 0 },
-                ),
+                axios.post(`${pymixUrl}/sync/playlists`, downloadBody, {
+                    headers: { Cookie: cookie },
+                    httpsAgent,
+                    timeout: 0,
+                }),
             );
 
             if (!syncResponse.data.success) {
@@ -1364,6 +1488,21 @@ handleKeepingAwake(
         }
     },
 );
+
+/** The download in flight, for sync:cancel-download. One at a time: the screen
+ *  that starts one shows its progress until it ends. */
+let activeDownload: AbortController | null = null;
+
+ipcMain.handle('sync:cancel-download', async (): Promise<void> => {
+    activeDownload?.abort();
+});
+
+/** Bytes free where a download puts tracks, for the preview; null if unknown. */
+ipcMain.handle('sync:free-space', async (): Promise<null | number> => freeBytes(getMusicPath()));
+
+function formatGigabytes(bytes: number): string {
+    return `${(bytes / 1e9).toFixed(1)} GB`;
+}
 
 ipcMain.handle('sync:get-local-tracks', async (): Promise<LocalTrack[]> => {
     return scanLocalTracks();
