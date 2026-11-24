@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import styles from './mode-toggle.module.css';
 
+import { useDownloadRunActive } from '/@/renderer/features/sync/store/download-run-store';
 import { useUploadRunActive } from '/@/renderer/features/sync/store/upload-run-store';
 import { AppMenu } from '/@/renderer/features/titlebar/components/app-menu';
 import { useAppMode, useAppStoreActions } from '/@/renderer/store';
@@ -24,6 +25,7 @@ export const ModeToggle = ({ withAppMenu = true }: ModeToggleProps) => {
     // An upload keeps going while the user is in the library; this is how they can
     // tell without opening Sync.
     const uploadRunning = useUploadRunActive();
+    const downloadRunning = useDownloadRunActive();
 
     return (
         <div className={styles.modeToggleBar}>
@@ -71,10 +73,15 @@ export const ModeToggle = ({ withAppMenu = true }: ModeToggleProps) => {
                                               defaultValue:
                                                   'An upload is running. Open Sync to see how it is getting on.',
                                           })
-                                        : t('page.modeToggle.syncTooltip', {
-                                              defaultValue:
-                                                  'Move music between your DJ software and Sub-box. Upload tracks from Rekordbox or Serato, or download playlists back out as a Rekordbox XML or Serato crates.',
-                                          })
+                                        : downloadRunning
+                                          ? t('page.modeToggle.syncDownloadRunningTooltip', {
+                                                defaultValue:
+                                                    'A download is running. Open Sync to see how it is getting on.',
+                                            })
+                                          : t('page.modeToggle.syncTooltip', {
+                                                defaultValue:
+                                                    'Move music between your DJ software and Sub-box. Upload tracks from Rekordbox or Serato, or download playlists back out as a Rekordbox XML or Serato crates.',
+                                            })
                                 }
                                 multiline
                                 openDelay={300}
@@ -83,7 +90,7 @@ export const ModeToggle = ({ withAppMenu = true }: ModeToggleProps) => {
                                 <span
                                     style={{ alignItems: 'center', display: 'inline-flex', gap: 4 }}
                                 >
-                                    {uploadRunning && <Spinner size={10} />}
+                                    {(uploadRunning || downloadRunning) && <Spinner size={10} />}
                                     {t('page.sidebar.sync', {
                                         defaultValue: 'Sync',
                                         postProcess: 'titleCase',
