@@ -196,8 +196,12 @@ details.feat + details.feat { margin-top: 0; }
 <div>
 <details><summary>It says “Storage Limit Reached”</summary>
 <p>The playlists you ticked add up to more than the space on your account. Nothing was uploaded. Go back, untick some playlists and try again.</p></details>
-<details><summary>Some tracks are “skipped (file not found, or already uploaded)”</summary>
-<p>This covers two different things: a file that was moved or deleted after Rekordbox last saw it, or a track you already uploaded in an earlier sync (harmless). Everything else uploaded normally. If you think a track is missing, check Rekordbox for a warning icon on it, export the collection again, then put the fixed tracks in a new playlist and upload just that one.</p></details>
+<details><summary>Some tracks are “not found on this computer”</summary>
+<p>Their file was moved or deleted after Rekordbox last saw it, so they weren’t uploaded, and the playlists they’re in are missing them. Click <span class="quote">Show missing tracks</span> to see which ones and where Rekordbox expected them. Fix them in Rekordbox (a warning icon marks a missing file; relocate it), export the collection again, then upload again. Tracks already uploaded aren’t sent twice.</p></details>
+<details><summary>Some tracks are “already uploaded”</summary>
+<p>An earlier upload already sent them. That’s harmless, and they weren’t sent again.</p></details>
+<details><summary>What is “Tracks not in any playlist”?</summary>
+<p>The tracks in your Rekordbox collection that aren’t in any playlist. Leave it ticked to upload them too: they land in your library without a playlist. Untick it to upload only your playlists.</p></details>
 <details><summary>The upload failed</summary>
 <p>Click <span class="quote">Copy details</span> on the error screen and paste it to us on <a href="https://discord.gg/mqrRbex3hs" target="_blank" rel="noopener">Discord</a>. Your library isn’t changed by a failed upload, so it’s safe to click <span class="quote">Retry</span>.</p></details>
 <details><summary>I want to add more music later</summary>

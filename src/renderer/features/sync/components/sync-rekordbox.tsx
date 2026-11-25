@@ -10,6 +10,7 @@ import {
     ImportStalled,
     JobOutcome,
     LibraryRootSetting,
+    MissingTracks,
     SelectableList,
     SyncFlow,
     SyncFlowFill,
@@ -46,6 +47,8 @@ interface PlaylistPreview {
     path: string[];
     trackCount: number;
     trackKeys: string[];
+    /** The XML's tracks in no playlist, as one entry named NOPLAYLIST (#337). */
+    unplaylisted?: boolean;
 }
 
 /** The screens before a run exists. Once one starts, the run store owns the step. */
@@ -354,8 +357,14 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                     items={playlists.map((pl) => ({
                         detail: `${pl.trackCount} ${pl.trackCount === 1 ? 'track' : 'tracks'}`,
                         id: playlistKey(pl),
-                        label: pl.name,
+                        // Sent to pymix as NOPLAYLIST, but that name told the user
+                        // nothing: tracks in no playlist went unsent when it was
+                        // unticked or overlooked at the end of the list (#337).
+                        label: pl.unplaylisted ? 'Tracks not in any playlist' : pl.name,
                         prefix: pl.path.length > 0 ? `${pl.path.join(' / ')} / ` : undefined,
+                        suffix: pl.unplaylisted
+                            ? 'added to your library without a playlist'
+                            : undefined,
                     }))}
                     onSelectAll={handleSelectAll}
                     onSelectNone={handleSelectNone}
@@ -703,13 +712,17 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
     }
 
     // ── Done ───────────────────────────────────────────────────────────────
-    // `skipped` counts upload failures too; split them out, because a failed upload
-    // is a track (and its playlist entries) missing for a reason a retry can fix, and
-    // a skip is a track that was not found locally or was already uploaded.
+    // `skipped` counts every track not sent; split it three ways. A failed upload is
+    // a track (and its playlist entries) missing for a reason a retry can fix, a
+    // missing file is one only the user can fix, and the rest were already uploaded.
     const failedUploads = uploadResult?.failed ?? [];
-    const otherSkipped = (uploadResult?.skipped ?? 0) - failedUploads.length;
+    // Not on disk where the XML says: never sent (#338). An older main process
+    // doesn't report them, and they stay in `alreadyUploaded`'s count as before.
+    const missingFiles = uploadResult?.missing ?? [];
+    const alreadyUploaded =
+        (uploadResult?.skipped ?? 0) - failedUploads.length - missingFiles.length;
     const untagged = uploadResult?.untagged ?? [];
-    const hasProblems = failedUploads.length > 0 || untagged.length > 0;
+    const hasProblems = failedUploads.length > 0 || untagged.length > 0 || missingFiles.length > 0;
 
     return (
         <SyncResult
@@ -744,6 +757,7 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                         through to the end (#55); that path always has progress now. */}
                     {uploadResult.uploaded === 0 &&
                     untagged.length === 0 &&
+                    missingFiles.length === 0 &&
                     (importProgress?.n_tracks_processed ?? 0) === 0 ? (
                         <Text c="dimmed" size="sm">
                             Everything is already up to date.
@@ -751,10 +765,10 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                     ) : (
                         <>
                             <Text size="sm">{uploadResult.uploaded} tracks uploaded</Text>
-                            {otherSkipped > 0 && (
+                            {alreadyUploaded > 0 && (
                                 <Text c="dimmed" size="sm">
-                                    {otherSkipped} tracks skipped (file not found, or already
-                                    uploaded)
+                                    {alreadyUploaded} {alreadyUploaded === 1 ? 'track' : 'tracks'}{' '}
+                                    already uploaded
                                 </Text>
                             )}
                             {failedUploads.length > 0 && (
@@ -798,6 +812,9 @@ export const SyncRekordbox = ({ formatControl }: SyncRekordboxProps) => {
                     {/* Outside the branch above too: a retry can upload nothing
                         (everything already staged) and still leave some untagged. */}
                     <UntaggedTracks tracks={untagged} />
+                    {/* Outside the branch too: a run whose every track is missing
+                        uploads nothing, and must still say why. */}
+                    <MissingTracks tracks={missingFiles} />
                     {/* Outside the branch above: a run can upload nothing and still
                         have dropped tracks, and "everything is already up to date"
                         would be wrong without this qualifying it. */}

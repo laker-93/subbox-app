@@ -11,6 +11,7 @@ export {
 } from './job-envelope';
 export { JobOutcome } from './job-outcome';
 export { LibraryRootSetting } from './library-root-setting';
+export { type MissingTrack, MissingTracks } from './missing-tracks';
 export { PathText } from './path-text';
 export { RekordboxImportSteps } from './rekordbox-import-steps';
 export { type SelectableItem, SelectableList, SelectionToolbar } from './selectable-list';
