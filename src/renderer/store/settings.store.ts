@@ -1730,7 +1730,7 @@ const initialState: SettingsState = {
                 size: 'default',
             },
             itemsPerPage: 100,
-            pagination: ListPaginationType.PAGINATED,
+            pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
                 columns: SONG_TABLE_COLUMNS.map((column) => ({
@@ -2618,10 +2618,20 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     if (state.autoDJ) state.autoDJ.enabled = false;
                 }
 
+                if (version <= 34) {
+                    // Subbox: Tracks scrolls through the whole library, as in
+                    // Rekordbox/Serato, instead of paging 100 at a time. The table
+                    // settings can switch it back.
+                    const songList = state.lists[LibraryItem.SONG] as ItemListSettings | undefined;
+                    if (songList?.pagination === ListPaginationType.PAGINATED) {
+                        songList.pagination = ListPaginationType.INFINITE;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 34,
+            version: 35,
         },
     ),
 );
