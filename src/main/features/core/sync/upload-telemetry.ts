@@ -54,6 +54,7 @@ export class UploadRun {
     private bytesTotal = 0;
     private readonly errors: Array<{ reason: string; track: string }> = [];
     private filesFailed = 0;
+    private filesMissing = 0;
     private filesSent = 0;
     private filesSkipped = 0;
     private filesTotal = 0;
@@ -196,15 +197,23 @@ export class UploadRun {
         );
     }
 
-    /** `filesSkipped` is what an earlier attempt already sent whole. */
-    start(args: { bytesTotal: number; filesSkipped: number; filesTotal: number }): void {
+    /** `filesSkipped` is what an earlier attempt already sent whole; `filesMissing`,
+     *  what the selection lists but isn't on disk, so is never sent (#338). */
+    start(args: {
+        bytesTotal: number;
+        filesMissing?: number;
+        filesSkipped: number;
+        filesTotal: number;
+    }): void {
         this.filesTotal = args.filesTotal;
         this.bytesTotal = args.bytesTotal;
         this.filesSkipped = args.filesSkipped;
+        this.filesMissing = args.filesMissing ?? 0;
         activeRuns.add(this);
         uploadLog.info(
             `[${this.tag}] started: ${args.filesTotal} file(s), ${mb(args.bytesTotal)} to send, ` +
-                `${args.filesSkipped} already on the server (app ${app.getVersion()})`,
+                `${args.filesSkipped} already on the server, ${this.filesMissing} not found ` +
+                `locally (app ${app.getVersion()})`,
         );
         void this.report('started');
         this.heartbeat = setInterval(() => {
@@ -248,6 +257,7 @@ export class UploadRun {
             elapsed_seconds: (Date.now() - this.startedAt) / 1000,
             event,
             files_failed: this.filesFailed,
+            files_missing: this.filesMissing,
             files_sent: this.filesSent,
             files_skipped: this.filesSkipped,
             files_total: this.filesTotal,

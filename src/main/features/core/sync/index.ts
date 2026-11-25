@@ -73,6 +73,13 @@ import { UploadRun } from '/@/main/features/core/sync/upload-telemetry';
 /** What pymix calls the Rekordbox XML it writes, in the zip and on its own. */
 const XML_FILENAME = 'subbox_rb_export.xml';
 
+export interface MissingTrack {
+    location: string;
+    /** The selected playlists it is in, so the user knows which are now short. */
+    playlists: string[];
+    trackName: string;
+}
+
 /** Lightweight playlist info sent to renderer for preview (no file paths). */
 export interface PlaylistPreview {
     name: string;
@@ -85,6 +92,9 @@ export interface PlaylistPreview {
      * sum of `trackCount`, which double-counts tracks shared by multiple playlists.
      */
     trackKeys: string[];
+    /** The synthetic entry for the XML's tracks in no playlist (#337). Its name is
+     *  NOPLAYLIST, which is what pymix is sent; this is how the renderer labels it. */
+    unplaylisted?: boolean;
 }
 
 export interface UploadProgress {
@@ -103,6 +113,10 @@ export interface UploadResult {
     /** Tracks whose upload failed server-side (e.g. a TUS create rejection) rather
      *  than being skipped for a known local reason (missing file, already uploaded). */
     failed: Array<{ reason: string; trackName: string }>;
+    /** Tracks the selection lists whose file isn't where the XML says, so they were
+     *  never sent (#338). Counted in `skipped` too, for an older renderer. */
+    missing: MissingTrack[];
+    /** Every track not sent: missing, already uploaded by an earlier attempt, or failed. */
     skipped: number;
     totalTracksInXml: number;
     /** Uploaded, but the server could not tag them, so the import leaves them out:
@@ -242,9 +256,13 @@ ipcMain.handle(
         }
 
         // Add a synthetic entry for tracks not in any playlist
+        // First, so it isn't lost at the bottom of a long list (#337).
         const orphanTracks = collectTracksNotInAnyPlaylist(result);
         if (orphanTracks.length > 0) {
-            previews.push(buildPreview(NOPLAYLIST_NAME, [], orphanTracks));
+            previews.unshift({
+                ...buildPreview(NOPLAYLIST_NAME, [], orphanTracks),
+                unplaylisted: true,
+            });
         }
 
         return previews;
@@ -357,6 +375,8 @@ handleKeepingAwake(
         // silently skipped, so the completion screen can say which tracks were left out
         // and why instead of just reporting a smaller number than the user expected.
         const trackMap = new Map<string, ParsedTrack>();
+        // Which selected playlists each file is in, for the missing-file report (#338).
+        const playlistsByLocation = new Map<string, string[]>();
         const droppedTracks: Array<{ reason: string; trackName: string }> = [];
         const seenDropped = new Set<string>();
         for (const pl of selectedPlaylists) {
@@ -376,6 +396,10 @@ handleKeepingAwake(
 
                 track.artist = eligibility.artist;
                 track.cleanName = eligibility.cleanName;
+                const inPlaylists = playlistsByLocation.get(track.location) ?? [];
+                const label = pl.name === NOPLAYLIST_NAME ? 'not in a playlist' : pl.name;
+                if (!inPlaylists.includes(label)) inPlaylists.push(label);
+                playlistsByLocation.set(track.location, inPlaylists);
                 if (!trackMap.has(eligibility.key)) {
                     trackMap.set(eligibility.key, track);
                 }
@@ -550,6 +574,7 @@ handleKeepingAwake(
 
         let uploadedCount = 0;
         let skippedCount = 0;
+        const missingFiles: MissingTrack[] = [];
         // Per-track TUS create/upload failures (e.g. a transient filebrowser error)
         // land here instead of aborting the whole batch — see the worker loop below.
         const failedTracks: Array<{ reason: string; stagingPath: string; trackName: string }> = [];
@@ -578,6 +603,11 @@ handleKeepingAwake(
                     `Track file does not exist at ${track.location}, skipping "${trackName}"`,
                 );
                 skippedCount++;
+                missingFiles.push({
+                    location: track.location,
+                    playlists: playlistsByLocation.get(track.location) ?? [],
+                    trackName: describeTrack(track),
+                });
                 continue;
             }
 
@@ -659,6 +689,7 @@ handleKeepingAwake(
                         return sum; // gone since the scan; its upload will say so
                     }
                 }, 0),
+                filesMissing: missingFiles.length,
                 filesSkipped: uploadableTracks.length - tracksToUpload.length,
                 filesTotal: tracksToUpload.length,
             });
@@ -786,6 +817,7 @@ handleKeepingAwake(
         return {
             dropped: droppedTracks,
             failed: failedTracks.map(({ reason, trackName }) => ({ reason, trackName })),
+            missing: missingFiles,
             skipped: skippedCount,
             totalTracksInXml: totalTracks,
             untagged: untagged.map(({ reason, stagingLocation }) => ({

@@ -4,7 +4,11 @@ import { createWithEqualityFn } from 'zustand/traditional';
 import { isUploadForbidden, PymixController } from '/@/renderer/api/pymix/pymix-controller';
 import { urlConfig } from '/@/renderer/config/url-config';
 import { refreshPlaylistsAfterImport } from '/@/renderer/features/playlist-tree/hooks/use-playlist-tree';
-import { describeJobWork, type ImportProgress } from '/@/renderer/features/sync/components/shared';
+import {
+    describeJobWork,
+    type ImportProgress,
+    type MissingTrack,
+} from '/@/renderer/features/sync/components/shared';
 import { queryClient } from '/@/renderer/lib/react-query';
 import { toast } from '/@/shared/components/toast/toast';
 
@@ -55,6 +59,9 @@ export interface RekordboxUploadRequest {
 export interface RekordboxUploadResult {
     dropped?: TrackProblem[];
     failed?: TrackProblem[];
+    /** Listed in the selection but not on disk where the XML says, so never sent
+     *  (#338). Also counted in `skipped`. */
+    missing?: MissingTrack[];
     skipped: number;
     totalTracksInXml?: number;
     /** Uploaded but not tagged on the server, so not imported (#310). */
