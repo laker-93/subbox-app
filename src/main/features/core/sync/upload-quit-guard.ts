@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog } from 'electron';
 
+import { abandonActiveDownloads } from '/@/main/features/core/sync/download-telemetry';
 import {
     abandonActiveUploads,
     activeUploads,
@@ -32,6 +33,14 @@ let declinedAt = 0;
  * `before-quit` or window `close` handler can still `preventDefault` on a no.
  */
 export function mayExitDuringUpload(win: BrowserWindow | null, verb: 'close' | 'quit'): boolean {
+    const ok = asked(win, verb);
+    // A download carries on with the window closed, so only a quit abandons one.
+    // Its last report says so; without it the server reads the silence the same way.
+    if (ok && verb === 'quit') abandonActiveDownloads();
+    return ok;
+}
+
+function asked(win: BrowserWindow | null, verb: 'close' | 'quit'): boolean {
     const runs = activeUploads();
     if (runs.every((r) => confirmed.has(r))) return true;
     if (Date.now() - declinedAt < ANSWER_HOLDS_MS) return false;

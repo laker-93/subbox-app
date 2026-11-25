@@ -1,3 +1,5 @@
+import type { DownloadRun } from '/@/main/features/core/sync/download-telemetry';
+
 import axios, { AxiosResponse, isAxiosError } from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -32,6 +34,9 @@ const TRACK_ATTEMPTS = 4;
 
 /** How long a stalled transfer may go without a byte before it is retried. */
 const TRACK_IDLE_TIMEOUT_MS = 60_000;
+
+/** The error a stalled transfer is destroyed with, so a retry can say it stalled. */
+const STALLED = 'the transfer stalled';
 
 /** Poll intervals, settling at the last. */
 const POLL_DELAYS_MS = [500, 1_000, 2_000, 3_000, 5_000];
@@ -119,19 +124,22 @@ export async function fetchDownloadsFile(
     pymixUrl: string,
     filename: string,
     dest: string,
+    run?: DownloadRun,
 ): Promise<void> {
     const partial = dest + PARTIAL_SUFFIX;
-    const response = await withNetworkRetry(() =>
-        withPymixAuth<NodeJS.ReadableStream>(
-            auth,
-            (cookie) =>
-                axios.get(`${pymixUrl}/sync/download/${encodeURIComponent(filename)}`, {
-                    headers: { Cookie: cookie },
-                    httpsAgent,
-                    responseType: 'stream',
-                    timeout: 60_000,
-                }) as Promise<AxiosResponse<NodeJS.ReadableStream>>,
-        ),
+    const response = await withNetworkRetry(
+        () =>
+            withPymixAuth<NodeJS.ReadableStream>(
+                auth,
+                (cookie) =>
+                    axios.get(`${pymixUrl}/sync/download/${encodeURIComponent(filename)}`, {
+                        headers: { Cookie: cookie },
+                        httpsAgent,
+                        responseType: 'stream',
+                        timeout: 60_000,
+                    }) as Promise<AxiosResponse<NodeJS.ReadableStream>>,
+            ),
+        (err) => run?.networkWait((err as Error).message),
     );
     try {
         await pipeline(response.data, fs.createWriteStream(partial));
@@ -158,9 +166,11 @@ export async function fetchTracks(args: {
     musicPath: string;
     onProgress: (progress: DownloadProgress) => void;
     pymixUrl: string;
+    /** The run's telemetry, told about each track. */
+    run?: DownloadRun;
     signal: AbortSignal;
 }): Promise<FetchTracksResult> {
-    const { auth, entries, jobId, musicPath, onProgress, pymixUrl, signal } = args;
+    const { auth, entries, jobId, musicPath, onProgress, pymixUrl, run, signal } = args;
     const result: FetchTracksResult = { downloaded: [], failed: [], skipped: 0 };
     const bytesTotal = entries.reduce((sum, e) => sum + e.size, 0);
     let bytesDone = 0;
@@ -172,6 +182,7 @@ export async function fetchTracks(args: {
         const now = Date.now();
         if (!force && now - lastReport < 250) return;
         lastReport = now;
+        run?.progress(bytesDone);
         onProgress({
             activeTracks: [...active],
             bytesDone,
@@ -190,15 +201,15 @@ export async function fetchTracks(args: {
             if (signal.aborted) return;
             const dest = destinationFor(musicPath, entry.relativePath);
             if (!dest) {
-                result.failed.push({
-                    reason: 'the server named a path outside the music folder',
-                    relativePath: entry.relativePath,
-                });
+                const reason = 'the server named a path outside the music folder';
+                result.failed.push({ reason, relativePath: entry.relativePath });
+                run?.trackFailed(entry.relativePath, reason);
                 nDone++;
                 continue;
             }
             if (alreadyDownloaded(dest, entry.size)) {
                 result.skipped++;
+                run?.trackSkipped();
                 bytesDone += entry.size;
                 nDone++;
                 report();
@@ -206,7 +217,9 @@ export async function fetchTracks(args: {
             }
             const label = path.basename(entry.relativePath);
             active.add(label);
+            run?.trackActive(label, true);
             report(true);
+            const startedAt = Date.now();
             try {
                 await fetchTrack(
                     auth,
@@ -216,11 +229,14 @@ export async function fetchTracks(args: {
                     dest,
                     (n) => {
                         bytesDone += n;
+                        run?.received(n);
                         report();
                     },
                     signal,
+                    run,
                 );
                 result.downloaded.push(dest);
+                run?.trackDownloaded(entry.relativePath, entry.size, Date.now() - startedAt);
             } catch (err) {
                 if (err instanceof DownloadCancelled || signal.aborted) return;
                 const reason = isAxiosError(err)
@@ -228,8 +244,10 @@ export async function fetchTracks(args: {
                     : (err as Error).message;
                 console.error(`[download] ${entry.relativePath} failed for good: ${reason}`);
                 result.failed.push({ reason, relativePath: entry.relativePath });
+                run?.trackFailed(entry.relativePath, reason);
             } finally {
                 active.delete(label);
+                run?.trackActive(label, false);
                 nDone++;
                 report(true);
             }
@@ -266,16 +284,19 @@ export async function startDownloadJob(
     auth: PymixAuth,
     pymixUrl: string,
     body: unknown,
+    onNetworkRetry?: (err: unknown) => void,
 ): Promise<DownloadJobStatus | null> {
     try {
-        const response = await withNetworkRetry(() =>
-            withPymixAuth<DownloadJobStatus>(auth, (cookie) =>
-                axios.post(`${pymixUrl}/sync/download/jobs`, body, {
-                    headers: { Cookie: cookie },
-                    httpsAgent,
-                    timeout: 60_000,
-                }),
-            ),
+        const response = await withNetworkRetry(
+            () =>
+                withPymixAuth<DownloadJobStatus>(auth, (cookie) =>
+                    axios.post(`${pymixUrl}/sync/download/jobs`, body, {
+                        headers: { Cookie: cookie },
+                        httpsAgent,
+                        timeout: 60_000,
+                    }),
+                ),
+            onNetworkRetry,
         );
         return response.data;
     } catch (err) {
@@ -297,20 +318,23 @@ export async function waitForDownloadJob(
     started: DownloadJobStatus,
     onStatus: (status: DownloadJobStatus) => void,
     signal: AbortSignal,
+    run?: DownloadRun,
 ): Promise<DownloadJobStatus> {
     let status = started;
     for (let poll = 0; status.inProgress; poll++) {
         onStatus(status);
         await sleep(POLL_DELAYS_MS[Math.min(poll, POLL_DELAYS_MS.length - 1)]);
         if (signal.aborted) throw new DownloadCancelled();
-        const response = await withNetworkRetry(() =>
-            withPymixAuth<DownloadJobStatus>(auth, (cookie) =>
-                axios.get(`${pymixUrl}/sync/download/jobs/${status.jobId}`, {
-                    headers: { Cookie: cookie },
-                    httpsAgent,
-                    timeout: 30_000,
-                }),
-            ),
+        const response = await withNetworkRetry(
+            () =>
+                withPymixAuth<DownloadJobStatus>(auth, (cookie) =>
+                    axios.get(`${pymixUrl}/sync/download/jobs/${status.jobId}`, {
+                        headers: { Cookie: cookie },
+                        httpsAgent,
+                        timeout: 30_000,
+                    }),
+                ),
+            (err) => run?.networkWait((err as Error).message),
         );
         status = response.data;
     }
@@ -333,24 +357,30 @@ async function fetchTrack(
     dest: string,
     onBytes: (n: number) => void,
     signal: AbortSignal,
+    run?: DownloadRun,
 ): Promise<void> {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     const partial = dest + PARTIAL_SUFFIX;
     for (let attempt = 1; ; attempt++) {
         let received = 0;
         try {
-            const response = await withNetworkRetry(() =>
-                withPymixAuth<NodeJS.ReadableStream>(
-                    auth,
-                    (cookie) =>
-                        axios.get(`${pymixUrl}/sync/download/jobs/${jobId}/tracks/${entry.index}`, {
-                            headers: { Cookie: cookie },
-                            httpsAgent,
-                            responseType: 'stream',
-                            signal,
-                            timeout: TRACK_IDLE_TIMEOUT_MS,
-                        }) as Promise<AxiosResponse<NodeJS.ReadableStream>>,
-                ),
+            const response = await withNetworkRetry(
+                () =>
+                    withPymixAuth<NodeJS.ReadableStream>(
+                        auth,
+                        (cookie) =>
+                            axios.get(
+                                `${pymixUrl}/sync/download/jobs/${jobId}/tracks/${entry.index}`,
+                                {
+                                    headers: { Cookie: cookie },
+                                    httpsAgent,
+                                    responseType: 'stream',
+                                    signal,
+                                    timeout: TRACK_IDLE_TIMEOUT_MS,
+                                },
+                            ) as Promise<AxiosResponse<NodeJS.ReadableStream>>,
+                    ),
+                (err) => run?.networkWait((err as Error).message),
             );
             const body = response.data as NodeJS.ReadableStream & {
                 destroy?: (err?: Error) => void;
@@ -360,10 +390,7 @@ async function fetchTrack(
             let idle: NodeJS.Timeout | undefined;
             const arm = () => {
                 if (idle) clearTimeout(idle);
-                idle = setTimeout(
-                    () => body.destroy?.(new Error('the transfer stalled')),
-                    TRACK_IDLE_TIMEOUT_MS,
-                );
+                idle = setTimeout(() => body.destroy?.(new Error(STALLED)), TRACK_IDLE_TIMEOUT_MS);
             };
             const counter = new Transform({
                 transform(chunk: Buffer, _encoding, done) {
@@ -393,8 +420,10 @@ async function fetchTrack(
                 // nothing written yet
             }
             if (signal.aborted) throw new DownloadCancelled();
+            if ((err as Error)?.message === STALLED) run?.stalled(entry.relativePath);
             if (attempt >= TRACK_ATTEMPTS || !retryable(err)) throw err;
             const wait = 2_000 * 2 ** (attempt - 1);
+            run?.retried(entry.relativePath, (err as Error).message);
             console.warn(
                 `[download] ${entry.relativePath} failed (${(err as Error).message}), ` +
                     `attempt ${attempt + 1} in ${wait / 1000}s`,
