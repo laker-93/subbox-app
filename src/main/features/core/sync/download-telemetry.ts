@@ -268,7 +268,7 @@ export class DownloadRun {
             `${mb(this.bytesDone)} of ${mb(this.bytesTotal)}`,
             `${mb(this.bytesFetched)} fetched`,
         ];
-        if (this.phase !== 'tracks') parts.push(this.phase);
+        if (!this.finished && this.phase !== 'tracks') parts.push(this.phase);
         if (this.tracksSkipped) parts.push(`${this.tracksSkipped} already here`);
         if (this.tracksFailed) parts.push(`${this.tracksFailed} failed`);
         if (this.retries) parts.push(`${this.retries} retries`);
