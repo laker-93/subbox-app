@@ -1,4 +1,5 @@
 import { closeAllModals } from '@mantine/modals';
+import clsx from 'clsx';
 import { AnimatePresence } from 'motion/react';
 import { CSSProperties, memo, ReactNode, useCallback, useRef, useState } from 'react';
 
@@ -79,7 +80,8 @@ const HeaderPlayButton = ({
     return (
         <div className={styles.playButtonContainer}>
             <DefaultPlayButton
-                className={className}
+                className={clsx(styles.headerPlayButton, className)}
+                iconProps={{ size: 'lg' }}
                 loading={isPlayerFetching}
                 onClick={() => setIsOpen((prev) => !prev)}
                 ref={buttonRef}
@@ -101,7 +103,7 @@ const HeaderPlayButton = ({
     );
 };
 
-const Title = ({ children, order = 1 }: TitleProps) => {
+const Title = ({ children, order = 3 }: TitleProps) => {
     return (
         <TextTitle fw={700} order={order as any} overflow="hidden">
             {children}

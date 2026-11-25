@@ -15,3 +15,9 @@
     align-items: center;
     justify-content: center;
 }
+
+/* Subbox: a smaller header leaves more of the window to the list below it. */
+.play-button-container .header-play-button {
+    width: 2.25rem;
+    height: 2.25rem;
+}

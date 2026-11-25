@@ -53,8 +53,11 @@ export const PlaylistDetailSongListHeader = ({
     const title = usePlaylistTitle(playlistId, detailQuery?.data?.name);
 
     const [collapsed] = useLocalStorage<boolean>({
-        defaultValue: false,
-        key: 'playlist-header-collapsed',
+        // Subbox: collapsed until the user opens it, so the track list starts near
+        // the top of the window. A new key, as the old one already holds `false`
+        // for anyone who has opened a playlist.
+        defaultValue: true,
+        key: 'playlist-header-collapsed-v2',
     });
 
     const player = usePlayer();

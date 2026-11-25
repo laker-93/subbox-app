@@ -19,12 +19,23 @@ export const useItemListColumnResize = ({
     });
 
     const handleColumnResized = useCallback(
-        (columnId: TableColumn, width: number) => {
+        (
+            columnId: TableColumn,
+            width: number,
+            renderedWidths?: Partial<Record<TableColumn, number>>,
+        ) => {
             if (!columns) return;
 
-            const updatedColumns = columns.map((column) =>
-                column.id === columnId ? { ...column, width } : column,
-            );
+            // From an auto-fitting table: keep every column at the width it has on
+            // screen and stop auto-fitting, so this resize only changes this column
+            // (and a wide column scrolls the table rather than squeezing the rest).
+            const freeze = Boolean(renderedWidths) && tableKey === 'main';
+
+            const updatedColumns = columns.map((column) => {
+                if (column.id === columnId) return { ...column, width };
+                const rendered = freeze ? renderedWidths?.[column.id] : undefined;
+                return rendered ? { ...column, width: rendered } : column;
+            });
 
             if (tableKey === 'detail') {
                 type SetListData = Parameters<
@@ -34,6 +45,7 @@ export const useItemListColumnResize = ({
             } else {
                 setList(itemListKey, {
                     table: {
+                        ...(freeze ? { autoFitColumns: false } : {}),
                         columns: updatedColumns,
                     },
                 });
