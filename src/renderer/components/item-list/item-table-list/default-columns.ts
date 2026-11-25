@@ -137,7 +137,7 @@ export const SONG_TABLE_COLUMNS: DefaultTableColumn[] = [
         label: i18n.t('table.config.label.year', { postProcess: 'titleCase' }),
         pinned: null,
         value: TableColumn.YEAR,
-        width: 80,
+        width: 90,
     },
     {
         align: 'center',
@@ -357,12 +357,23 @@ export const DJ_DEFAULT_COLUMNS: readonly TableColumn[] = [TableColumn.DJ_KEY, T
  * eight pads and a count, "Rekordbox", a BPM. Narrower than this, a DJ column says
  * nothing, and BPM squeezed to "1…" beside them was no better.
  */
+// Auto-fit never squeezes a column below these; once they no longer fit, the table
+// scrolls sideways instead of turning every cell into an ellipsis.
 export const AUTO_FIT_MIN_WIDTHS: Partial<Record<TableColumn, number>> = {
+    [TableColumn.ALBUM]: 120,
+    [TableColumn.ALBUM_ARTIST]: 120,
+    [TableColumn.ARTIST]: 120,
     [TableColumn.BPM]: 64,
     [TableColumn.DJ_CUES]: 72,
     [TableColumn.DJ_GRID]: 64,
     [TableColumn.DJ_KEY]: 90,
     [TableColumn.DJ_SOURCE]: 90,
+    [TableColumn.DURATION]: 64,
+    [TableColumn.GENRE]: 90,
+    [TableColumn.ROW_INDEX]: 44,
+    [TableColumn.TITLE]: 180,
+    [TableColumn.TITLE_COMBINED]: 180,
+    [TableColumn.YEAR]: 70,
 };
 
 export const PLAYLIST_SONG_TABLE_COLUMNS: DefaultTableColumn[] = SONG_TABLE_COLUMNS;

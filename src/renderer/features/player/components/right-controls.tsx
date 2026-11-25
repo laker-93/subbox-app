@@ -6,31 +6,24 @@ import { usePlayerbarSong } from '/@/renderer/features/dj/prep/prep-session.stor
 import { PopoverPlayQueue } from '/@/renderer/features/now-playing/components/popover-play-queue';
 import { PlayerConfig } from '/@/renderer/features/player/components/player-config';
 import { CustomPlayerbarSlider } from '/@/renderer/features/player/components/playerbar-slider';
-import { SleepTimerButton } from '/@/renderer/features/player/components/sleep-timer-button';
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { useSetRating } from '/@/renderer/features/shared/hooks/use-set-rating';
 import { useCreateFavorite } from '/@/renderer/features/shared/mutations/create-favorite-mutation';
 import { useDeleteFavorite } from '/@/renderer/features/shared/mutations/delete-favorite-mutation';
 import {
     useAppStoreActions,
-    useAutoDJSettings,
     useCurrentServer,
-    useFullScreenPlayerStore,
     useGeneralSettings,
     useHotkeySettings,
     usePlayerData,
     usePlayerMuted,
     usePlayerVolume,
-    useSetFullScreenPlayerStore,
-    useSettingsStoreActions,
     useSidebarRightExpanded,
     useSideQueueType,
     useVolumeWheelStep,
     useVolumeWidth,
 } from '/@/renderer/store';
-import { useFullScreenPlayerStoreActions } from '/@/renderer/store/full-screen-player.store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
-import { Button } from '/@/shared/components/button/button';
 import { Flex } from '/@/shared/components/flex/flex';
 import { Group } from '/@/shared/components/group/group';
 import { Rating } from '/@/shared/components/rating/rating';
@@ -68,50 +61,15 @@ export const RightControls = () => {
     const { showRatings } = useGeneralSettings();
     return (
         <Flex align="flex-end" direction="column" h="100%" px="1rem" py="0.5rem">
-            <Group h="calc(100% / 3)">
-                {showRatings && <RatingButton />}
-                <AutoDJButton />
-            </Group>
+            <Group h="calc(100% / 3)">{showRatings && <RatingButton />}</Group>
             <Group align="center" gap="xs" wrap="nowrap">
-                <SleepTimerButton />
                 <PlayerConfig />
-                <LyricsButton />
                 <FavoriteButton />
                 <QueueButton />
                 <VolumeButton />
             </Group>
             <Group h="calc(100% / 3)" />
         </Flex>
-    );
-};
-
-const AutoDJButton = () => {
-    const { t } = useTranslation();
-    const settings = useAutoDJSettings();
-    const { setSettings } = useSettingsStoreActions();
-
-    const toggleAutoDJ = () => {
-        setSettings({
-            autoDJ: {
-                ...settings,
-                enabled: !settings.enabled,
-            },
-        });
-    };
-
-    return (
-        <Button
-            onClick={(e) => {
-                e.stopPropagation();
-                toggleAutoDJ();
-            }}
-            size="compact-xs"
-            style={{ color: settings.enabled ? 'var(--theme-colors-primary)' : undefined }}
-            uppercase
-            variant="transparent"
-        >
-            {t('setting.autoDJ')}
-        </Button>
     );
 };
 
@@ -175,40 +133,6 @@ const QueueButton = () => {
                 handleToggleQueue();
             }}
             opened={popoverOpened}
-        />
-    );
-};
-
-const LyricsButton = () => {
-    const setFullScreenPlayerStore = useSetFullScreenPlayerStore();
-    const activeTab = useFullScreenPlayerStore((state) => state.activeTab);
-
-    const { setStore } = useFullScreenPlayerStoreActions();
-    const { expanded: isFullScreenPlayerExpanded } = useFullScreenPlayerStore();
-
-    const expandFullScreenPlayer = () => {
-        setFullScreenPlayerStore({ expanded: !isFullScreenPlayerExpanded });
-    };
-
-    return (
-        <ActionIcon
-            icon="microphone"
-            iconProps={{
-                color: activeTab === 'lyrics' && isFullScreenPlayerExpanded ? 'primary' : undefined,
-                size: 'lg',
-            }}
-            onClick={(e) => {
-                e.stopPropagation();
-                if (!isFullScreenPlayerExpanded) setStore({ activeTab: 'lyrics' });
-                expandFullScreenPlayer();
-            }}
-            role="button"
-            size="sm"
-            tooltip={{
-                label: t('player.lyrics', { postProcess: 'titleCase' }),
-                openDelay: 0,
-            }}
-            variant="subtle"
         />
     );
 };

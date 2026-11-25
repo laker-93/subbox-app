@@ -1164,9 +1164,9 @@ const initialState: SettingsState = {
         primaryShade: 6,
         qobuz: true,
         resume: true,
-        showLyricsInSidebar: true,
+        showLyricsInSidebar: false,
         showRatings: true,
-        showVisualizerInSidebar: true,
+        showVisualizerInSidebar: false,
         sidebarCollapsedNavigation: true,
         sidebarCollapseShared: false,
         sidebarItems,
@@ -2565,7 +2565,7 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                         [TableColumn.DURATION]: [100, 70],
                         [TableColumn.GENRE]: [300, 150],
                         [TableColumn.ROW_INDEX]: [60, 50],
-                        [TableColumn.YEAR]: [200, 80],
+                        [TableColumn.YEAR]: [200, 90],
                     };
 
                     Object.entries(state.lists).forEach(([key, listConfig]) => {
@@ -2608,10 +2608,20 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     });
                 }
 
+                if (version <= 33) {
+                    // Subbox: the side queue is just the queue (the lyrics and
+                    // visualizer panes can be turned back on in settings), and Auto DJ
+                    // is gone from the UI, so it must not keep running for anyone who
+                    // had it on.
+                    state.general.showLyricsInSidebar = false;
+                    state.general.showVisualizerInSidebar = false;
+                    if (state.autoDJ) state.autoDJ.enabled = false;
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 33,
+            version: 34,
         },
     ),
 );

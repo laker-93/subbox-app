@@ -344,7 +344,7 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                     leftWidth: '280px',
                     rightExpanded: false,
                     rightHeight: '320px',
-                    rightWidth: '600px',
+                    rightWidth: '420px',
                 },
                 titlebar: {
                     backgroundColor: '#000000',
@@ -389,6 +389,12 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                     }
                 }
 
+                if (version <= 7 && state.sidebar?.rightWidth === '600px') {
+                    // Subbox: a narrower queue panel at the old default, so the track
+                    // table beside it keeps room for its columns.
+                    state.sidebar.rightWidth = '420px';
+                }
+
                 return state;
             },
             name: 'store_app',
@@ -397,7 +403,7 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                 const { globalExpanded: _, ...rest } = state;
                 return rest;
             },
-            version: 7,
+            version: 8,
         },
     ),
 );
