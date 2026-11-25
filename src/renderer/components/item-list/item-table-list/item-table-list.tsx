@@ -1590,8 +1590,7 @@ const BaseItemTableList = ({
                 onColumnResized(columnId, width);
                 return;
             }
-            const { calculatedColumnWidths: widths, parsedColumns: cols } =
-                columnWidthsRef.current;
+            const { calculatedColumnWidths: widths, parsedColumns: cols } = columnWidthsRef.current;
             const renderedWidths: Partial<Record<TableColumn, number>> = {};
             cols.forEach((col, index) => {
                 renderedWidths[col.id] = widths[index];
