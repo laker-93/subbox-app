@@ -1,31 +1,20 @@
 import { openContextModal } from '@mantine/modals';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import Fuse from 'fuse.js';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { api } from '/@/renderer/api';
-import { queryKeys } from '/@/renderer/api/query-keys';
-import {
-    getAlbumArtistSongsById,
-    getAlbumSongsById,
-    getGenreSongsById,
-    getPlaylistSongsById,
-    getSongsByFolder,
-} from '/@/renderer/features/player/utils';
 import { PlaylistPath } from '/@/renderer/features/playlist-tree/components/playlist-path';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
+import { useAddItemsToPlaylist } from '/@/renderer/features/playlists/hooks/use-add-items-to-playlist';
 import { useRecentPlaylists } from '/@/renderer/features/playlists/hooks/use-recent-playlists';
-import { useAddToPlaylist } from '/@/renderer/features/playlists/mutations/add-to-playlist-mutation';
 import { useCurrentServer, useCurrentServerId } from '/@/renderer/store';
 import { Checkbox } from '/@/shared/components/checkbox/checkbox';
 import { ContextMenu } from '/@/shared/components/context-menu/context-menu';
 import { Icon } from '/@/shared/components/icon/icon';
 import { Spinner } from '/@/shared/components/spinner/spinner';
 import { TextInput } from '/@/shared/components/text-input/text-input';
-import { toast } from '/@/shared/components/toast/toast';
 import { Tooltip } from '/@/shared/components/tooltip/tooltip';
-import { useLocalStorage } from '/@/shared/hooks/use-local-storage';
 import { LibraryItem, PlaylistListSort, SortOrder } from '/@/shared/types/domain-types';
 
 interface AddToPlaylistActionProps {
@@ -37,13 +26,8 @@ export const AddToPlaylistAction = ({ items, itemType }: AddToPlaylistActionProp
     const { t } = useTranslation();
     const server = useCurrentServer();
     const serverId = useCurrentServerId();
-    const queryClient = useQueryClient();
     const [searchTerm, setSearchTerm] = useState('');
-    const [skipDuplicates, setSkipDuplicates] = useLocalStorage({
-        defaultValue: true,
-        key: 'playlist-skip-duplicate',
-    });
-    const addToPlaylistMutation = useAddToPlaylist({});
+    const { addItemsToPlaylist, setSkipDuplicates, skipDuplicates } = useAddItemsToPlaylist();
 
     const playlistsQuery = useQuery(
         playlistsQueries.list({
@@ -102,209 +86,9 @@ export const AddToPlaylistAction = ({ items, itemType }: AddToPlaylistActionProp
         return recentPlaylistId ? filtered.filter((p) => p.id !== recentPlaylistId) : filtered;
     }, [playlists, searchTerm, fuse, recentPlaylistId]);
 
-    const getSongsByAlbum = useCallback(
-        async (albumId: string) => {
-            return getAlbumSongsById({
-                id: [albumId],
-                queryClient,
-                serverId,
-            });
-        },
-        [queryClient, serverId],
-    );
-
-    const getSongsByArtist = useCallback(
-        async (artistId: string) => {
-            return getAlbumArtistSongsById({
-                id: [artistId],
-                queryClient,
-                serverId,
-            });
-        },
-        [queryClient, serverId],
-    );
-
-    const getSongsByGenre = useCallback(
-        async (genreIds: string[]) => {
-            return getGenreSongsById({
-                id: genreIds,
-                queryClient,
-                serverId,
-            });
-        },
-        [queryClient, serverId],
-    );
-
-    const getSongsByPlaylist = useCallback(
-        async (playlistId: string) => {
-            return getPlaylistSongsById({
-                id: playlistId,
-                queryClient,
-                serverId,
-            });
-        },
-        [queryClient, serverId],
-    );
-
-    const getSongsByFolderLocal = useCallback(
-        async (folderId: string) => {
-            if (!server) return null;
-
-            const songsResponse = await getSongsByFolder({
-                id: [folderId],
-                queryClient,
-                serverId: server.id,
-            });
-
-            return {
-                items: songsResponse.items.map((song) => song.id),
-                startIndex: 0,
-                totalRecordCount: songsResponse.items.length,
-            };
-        },
-        [queryClient, server],
-    );
-
     const handleAddToPlaylist = useCallback(
-        async (playlistId: string) => {
-            if (items.length === 0 || !serverId) return;
-
-            try {
-                let allSongIds: string[] = [];
-
-                if (itemType === LibraryItem.SONG || itemType === LibraryItem.PLAYLIST_SONG) {
-                    allSongIds = items;
-                } else if (itemType === LibraryItem.ALBUM) {
-                    for (const id of items) {
-                        const songs = await getSongsByAlbum(id);
-                        allSongIds.push(...(songs?.items?.map((song) => song.id) || []));
-                    }
-                } else if (
-                    itemType === LibraryItem.ALBUM_ARTIST ||
-                    itemType === LibraryItem.ARTIST
-                ) {
-                    for (const id of items) {
-                        const songs = await getSongsByArtist(id);
-                        allSongIds.push(...(songs?.items?.map((song) => song.id) || []));
-                    }
-                } else if (itemType === LibraryItem.GENRE) {
-                    const songs = await getSongsByGenre(items);
-                    allSongIds.push(...(songs?.items?.map((song) => song.id) || []));
-                } else if (itemType === LibraryItem.PLAYLIST) {
-                    for (const id of items) {
-                        const songs = await getSongsByPlaylist(id);
-                        allSongIds.push(...(songs?.items?.map((song) => song.id) || []));
-                    }
-                } else if (itemType === LibraryItem.FOLDER) {
-                    for (const id of items) {
-                        const songs = await getSongsByFolderLocal(id);
-                        allSongIds.push(...(songs?.items || []));
-                    }
-                }
-
-                if (allSongIds.length === 0) {
-                    toast.success({
-                        message: t('form.addToPlaylist.success', {
-                            message: 0,
-                            numOfPlaylists: 1,
-                            postProcess: 'sentenceCase',
-                        }),
-                    });
-                    return;
-                }
-
-                let songsToAdd: string[] = allSongIds;
-
-                if (skipDuplicates) {
-                    const queryKey = queryKeys.playlists.songList(serverId, playlistId);
-
-                    const playlistSongsRes = await queryClient.fetchQuery({
-                        queryFn: ({ signal }) => {
-                            return api.controller.getPlaylistSongList({
-                                apiClientProps: {
-                                    serverId,
-                                    signal,
-                                },
-                                query: {
-                                    id: playlistId,
-                                },
-                            });
-                        },
-                        queryKey,
-                    });
-
-                    const playlistSongIds = playlistSongsRes?.items?.map((song) => song.id);
-                    const uniqueSongIds: string[] = [];
-
-                    for (const songId of allSongIds) {
-                        if (!playlistSongIds?.includes(songId)) {
-                            uniqueSongIds.push(songId);
-                        }
-                    }
-
-                    songsToAdd = uniqueSongIds;
-                }
-
-                if (songsToAdd.length === 0) {
-                    toast.success({
-                        message: t('form.addToPlaylist.success', {
-                            message: 0,
-                            numOfPlaylists: 1,
-                            postProcess: 'sentenceCase',
-                        }),
-                    });
-                    return;
-                }
-
-                addToPlaylistMutation.mutate(
-                    {
-                        apiClientProps: { serverId },
-                        body: {
-                            songId: songsToAdd,
-                        },
-                        query: {
-                            id: playlistId,
-                        },
-                    },
-                    {
-                        onError: (err) => {
-                            toast.error({
-                                message: err.message,
-                                title: t('error.genericError', { postProcess: 'sentenceCase' }),
-                            });
-                        },
-                        onSuccess: () => {},
-                    },
-                );
-
-                toast.success({
-                    message: t('form.addToPlaylist.success', {
-                        message: songsToAdd.length,
-                        numOfPlaylists: 1,
-                        postProcess: 'sentenceCase',
-                    }),
-                });
-            } catch (error) {
-                toast.error({
-                    message: (error as Error).message,
-                    title: t('error.genericError', { postProcess: 'sentenceCase' }),
-                });
-            }
-        },
-        [
-            addToPlaylistMutation,
-            getSongsByAlbum,
-            getSongsByArtist,
-            getSongsByFolderLocal,
-            getSongsByGenre,
-            getSongsByPlaylist,
-            itemType,
-            items,
-            queryClient,
-            serverId,
-            skipDuplicates,
-            t,
-        ],
+        (playlistId: string) => addItemsToPlaylist(playlistId, items, itemType),
+        [addItemsToPlaylist, itemType, items],
     );
 
     const handleOpenModal = useCallback(() => {
