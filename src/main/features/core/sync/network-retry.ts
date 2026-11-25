@@ -127,8 +127,14 @@ export async function waitForServer(url: string, timeoutMs = CONNECTION_WAIT_MS)
     }
 }
 
-/** Run `request`, retrying it with backoff while it fails with a network error. */
-export async function withNetworkRetry<T>(request: () => Promise<T>): Promise<T> {
+/**
+ * Run `request`, retrying it with backoff while it fails with a network error.
+ * `onRetry` hears about each retry, for a run's telemetry.
+ */
+export async function withNetworkRetry<T>(
+    request: () => Promise<T>,
+    onRetry?: (err: unknown) => void,
+): Promise<T> {
     for (let attempt = 0; ; attempt++) {
         try {
             return await request();
@@ -138,6 +144,7 @@ export async function withNetworkRetry<T>(request: () => Promise<T>): Promise<T>
                 `[network] request failed (${(err as Error).message}), retry ${attempt + 1} in ` +
                     `${REQUEST_RETRY_DELAYS_MS[attempt] / 1000}s`,
             );
+            onRetry?.(err);
             await sleep(REQUEST_RETRY_DELAYS_MS[attempt]);
         }
     }

@@ -13,6 +13,7 @@ import { getStoredPassword, store } from '/@/main/features/core/settings';
 import {
     alreadyDownloaded,
     destinationFor,
+    DownloadCancelled,
     DownloadProgress,
     fetchDownloadsFile,
     fetchTracks,
@@ -20,6 +21,7 @@ import {
     startDownloadJob,
     waitForDownloadJob,
 } from '/@/main/features/core/sync/download-job';
+import { DownloadRun } from '/@/main/features/core/sync/download-telemetry';
 import { resolveExtractDestination } from '/@/main/features/core/sync/export-zip-layout';
 import { extractTrackName } from '/@/main/features/core/sync/extract-track-name';
 import {
@@ -1270,6 +1272,9 @@ handleKeepingAwake(
             if (job) {
                 const abort = new AbortController();
                 activeDownload = abort;
+                // What pymix and the log hear about this run (POST /sync/download_report).
+                const run = new DownloadRun({ pymixAuth, pymixUrl });
+                run.start(job.jobId);
                 const sendProgress = (progress: DownloadProgress) => {
                     if (!event.sender.isDestroyed()) {
                         event.sender.send('sync:download-progress', progress);
@@ -1296,6 +1301,7 @@ handleKeepingAwake(
                                 tracksSkipped: 0,
                             }),
                         abort.signal,
+                        run,
                     );
 
                     // As below: pymix wrote their new paths into this download.
@@ -1305,6 +1311,10 @@ handleKeepingAwake(
 
                     const musicPath = getMusicPath();
                     const entries = ready.tracks ?? [];
+                    run.prepared({
+                        bytesTotal: entries.reduce((sum, entry) => sum + entry.size, 0),
+                        tracksTotal: entries.length,
+                    });
                     // Only what isn't already here, and no x2 for an unzip any more.
                     const needed = entries
                         .filter((entry) => {
@@ -1329,6 +1339,7 @@ handleKeepingAwake(
                         musicPath,
                         onProgress: sendProgress,
                         pymixUrl,
+                        run,
                         signal: abort.signal,
                     });
                     // pymix tagged these files before listing them: cache their ids
@@ -1337,18 +1348,21 @@ handleKeepingAwake(
 
                     let xmlPath: string | undefined;
                     if (ready.xmlFilename) {
+                        run.xml();
                         ensureXmlDir();
                         await fetchDownloadsFile(
                             pymixAuth,
                             pymixUrl,
                             ready.xmlFilename,
                             xmlDestPath,
+                            run,
                         );
                         xmlPath = xmlDestPath;
                     }
 
                     if (fetched.failed.length > 0) {
                         const n = fetched.failed.length;
+                        run.finish('partial', `${n} of ${entries.length} tracks failed`);
                         throw new Error(
                             `${n} of ${entries.length} ${entries.length === 1 ? 'track' : 'tracks'} ` +
                                 `didn't download (${fetched.failed[0].relativePath}: ` +
@@ -1361,6 +1375,7 @@ handleKeepingAwake(
                         `[download] job ${ready.jobId}: ${fetched.downloaded.length} downloaded, ` +
                             `${fetched.skipped} already here`,
                     );
+                    run.finish('completed');
                     return {
                         musicPath,
                         tracksExported: entries.length,
@@ -1368,6 +1383,10 @@ handleKeepingAwake(
                         warnings: ready.warnings || undefined,
                         xmlPath,
                     };
+                } catch (err) {
+                    // A no-op after `partial`: the first finish wins.
+                    run.finish(err instanceof DownloadCancelled ? 'cancelled' : 'failed', err);
+                    throw err;
                 } finally {
                     if (activeDownload === abort) activeDownload = null;
                 }
