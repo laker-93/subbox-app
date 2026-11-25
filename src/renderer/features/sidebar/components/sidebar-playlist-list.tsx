@@ -1,4 +1,3 @@
-import { openContextModal } from '@mantine/modals';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { memo, MouseEvent, useCallback, useMemo, useState } from 'react';
@@ -12,6 +11,7 @@ import { ContextMenuController } from '/@/renderer/features/context-menu/context
 import { usePlayer } from '/@/renderer/features/player/context/player-context';
 import { playlistsQueries } from '/@/renderer/features/playlists/api/playlists-api';
 import { openCreatePlaylistModal } from '/@/renderer/features/playlists/components/create-playlist-form';
+import { useAddItemsToPlaylist } from '/@/renderer/features/playlists/hooks/use-add-items-to-playlist';
 import {
     LONG_PRESS_PLAY_BEHAVIOR,
     PlayTooltip,
@@ -66,6 +66,7 @@ export const PlaylistRowButton = memo(
         };
         const { t } = useTranslation();
         const sidebarPlaylistSorting = useSidebarPlaylistSorting();
+        const { addItemsToPlaylist } = useAddItemsToPlaylist();
 
         const [isHovered, setIsHovered] = useState(false);
 
@@ -138,55 +139,18 @@ export const PlaylistRowButton = memo(
                         return;
                     }
 
-                    const modalProps: {
-                        albumId?: string[];
-                        artistId?: string[];
-                        folderId?: string[];
-                        genreId?: string[];
-                        initialSelectedIds?: string[];
-                        playlistId?: string[];
-                        songId?: string[];
-                    } = {
-                        initialSelectedIds: [to],
-                    };
-
-                    switch (sourceItemType) {
-                        case LibraryItem.ALBUM:
-                            modalProps.albumId = sourceIds;
-                            break;
-                        case LibraryItem.ALBUM_ARTIST:
-                        case LibraryItem.ARTIST:
-                            modalProps.artistId = sourceIds;
-                            break;
-                        case LibraryItem.FOLDER:
-                            modalProps.folderId = sourceIds;
-                            break;
-                        case LibraryItem.GENRE:
-                            modalProps.genreId = sourceIds;
-                            break;
-                        case LibraryItem.PLAYLIST:
-                            modalProps.playlistId = sourceIds;
-                            break;
-                        case LibraryItem.PLAYLIST_SONG:
-                        case LibraryItem.QUEUE_SONG:
-                        case LibraryItem.SONG:
-                            if (args.source.item && Array.isArray(args.source.item)) {
-                                const songs = args.source.item as Song[];
-                                modalProps.songId = songs.map((song) => song.id);
-                            } else {
-                                modalProps.songId = sourceIds;
-                            }
-                            break;
-                        default:
-                            return;
-                    }
-
-                    openContextModal({
-                        innerProps: modalProps,
-                        modalKey: 'addToPlaylist',
-                        size: 'lg',
-                        title: t('form.addToPlaylist.title', { postProcess: 'titleCase' }),
-                    });
+                    // Dropping onto a playlist names the target already, so add
+                    // straight away (as the context menu's submenu does) rather than
+                    // opening the add-to-playlist modal to pick it again.
+                    const songIds =
+                        Array.isArray(args.source.item) &&
+                        args.source.item.length > 0 &&
+                        (sourceItemType === LibraryItem.SONG ||
+                            sourceItemType === LibraryItem.PLAYLIST_SONG ||
+                            sourceItemType === LibraryItem.QUEUE_SONG)
+                            ? (args.source.item as Song[]).map((song) => song.id)
+                            : sourceIds;
+                    void addItemsToPlaylist(to, songIds, sourceItemType);
                 },
             },
             isEnabled: true,
