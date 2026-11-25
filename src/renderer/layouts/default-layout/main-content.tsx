@@ -240,18 +240,30 @@ function MainContentBody() {
 
     return (
         <div className={styles.mainContentBody}>
-            <ModeToggle />
+            {appMode === 'sync' && <ModeToggle />}
             {/* Above the scroll container, not inside it: the demo ask has to stay
                 visible while someone browses, which is the whole point of showing it. */}
             <DemoBanner />
-            <div className={styles.mainContentBodyScroll}>
-                {appMode === 'sync' ? (
-                    <SyncModePlaceholder />
-                ) : (
-                    <Suspense fallback={<Spinner container />}>
-                        <Outlet />
-                    </Suspense>
+            <div
+                className={styles.mainContentBodyFrame}
+                data-mode-toggle={appMode === 'library' ? 'true' : undefined}
+            >
+                {/* Library mode: the toggle sits in the page header's row, which keeps
+                    room for it (PageHeader), instead of taking a row of its own. */}
+                {appMode === 'library' && (
+                    <div className={styles.modeToggleOverlay}>
+                        <ModeToggle />
+                    </div>
                 )}
+                <div className={styles.mainContentBodyScroll}>
+                    {appMode === 'sync' ? (
+                        <SyncModePlaceholder />
+                    ) : (
+                        <Suspense fallback={<Spinner container />}>
+                            <Outlet />
+                        </Suspense>
+                    )}
+                </div>
             </div>
             {appMode === 'library' && <GlobalExpandedPanel />}
         </div>

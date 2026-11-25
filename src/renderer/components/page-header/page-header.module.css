@@ -3,7 +3,7 @@
     z-index: 190;
     visibility: hidden;
     width: 100%;
-    height: 65px;
+    height: 52px;
     overflow: hidden;
     pointer-events: none;
     background: var(--theme-colors-background);
@@ -98,6 +98,10 @@
     width: 100%;
     height: 100%;
     padding: var(--theme-spacing-sm);
+
+    /* Room for the Library/Sync toggle that sits over this row (main-content sets
+       the variable in library mode only). */
+    padding-right: calc(var(--theme-spacing-sm) + var(--mode-toggle-reserve, 0px));
 }
 
 .title-wrapper.hidden {

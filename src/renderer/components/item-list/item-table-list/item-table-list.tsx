@@ -98,6 +98,15 @@ const hasRequiredStateItemProperties = (
     );
 };
 
+// Compact rows for a table with no two-line column: one line of text per track, as
+// in Rekordbox/Serato.
+const DENSE_ROW_HEIGHT = 30;
+const TWO_LINE_COLUMNS = new Set<TableColumn>([
+    TableColumn.ALBUM_GROUP,
+    TableColumn.TITLE_ARTIST,
+    TableColumn.TITLE_COMBINED,
+]);
+
 export enum TableItemSize {
     COMPACT = 40,
     DEFAULT = 64,
@@ -882,7 +891,15 @@ interface ItemTableListProps {
         columnIdTo: TableColumn,
         edge: 'bottom' | 'left' | 'right' | 'top' | null,
     ) => void;
-    onColumnResized?: (columnId: TableColumn, width: number) => void;
+    /**
+     * `renderedWidths` is set when the table was auto-fitting: every column's width on
+     * screen at the moment of the resize, so the caller can keep them as they are.
+     */
+    onColumnResized?: (
+        columnId: TableColumn,
+        width: number,
+        renderedWidths?: Partial<Record<TableColumn, number>>,
+    ) => void;
     onRangeChanged?: (range: { startIndex: number; stopIndex: number }) => void;
     onScrollEnd?: (offset: number, internalState: ItemListStateActions) => void;
     overrideControls?: Partial<ItemControls>;
@@ -1440,11 +1457,19 @@ const BaseItemTableList = ({
         setShowTopShadow,
     });
 
+    const compactRowHeight = useMemo(
+        () =>
+            parsedColumns.some((col) => TWO_LINE_COLUMNS.has(col.id))
+                ? TableItemSize.COMPACT
+                : DENSE_ROW_HEIGHT,
+        [parsedColumns],
+    );
+
     const getRowHeight = useCallback(
         (index: number, cellProps: TableItemProps) => {
             const height =
                 size === 'compact'
-                    ? TableItemSize.COMPACT
+                    ? compactRowHeight
                     : size === 'large'
                       ? TableItemSize.LARGE
                       : TableItemSize.DEFAULT;
@@ -1459,7 +1484,7 @@ const BaseItemTableList = ({
 
             return baseHeight;
         },
-        [enableHeader, headerHeight, rowHeight, pinnedRowCount, size],
+        [compactRowHeight, enableHeader, headerHeight, rowHeight, pinnedRowCount, size],
     );
 
     // Create a wrapper for getRowHeight that doesn't require cellProps (for sticky group rows hook)
@@ -1467,7 +1492,7 @@ const BaseItemTableList = ({
         (index: number) => {
             const height =
                 size === 'compact'
-                    ? TableItemSize.COMPACT
+                    ? compactRowHeight
                     : size === 'large'
                       ? TableItemSize.LARGE
                       : TableItemSize.DEFAULT;
@@ -1481,7 +1506,7 @@ const BaseItemTableList = ({
 
             return baseHeight;
         },
-        [enableHeader, headerHeight, rowHeight, pinnedRowCount, size],
+        [compactRowHeight, enableHeader, headerHeight, rowHeight, pinnedRowCount, size],
     );
 
     const getDataFn = useCallback(() => {
@@ -1552,9 +1577,31 @@ const BaseItemTableList = ({
         scrollToTableOffset,
     });
 
+    // Under auto-fit a column's stored width is only a share of the view, so widening
+    // one squeezes the others and the total can never outgrow the view. A resize hands
+    // the caller what is on screen instead, so it can switch to fixed widths.
+    const columnWidthsRef = useRef({ calculatedColumnWidths, parsedColumns });
+    columnWidthsRef.current = { calculatedColumnWidths, parsedColumns };
+
+    const handleColumnResized = useMemo(() => {
+        if (!onColumnResized) return undefined;
+        return (columnId: TableColumn, width: number) => {
+            if (!autoFitColumns) {
+                onColumnResized(columnId, width);
+                return;
+            }
+            const { calculatedColumnWidths: widths, parsedColumns: cols } = columnWidthsRef.current;
+            const renderedWidths: Partial<Record<TableColumn, number>> = {};
+            cols.forEach((col, index) => {
+                renderedWidths[col.id] = widths[index];
+            });
+            onColumnResized(columnId, width, renderedWidths);
+        };
+    }, [autoFitColumns, onColumnResized]);
+
     const controls = useDefaultItemListControls({
         onColumnReordered,
-        onColumnResized,
+        onColumnResized: handleColumnResized,
         overrides: overrideControls,
     });
 

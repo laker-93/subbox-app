@@ -62,8 +62,32 @@
     overflow: hidden;
 }
 
+.main-content-body-frame {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.main-content-body-frame[data-mode-toggle='true'] {
+    /* Read by page headers, which leave this much room on their right. */
+    --mode-toggle-reserve: 120px;
+}
+
 .main-content-body-scroll {
     flex: 1;
     min-height: 0;
     overflow: auto;
+}
+
+/* Library/Sync toggle, over the right end of the page header (same height). */
+.mode-toggle-overlay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    height: 52px;
 }

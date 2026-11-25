@@ -1164,9 +1164,9 @@ const initialState: SettingsState = {
         primaryShade: 6,
         qobuz: true,
         resume: true,
-        showLyricsInSidebar: true,
+        showLyricsInSidebar: false,
         showRatings: true,
-        showVisualizerInSidebar: true,
+        showVisualizerInSidebar: false,
         sidebarCollapsedNavigation: true,
         sidebarCollapseShared: false,
         sidebarItems,
@@ -1730,7 +1730,7 @@ const initialState: SettingsState = {
                 size: 'default',
             },
             itemsPerPage: 100,
-            pagination: ListPaginationType.PAGINATED,
+            pagination: ListPaginationType.INFINITE,
             table: {
                 autoFitColumns: true,
                 columns: SONG_TABLE_COLUMNS.map((column) => ({
@@ -2552,10 +2552,86 @@ export const useSettingsStore = createWithEqualityFn<SettingsSlice>()(
                     });
                 }
 
+                if (version <= 32) {
+                    // Subbox: denser track tables, closer to Rekordbox/Serato. A song
+                    // table showing the two-line Title (artwork + title + artist) gets
+                    // one-line Title and Artist columns in its place, which lets its
+                    // rows drop to the short height. Widths still at the old defaults
+                    // shrink to the new ones; a width the user has set is kept. The
+                    // queues keep the combined column.
+                    const oldToNewWidth: Partial<Record<TableColumn, [number, number]>> = {
+                        [TableColumn.ALBUM]: [300, 220],
+                        [TableColumn.BPM]: [100, 70],
+                        [TableColumn.DURATION]: [100, 70],
+                        [TableColumn.GENRE]: [300, 150],
+                        [TableColumn.ROW_INDEX]: [60, 50],
+                        [TableColumn.YEAR]: [200, 90],
+                    };
+
+                    Object.entries(state.lists).forEach(([key, listConfig]) => {
+                        if (key === 'sideQueue' || key === 'fullScreen') return;
+                        const table = (listConfig as ItemListSettings)?.table;
+                        const columns = table?.columns;
+                        if (!columns) return;
+
+                        const combinedIndex = columns.findIndex(
+                            (col) => col.id === TableColumn.TITLE_COMBINED && col.isEnabled,
+                        );
+                        const titleIndex = columns.findIndex((col) => col.id === TableColumn.TITLE);
+                        if (combinedIndex === -1 || titleIndex === -1) return;
+                        if (columns[titleIndex].isEnabled) return;
+
+                        const combined = columns[combinedIndex];
+                        combined.isEnabled = false;
+
+                        const [title] = columns.splice(titleIndex, 1);
+                        title.isEnabled = true;
+                        title.width = combined.width;
+                        title.pinned = combined.pinned;
+                        const insertAt = columns.indexOf(combined);
+                        columns.splice(insertAt, 0, title);
+
+                        const artistIndex = columns.findIndex(
+                            (col) => col.id === TableColumn.ARTIST,
+                        );
+                        if (artistIndex !== -1 && !columns[artistIndex].isEnabled) {
+                            const [artist] = columns.splice(artistIndex, 1);
+                            artist.isEnabled = true;
+                            if (artist.width === 300) artist.width = 220;
+                            columns.splice(columns.indexOf(title) + 1, 0, artist);
+                        }
+
+                        columns.forEach((col) => {
+                            const widths = oldToNewWidth[col.id];
+                            if (widths && col.width === widths[0]) col.width = widths[1];
+                        });
+                    });
+                }
+
+                if (version <= 33) {
+                    // Subbox: the side queue is just the queue (the lyrics and
+                    // visualizer panes can be turned back on in settings), and Auto DJ
+                    // is gone from the UI, so it must not keep running for anyone who
+                    // had it on.
+                    state.general.showLyricsInSidebar = false;
+                    state.general.showVisualizerInSidebar = false;
+                    if (state.autoDJ) state.autoDJ.enabled = false;
+                }
+
+                if (version <= 34) {
+                    // Subbox: Tracks scrolls through the whole library, as in
+                    // Rekordbox/Serato, instead of paging 100 at a time. The table
+                    // settings can switch it back.
+                    const songList = state.lists[LibraryItem.SONG] as ItemListSettings | undefined;
+                    if (songList?.pagination === ListPaginationType.PAGINATED) {
+                        songList.pagination = ListPaginationType.INFINITE;
+                    }
+                }
+
                 return persistedState;
             },
             name: 'store_settings',
-            version: 32,
+            version: 35,
         },
     ),
 );

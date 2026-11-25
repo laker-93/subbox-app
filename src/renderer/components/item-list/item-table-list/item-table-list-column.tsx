@@ -758,7 +758,9 @@ const ColumnResizeHandle = ({
 
         const handleMouseMove = (event: MouseEvent) => {
             const deltaX = event.clientX - startXRef.current;
-            const newWidth = Math.min(Math.max(10, startWidthRef.current + deltaX), 1000);
+            // No upper bound: a column can be widened as far as the user drags it,
+            // and the table scrolls sideways once it is wider than the view.
+            const newWidth = Math.max(30, startWidthRef.current + deltaX);
             finalWidthRef.current = newWidth;
         };
 

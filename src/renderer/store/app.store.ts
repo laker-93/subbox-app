@@ -324,10 +324,9 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                     download: 'rekordbox',
                     upload: null,
                 },
-                pageSidebar: {
-                    album: true,
-                    song: true,
-                },
+                // Subbox: the filter panels start closed; the filter button opens or
+                // pins one.
+                pageSidebar: {},
                 platform: Platform.WINDOWS,
                 privateMode: false,
                 // No migrate branch: `merge(currentState, persistedState)` fills a key
@@ -342,10 +341,10 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                     collapsed: false,
                     expanded: [],
                     image: false,
-                    leftWidth: '400px',
+                    leftWidth: '280px',
                     rightExpanded: false,
                     rightHeight: '320px',
-                    rightWidth: '600px',
+                    rightWidth: '420px',
                 },
                 titlebar: {
                     backgroundColor: '#000000',
@@ -377,6 +376,25 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                     state.libraryFormat = { download: 'rekordbox', upload: null };
                 }
 
+                if (version <= 6) {
+                    // Subbox: denser library views. The Tracks and Albums filter panels
+                    // shipped pinned open, so close them once; pinning one again sticks.
+                    // A sidebar still at the old 400px default narrows to the new one.
+                    if (state.pageSidebar) {
+                        state.pageSidebar.album = false;
+                        state.pageSidebar.song = false;
+                    }
+                    if (state.sidebar?.leftWidth === '400px') {
+                        state.sidebar.leftWidth = '280px';
+                    }
+                }
+
+                if (version <= 7 && state.sidebar?.rightWidth === '600px') {
+                    // Subbox: a narrower queue panel at the old default, so the track
+                    // table beside it keeps room for its columns.
+                    state.sidebar.rightWidth = '420px';
+                }
+
                 return state;
             },
             name: 'store_app',
@@ -385,7 +403,7 @@ export const useAppStore = createWithEqualityFn<AppSlice>()(
                 const { globalExpanded: _, ...rest } = state;
                 return rest;
             },
-            version: 6,
+            version: 8,
         },
     ),
 );
